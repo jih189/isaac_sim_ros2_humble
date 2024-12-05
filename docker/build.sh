@@ -1,0 +1,1 @@
+docker build -f Dockerfile -t isaac-sim-ros2:latest .
