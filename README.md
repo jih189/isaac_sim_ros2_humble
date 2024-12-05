@@ -13,6 +13,9 @@ cd docker
 # create the container
 ./run.sh
 
+# you can create a new terminal to enter the container
+./enter_container.sh
+
 # delete the container
 ./delete_container.sh
 ```
