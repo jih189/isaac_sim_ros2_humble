@@ -125,7 +125,7 @@ RUN mkdir -p /home/$USERNAME/ros2_ws/src
 WORKDIR /home/$USERNAME
 
 # Set the ownership of the workspace to the user
-RUN chown -R ${UID}:${GID} /home/$USERNAME/ros2_ws/
+RUN chown -R ${USERNAME}:${USERNAME} /home/$USERNAME
 
 # Set up the entrypoint
 COPY entrypoint.sh /home
