@@ -1,0 +1,6 @@
+<launch>
+  <node pkg="robot_state_publisher" exec="robot_state_publisher">
+    <param name="robot_description" value="$(command 'cat $(find-pkg-share fetch_description)/robots/fetch.urdf')"/>
+    <remap from="/joint_states" to="/fetch_robot/joint_states"/>
+  </node>
+</launch>
