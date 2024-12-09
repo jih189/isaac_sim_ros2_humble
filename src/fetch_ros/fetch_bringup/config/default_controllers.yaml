@@ -1,0 +1,30 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 60
+    use_sim_time: true
+
+    differential_base_controller:
+      type: diff_drive_controller/DiffDriveController
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+differential_base_controller:
+  ros__parameters:
+
+    publish_rate: 60.0 # You can set this higher than the controller manager update rate, but it will be throttled
+
+    odom_frame_id: odom
+    base_frame_id: base_link
+    pose_covariance_diagonal: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    twist_covariance_diagonal: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    left_wheel_names: ['l_front_support_wheel_joint', 'l_back_support_wheel_joint']
+    right_wheel_names: ['r_front_support_wheel_joint', 'r_back_support_wheel_joint']
+    wheel_separation: 0.375
+    wheel_radius: 0.06
+    position_feedback: false
+    open_loop: true
+    enable_odom_tf: true
+    use_stamped_vel: false
+    wheels_per_side: 1

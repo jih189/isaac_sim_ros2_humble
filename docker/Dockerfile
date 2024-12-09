@@ -116,6 +116,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV DEBIAN_FRONTEND=
 ENV LD_LIBRARY_PATH=/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib
 
+RUN apt-get update && apt-get install -y \
+  ros-humble-ros2-control \
+  ros-humble-ros2-controllers \
+  ros-humble-topic-based-ros2-control \
+  ros-humble-joint-state-broadcaster \
+  ros-humble-xacro \
+  && rm -rf /var/lib/apt/lists/*
+
 ###########################################
 #  Setup Workspace
 ###########################################

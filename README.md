@@ -50,3 +50,8 @@ Then you can open rviz2 to check the state of the robot.
 ```
 rviz2
 ```
+
+Then you can use following code to control the base
+```
+os2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/differential_base_controller/cmd_vel_unstamped
+```
