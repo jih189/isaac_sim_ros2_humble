@@ -1,0 +1,10 @@
+<launch>
+
+    <!-- Include navigation launch file -->
+    <include file="$(find-pkg-share slam_toolbox)/launch/online_async_launch.py">
+        <arg name="slam_params_file" value="$(find-pkg-share fetch_localization)/config/slam.yaml"/>
+        <arg name="use_sim_time" value="true"/>
+        <!-- <remap from="scan" to="/fetch_robot/base_scan"/> -->
+    </include>
+
+</launch>

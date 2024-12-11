@@ -55,3 +55,20 @@ Then you can use following code to control the base
 ```
 os2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/differential_base_controller/cmd_vel_unstamped
 ```
+
+### SLAM
+If you want to build the build, you can use the slam system from NAV2. First, you need to launch the nav2 bringup in a new terminal
+
+```
+ros2 launch fetch_localization nav.xml
+```
+then in another terminal you can launch the slam node
+```
+ros2 launch fetch_localization slam.xml
+```
+By using the keyboard control, you can move the robot in the room, and the slam will generate the map. You can save the map by
+```
+ros2 run nav2_map_server map_saver_cli -f ~/map
+```
+
+If the robot does not build the map correctly, you may need to play with the parameter of the NAV2 and slam_tool in __($fetch_localization)/config__

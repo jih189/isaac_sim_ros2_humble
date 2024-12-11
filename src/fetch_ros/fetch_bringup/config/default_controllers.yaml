@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 60
+    update_rate: 10
     use_sim_time: true
 
     differential_base_controller:
@@ -12,7 +12,9 @@ controller_manager:
 differential_base_controller:
   ros__parameters:
 
-    publish_rate: 60.0 # You can set this higher than the controller manager update rate, but it will be throttled
+    publish_rate: 10.0 # You can set this higher than the controller manager update rate, but it will be throttled
+
+    use_sim_time: true
 
     odom_frame_id: odom
     base_frame_id: base_link

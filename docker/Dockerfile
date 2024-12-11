@@ -122,12 +122,20 @@ RUN apt-get update && apt-get install -y \
   ros-humble-topic-based-ros2-control \
   ros-humble-joint-state-broadcaster \
   ros-humble-xacro \
+  ros-humble-navigation2 \
+  ros-humble-nav2-bringup \
+  ros-humble-robot-localization \
+  ros-humble-slam-toolbox \
+  ros-humble-teleop-twist-keyboard \
+  ros-humble-rmw-cyclonedds-cpp \
   && rm -rf /var/lib/apt/lists/*
 
 ###########################################
 #  Setup Workspace
 ###########################################
 FROM full AS workspace
+
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 RUN mkdir -p /home/$USERNAME/ros2_ws/src
 WORKDIR /home/$USERNAME

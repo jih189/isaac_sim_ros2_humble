@@ -1,0 +1,8 @@
+<launch>
+    <!-- Include navigation launch file -->
+    <include file="$(find-pkg-share nav2_bringup)/launch/navigation_launch.py">
+        <arg name="params_file" value="$(find-pkg-share fetch_localization)/config/nav2_params.yaml"/>
+        <arg name="use_sim_time" value="true"/>
+        <!-- <remap from="scan" to="/fetch_robot/base_scan"/> -->
+    </include>
+</launch>
