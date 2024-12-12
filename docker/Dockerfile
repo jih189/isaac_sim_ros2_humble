@@ -128,6 +128,7 @@ RUN apt-get update && apt-get install -y \
   ros-humble-slam-toolbox \
   ros-humble-teleop-twist-keyboard \
   ros-humble-rmw-cyclonedds-cpp \
+  ros-humble-rqt-tf-tree \
   && rm -rf /var/lib/apt/lists/*
 
 ###########################################
