@@ -53,7 +53,7 @@ rviz2
 
 Then you can use following code to control the base
 ```
-ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/differential_base_controller/cmd_vel_unstamped
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/cmd_vel_nav
 ```
 
 ### SLAM
@@ -86,3 +86,8 @@ ros2 launch fetch_navigation nav.xml
 ```
 
 In the rviz2, you should see a map while the robot is empty there. This is because you did not set the initial pose of the robot, so it does not know where the robot actually is initially. You can set it by clicking "2D Pose Estimate" on the top bar, then in the map you can click and drag a direction to indicate the robot pose. Once you done that, the robot will be visible on the map.
+
+Then, you can click 2D Goal Pose to select the target pose in the map, then the robot will navigate to there. You may need to play with those parameters to make the robot move smoothly.
+
+## <span style="color:red">Warning</span>
+Due to the design of Nav2, it can only publish the topic /cmd_vel_nav for controlling the robot, so we have to remap the differential_controller//differential_base_controller/cmd_vel_unstamped to it. As a result, you can have only one robot in the scene.
