@@ -1,0 +1,7 @@
+<launch>
+    <include file="$(find-pkg-share nav2_bringup)/launch/bringup_launch.py">
+        <arg name="params_file" value="$(find-pkg-share fetch_navigation)/config/nav2_params.yaml"/>
+        <arg name="use_sim_time" value="true"/>
+        <arg name="map" value="$(find-pkg-share fetch_navigation)/maps/SimpleRoom.yaml"/>
+    </include>
+</launch>
