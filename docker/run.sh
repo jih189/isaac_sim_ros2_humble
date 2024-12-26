@@ -14,4 +14,4 @@ docker run -v $PWD/../src/:/home/${USERNAME}/ros2_ws/src \
 	--privileged=true \
 	-v /etc/localtime:/etc/localtime:ro \
 	-v /dev/video0:/dev/video0 \
-	-v "/tmp/.X11-unix:/tmp/.X11-unix:rw" -p 19997:19997 -it isaac-sim-ros2 bash
+	-v "/tmp/.X11-unix:/tmp/.X11-unix:rw" -p 19997:19997 --rm -it isaac-sim-ros2-moveit2 bash

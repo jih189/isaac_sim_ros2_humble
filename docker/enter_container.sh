@@ -1,5 +1,5 @@
 #!/bin/bash
-IMAGE_NAME="isaac-sim-ros2"
+IMAGE_NAME="isaac-sim-ros2-moveit2"
 container_count=$(docker ps | grep $IMAGE_NAME | wc -l)
 if [ $container_count -eq 1 ]; then
         last_container_id=$(docker container ls  --filter=ancestor=$IMAGE_NAME --format "{{.ID}}")

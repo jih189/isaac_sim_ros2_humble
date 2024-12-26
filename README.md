@@ -17,9 +17,6 @@ cd docker
 
 # you can create a new terminal to enter the container
 ./enter_container.sh
-
-# delete the container
-./delete_container.sh
 ```
 
 ### Build package
@@ -90,4 +87,4 @@ In the rviz2, you should see a map while the robot is empty there. This is becau
 Then, you can click 2D Goal Pose to select the target pose in the map, then the robot will navigate to there. You may need to play with those parameters to make the robot move smoothly.
 
 ## <span style="color:red">Warning</span>
-Due to the design of Nav2, it can only publish the topic /cmd_vel_nav for controlling the robot, so we have to remap the differential_controller//differential_base_controller/cmd_vel_unstamped to it. As a result, you can have only one robot in the scene.
+Due to the design of Nav2, it can only publish the topic /cmd_vel_nav for controlling the robot, so we have to remap the differential_controller/differential_base_controller/cmd_vel_unstamped to it. As a result, you can have only one robot in the scene.
