@@ -4,7 +4,7 @@ from launch.actions import DeclareLaunchArgument, EmitEvent, RegisterEventHandle
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from moveit_configs_utils import MoveItConfigsBuilder
@@ -26,10 +26,12 @@ def generate_launch_description():
     # Constants for paths to different files and folders
     package_name_description = 'fetch_description'
     package_name_moveit_config = 'fetch_moveit2_config'
+    package_name_bringup = 'fetch_bringup'
  
     # Set the path to different files and folders
     pkg_share_description = FindPackageShare(package=package_name_description).find(package_name_description)
     pkg_share_moveit_config = FindPackageShare(package=package_name_moveit_config).find(package_name_moveit_config)
+    # pkg_share_bringup = FindPackageShare(package=package_name_bringup).find(package_name_bringup)
  
     # Paths for various configuration files
     urdf_file_path = 'robots/fetch.urdf.xacro'
@@ -39,6 +41,7 @@ def generate_launch_description():
     kinematics_file_path = 'config/kinematics.yaml'
     pilz_cartesian_limits_file_path = 'config/pilz_cartesian_limits.yaml'
     initial_positions_file_path = 'config/initial_positions.yaml'
+    # ros_controllers_file_path = 'config/default_controllers.yaml'
     # rviz_config_file_path = 'rviz/move_group.rviz'
  
     # Set the full paths
@@ -49,7 +52,10 @@ def generate_launch_description():
     kinematics_file_path = os.path.join(pkg_share_moveit_config, kinematics_file_path)
     pilz_cartesian_limits_file_path = os.path.join(pkg_share_moveit_config, pilz_cartesian_limits_file_path)
     initial_positions_file_path = os.path.join(pkg_share_moveit_config, initial_positions_file_path)
+    # ros_controllers_file_path = os.path.join(pkg_share_bringup, ros_controllers_file_path)
     # rviz_config_file = os.path.join(pkg_share_moveit_config, rviz_config_file_path)
+
+    controller_params = os.path.join(get_package_share_directory(package_name_bringup), 'config', 'default_controllers.yaml')
  
     # Launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -115,21 +121,47 @@ def generate_launch_description():
         name="robot_state_publisher",
         output="both",
         parameters=[
-            moveit_config.to_dict(),
+            moveit_config.robot_description,
             {'use_sim_time': use_sim_time},
         ],
     )
 
     ros2_control_node = Node(
         package="controller_manager",
-        condition=IfCondition(use_fake_controller),
+        # condition=IfCondition(use_fake_controller),
         executable="ros2_control_node",
         parameters=[
-            moveit_config.to_dict(),
+            moveit_config.robot_description,
+            controller_params,
             {'use_sim_time': use_sim_time},
         ],
         output="both",
     )
+
+    # joint_state_broadcaster_spawner = Node(
+    #     package="controller_manager",
+    #     condition=IfCondition(use_fake_controller),
+    #     executable="spawner",
+    #     arguments=[
+    #         "joint_state_broadcaster",
+    #         "--controller-manager",
+    #         "controller_manager",
+    #     ],
+    # )
+
+    # arm_controller_spawner = Node(
+    #     package="controller_manager",
+    #     condition=IfCondition(use_fake_controller),
+    #     executable="spawner",
+    #     arguments=["arm_controller", "-c", "controller_manager"],
+    # )
+
+    # torso_controller_spawner = Node(
+    #     package="controller_manager",
+    #     condition=IfCondition(use_fake_controller),
+    #     executable="spawner",
+    #     arguments=["torso_controller", "-c", "controller_manager"],
+    # )
  
     # # RViz
     # start_rviz_node_cmd = Node(
@@ -168,6 +200,9 @@ def generate_launch_description():
     ld.add_action(robot_state_publisher)
     ld.add_action(ros2_control_node)
     ld.add_action(start_move_group_node_cmd)
+    # ld.add_action(joint_state_broadcaster_spawner)
+    # ld.add_action(arm_controller_spawner)
+    # ld.add_action(torso_controller_spawner)
     # ld.add_action(start_rviz_node_cmd)
      
     # # Clean shutdown of RViz

@@ -1,11 +1,11 @@
 # Default initial positions for fetch's ros2_control fake system
 
 initial_positions:
-  torso_lift_joint: 0
-  shoulder_pan_joint: 0
-  shoulder_lift_joint: 0
-  upperarm_roll_joint: 0
-  elbow_flex_joint: 0
+  torso_lift_joint: 0.1
+  shoulder_pan_joint: -1.2
+  shoulder_lift_joint: 1.50
+  upperarm_roll_joint: 0.35
+  elbow_flex_joint: 1.81
   forearm_roll_joint: 0
-  wrist_flex_joint: 0
+  wrist_flex_joint: 1.47
   wrist_roll_joint: 0
