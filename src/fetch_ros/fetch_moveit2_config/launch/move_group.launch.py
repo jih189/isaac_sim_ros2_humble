@@ -39,12 +39,17 @@ def generate_launch_description():
  
     # Launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time')
+    use_rviz = LaunchConfiguration('use_rviz')
  
     # Declare the launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         name='use_sim_time',
         default_value='true',
         description='Use simulation clock if true')
+    declare_use_rviz_cmd = DeclareLaunchArgument(
+        name='use_rviz',
+        default_value='false',
+        description='Whether to start RViz')
  
     # Load the robot configuration
     # Typically, you would also have this line in here: .robot_description(file_path=urdf_model_path)
@@ -79,14 +84,32 @@ def generate_launch_description():
             {'use_sim_time': use_sim_time},
         ],
     )
+
+    # Launch RViz
+    rviz_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="log",
+        condition=IfCondition(use_rviz),
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            moveit_config.planning_pipelines,
+            moveit_config.joint_limits,
+        ],
+    )
  
     # Create the launch description and populate
     ld = LaunchDescription()
  
     # Declare the launch options
     ld.add_action(declare_use_sim_time_cmd)
+    ld.add_action(declare_use_rviz_cmd)
  
     # Add any actions
     ld.add_action(start_move_group_node_cmd)
+    ld.add_action(rviz_node)
 
     return ld

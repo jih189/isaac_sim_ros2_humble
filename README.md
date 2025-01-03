@@ -86,5 +86,17 @@ In the rviz2, you should see a map while the robot is empty there. This is becau
 
 Then, you can click 2D Goal Pose to select the target pose in the map, then the robot will navigate to there. You may need to play with those parameters to make the robot move smoothly.
 
+### Manipulation
+In this project, we use Moveit2 to handle the motion planning for manipulation. You can launch the Moveit2 by
+```
+ros2 launch fetch_moveit2_config move_group.launch.py use_rviz:='true'
+```
+where the rviz2 will launch if __use_rviz__ is 'true'. If you open rviz2 with another terminal, the interactive marker will not show up.
+
+If you just want to play with Moveit2 without simulation, you can use fake controller 
+```
+ros2 launch fetch_moveit2_config move_group_fake_control.launch.py
+```
+
 ## <span style="color:red">Warning</span>
 Due to the design of Nav2, it can only publish the topic /cmd_vel_nav for controlling the robot, so we have to remap the differential_controller/differential_base_controller/cmd_vel_unstamped to it. As a result, you can have only one robot in the scene.
