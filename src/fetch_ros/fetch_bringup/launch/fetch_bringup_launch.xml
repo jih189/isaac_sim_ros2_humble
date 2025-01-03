@@ -18,5 +18,6 @@
   <node pkg="controller_manager" exec="spawner" args="joint_state_broadcaster -c /controller_manager" />
   <node pkg="controller_manager" exec="spawner" args="differential_base_controller -c /controller_manager"/>
   <node pkg="controller_manager" exec="spawner" args="arm_with_torso_controller -c /controller_manager"/>
+  <node pkg="controller_manager" exec="spawner" args="gripper_controller -c /controller_manager"/>
 
 </launch>

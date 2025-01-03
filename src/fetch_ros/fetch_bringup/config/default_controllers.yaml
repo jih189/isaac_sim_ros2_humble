@@ -12,6 +12,9 @@ controller_manager:
     arm_with_torso_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
 differential_base_controller:
   ros__parameters:
 
@@ -52,6 +55,21 @@ arm_with_torso_controller:
       - forearm_roll_joint
       - wrist_flex_joint
       - wrist_roll_joint
+
+    allow_partial_joints_goal: true
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
+      - velocity
+
+gripper_controller:
+  ros__parameters:
+    joints:
+      - l_gripper_finger_joint
+      - r_gripper_finger_joint
 
     allow_partial_joints_goal: true
 

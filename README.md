@@ -99,4 +99,7 @@ ros2 launch fetch_moveit2_config move_group_fake_control.launch.py
 ```
 
 ## <span style="color:red">Warning</span>
+### Nav2
 Due to the design of Nav2, it can only publish the topic /cmd_vel_nav for controlling the robot, so we have to remap the differential_controller/differential_base_controller/cmd_vel_unstamped to it. As a result, you can have only one robot in the scene.
+### Moveit2
+Because parallel gripper action controller only takes one joint(we have two joints on the gripper), we used joint_trajectory_controller/JointTrajectoryController to control the gripper(which is not quite correct). Therefore, later testing on the real robot, developer may need to be aware of this. One possible solution is that we can have a node to convert gripper controller's command to two joints.

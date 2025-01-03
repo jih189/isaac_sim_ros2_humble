@@ -105,6 +105,12 @@ def generate_launch_description():
         arguments=["arm_with_torso_controller", "-c", "controller_manager"],
     )
 
+    gripper_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=["gripper_controller", "-c", "controller_manager"],
+    )
+
     # Launch RViz
     rviz_node = Node(
         package="rviz2",
@@ -129,6 +135,7 @@ def generate_launch_description():
     ld.add_action(ros2_control_node)
     ld.add_action(joint_state_broadcaster_spawner)
     ld.add_action(arm_with_torso_controller_spawner)
+    ld.add_action(gripper_controller_spawner)
     ld.add_action(rviz_node)
 
     return ld
