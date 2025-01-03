@@ -105,6 +105,21 @@ def generate_launch_description():
         arguments=["arm_with_torso_controller", "-c", "controller_manager"],
     )
 
+    # Launch RViz
+    rviz_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="log",
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            moveit_config.planning_pipelines,
+            moveit_config.joint_limits,
+        ],
+    )
+
     # Create the launch description and populate
     ld = LaunchDescription()
 
@@ -114,5 +129,6 @@ def generate_launch_description():
     ld.add_action(ros2_control_node)
     ld.add_action(joint_state_broadcaster_spawner)
     ld.add_action(arm_with_torso_controller_spawner)
+    ld.add_action(rviz_node)
 
     return ld
