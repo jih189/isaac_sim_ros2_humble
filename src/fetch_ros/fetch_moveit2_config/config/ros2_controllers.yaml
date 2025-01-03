@@ -4,16 +4,14 @@ controller_manager:
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
-
-    arm_controller:
-      type: joint_trajectory_controller/JointTrajectoryController
     
-    torso_controller:
+    arm_with_torso_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
-arm_controller:
+arm_with_torso_controller:
   ros__parameters:
     joints:
+      - torso_lift_joint
       - shoulder_pan_joint
       - shoulder_lift_joint
       - upperarm_roll_joint
@@ -22,17 +20,7 @@ arm_controller:
       - wrist_flex_joint
       - wrist_roll_joint
 
-    command_interfaces:
-      - position
-
-    state_interfaces:
-      - position
-      - velocity
-
-torso_controller:
-  ros__parameters:
-    joints:
-      - torso_lift_joint
+    allow_partial_joints_goal: true
 
     command_interfaces:
       - position

@@ -59,7 +59,7 @@ def generate_launch_description():
     )
 
     print("==============================================")
-    print("kinematics_file_path: ", kinematics_file_path)
+    print("kinematics_file_path: ", moveit_config.robot_description_kinematics)
      
     # Start the actual move_group node/action server
     start_move_group_node_cmd = Node(
@@ -99,18 +99,12 @@ def generate_launch_description():
         arguments=["joint_state_broadcaster", "-c", "controller_manager",],
     )
 
-    arm_controller_spawner = Node(
+    arm_with_torso_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["arm_controller", "-c", "controller_manager"],
+        arguments=["arm_with_torso_controller", "-c", "controller_manager"],
     )
 
-    torso_controller_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=["torso_controller", "-c", "controller_manager"],
-    )
-     
     # Create the launch description and populate
     ld = LaunchDescription()
 
@@ -119,7 +113,6 @@ def generate_launch_description():
     ld.add_action(robot_state_publisher)
     ld.add_action(ros2_control_node)
     ld.add_action(joint_state_broadcaster_spawner)
-    ld.add_action(arm_controller_spawner)
-    ld.add_action(torso_controller_spawner)
+    ld.add_action(arm_with_torso_controller_spawner)
 
     return ld

@@ -4,23 +4,12 @@ moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControll
 # Define the controllers configured using the ROS 2 Control framework.
 moveit_simple_controller_manager:
   controller_names:
-    - arm_controller
     - arm_with_torso_controller
-  arm_controller:
-    action_ns: follow_joint_trajectory
-    type: FollowJointTrajectory
-    default: true
-    joints:
-      - shoulder_pan_joint
-      - shoulder_lift_joint
-      - upperarm_roll_joint
-      - elbow_flex_joint
-      - forearm_roll_joint
-      - wrist_flex_joint
-      - wrist_roll_joint
+
   arm_with_torso_controller:
     action_ns: follow_joint_trajectory
     type: FollowJointTrajectory
+    default: true
     joints:
       - torso_lift_joint
       - shoulder_pan_joint
@@ -30,11 +19,11 @@ moveit_simple_controller_manager:
       - forearm_roll_joint
       - wrist_flex_joint
       - wrist_roll_joint
-  gripper_controller:
-    type: GripperCommand
-    action_ns: gripper_action
-    default: true
-    parallel: true
-    joints:
-      - l_gripper_finger_joint
-      - r_gripper_finger_joint
+  # gripper_controller:
+  #   type: GripperCommand
+  #   action_ns: gripper_action
+  #   default: true
+  #   parallel: true
+  #   joints:
+  #     - l_gripper_finger_joint
+  #     - r_gripper_finger_joint
