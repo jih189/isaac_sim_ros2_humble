@@ -28,8 +28,6 @@ def generate_launch_description():
     joint_limits_file_path = 'config/joint_limits.yaml'
     kinematics_file_path = 'config/kinematics.yaml'
     pilz_cartesian_limits_file_path = 'config/pilz_cartesian_limits.yaml'
-    initial_positions_file_path = 'config/initial_positions.yaml'
-    # rviz_config_file_path = 'rviz/move_group.rviz'
  
     # Set the full paths
     urdf_model_path = os.path.join(pkg_share_description, urdf_file_path)
@@ -38,23 +36,15 @@ def generate_launch_description():
     joint_limits_file_path = os.path.join(pkg_share_moveit_config, joint_limits_file_path)
     kinematics_file_path = os.path.join(pkg_share_moveit_config, kinematics_file_path)
     pilz_cartesian_limits_file_path = os.path.join(pkg_share_moveit_config, pilz_cartesian_limits_file_path)
-    initial_positions_file_path = os.path.join(pkg_share_moveit_config, initial_positions_file_path)
-    # rviz_config_file = os.path.join(pkg_share_moveit_config, rviz_config_file_path)
  
     # Launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time')
-    use_rviz = LaunchConfiguration('use_rviz')
  
     # Declare the launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         name='use_sim_time',
         default_value='true',
         description='Use simulation clock if true')
- 
-    declare_use_rviz_cmd = DeclareLaunchArgument(
-        name='use_rviz',
-        default_value='false',
-        description='Whether to start RViz')
  
     # Load the robot configuration
     # Typically, you would also have this line in here: .robot_description(file_path=urdf_model_path)
@@ -68,7 +58,7 @@ def generate_launch_description():
         .robot_description_kinematics(file_path=kinematics_file_path)
         .planning_pipelines(
             pipelines=["ompl", "pilz_industrial_motion_planner"],
-            default_planning_pipeline="pilz_industrial_motion_planner"
+            default_planning_pipeline="ompl"
         )
         .planning_scene_monitor(
             publish_robot_description=False,
@@ -87,47 +77,16 @@ def generate_launch_description():
         parameters=[
             moveit_config.to_dict(),
             {'use_sim_time': use_sim_time},
-            {'start_state': {'content': initial_positions_file_path}},
         ],
     )
  
-    # # RViz
-    # start_rviz_node_cmd = Node(
-    #     condition=IfCondition(use_rviz),
-    #     package="rviz2",
-    #     executable="rviz2",
-    #     arguments=["-d", rviz_config_file],
-    #     output="screen",
-    #     parameters=[
-    #         moveit_config.robot_description,
-    #         moveit_config.robot_description_semantic,
-    #         moveit_config.planning_pipelines,
-    #         moveit_config.robot_description_kinematics,
-    #         moveit_config.joint_limits,
-    #         {'use_sim_time': use_sim_time}
-    #     ],
-    # )
-     
-    # exit_event_handler = RegisterEventHandler(
-    #     condition=IfCondition(use_rviz),
-    #     event_handler=OnProcessExit(
-    #         target_action=start_rviz_node_cmd,
-    #         on_exit=EmitEvent(event=Shutdown(reason='rviz exited')),
-    #     ),
-    # )
-     
     # Create the launch description and populate
     ld = LaunchDescription()
  
     # Declare the launch options
     ld.add_action(declare_use_sim_time_cmd)
-    ld.add_action(declare_use_rviz_cmd)
  
     # Add any actions
     ld.add_action(start_move_group_node_cmd)
-    # ld.add_action(start_rviz_node_cmd)
-     
-    # # Clean shutdown of RViz
-    # ld.add_action(exit_event_handler)
- 
+
     return ld
