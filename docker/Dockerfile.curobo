@@ -1,0 +1,38 @@
+###########################################
+# ROS humble, OMPL, and moveit2 image
+###########################################
+FROM isaac-sim-ros2-moveit2 AS isaac-sim-ros2-moveit2-base
+
+USER root
+
+ARG ROS_DISTRO=humble
+ARG USERNAME=ros
+
+RUN pip3 install torch torchvision torchaudio
+RUN pip3 install tensorboard
+
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+RUN dpkg -i cuda-keyring_1.1-1_all.deb
+RUN apt-get update
+RUN apt-get -y install cuda-toolkit-12-6
+
+# back to ros2_ws
+WORKDIR /home/$USERNAME
+
+# install curobo
+RUN apt-get update && apt-get install -y \
+    git-lfs \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# include CUDA to path
+ENV CUDA_HOME=/usr/local/cuda
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+ENV PATH=$CUDA_HOME/bin:$PATH
+ENV TORCH_CUDA_ARCH_LIST="7.0+PTX"
+
+RUN git clone https://github.com/NVlabs/curobo.git \
+    && cd curobo \
+    && python3 -m pip install -e . --no-build-isolation
+
+RUN pip3 install --upgrade pip setuptools
