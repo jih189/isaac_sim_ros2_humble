@@ -25,6 +25,8 @@ bool LerpInterface::solve(
 {
   RCLCPP_INFO(node_->get_logger(), "Planning trajectory");
 
+  auto result_traj = std::make_shared<robot_trajectory::RobotTrajectory>(
+    planning_scene->getRobotModel(), request.group_name);
 
   rclcpp::Time start_time = node_->now();
 
@@ -33,6 +35,8 @@ bool LerpInterface::solve(
   response.processing_time_.push_back(node_->now().seconds() - start_time.seconds());
   response.description_.clear();
   response.trajectory_.clear();
+
+  response.trajectory_.push_back(result_traj);
 
   return true;
 }
