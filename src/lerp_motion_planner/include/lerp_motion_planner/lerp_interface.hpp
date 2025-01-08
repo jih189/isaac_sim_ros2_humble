@@ -15,6 +15,7 @@ public:
   LerpInterface(const rclcpp::Node::SharedPtr & node)
   : node_(node)
   {
+    num_steps_ = 10;
   }
 
   bool solve(
@@ -26,6 +27,13 @@ public:
 
 private:
   std::shared_ptr<rclcpp::Node> node_;
+
+  int num_steps_;
+  int dof_;
+
+  void interpolate(moveit::core::RobotStatePtr& robot_state,
+                   const moveit::core::JointModelGroup* joint_model_group, const std::vector<double>& start_joint_vals,
+                   const std::vector<double>& goal_joint_vals, robot_trajectory::RobotTrajectoryPtr& joint_trajectory);
 };
 
 }  // namespace lerp_interface

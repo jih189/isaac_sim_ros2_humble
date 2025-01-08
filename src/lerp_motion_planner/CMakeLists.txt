@@ -7,22 +7,32 @@ endif()
 
 set(CMAKE_BUILD_TYPE Release)
 
-find_package(moveit_common REQUIRED)
-moveit_package()
-
-find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_auto REQUIRED)
-ament_auto_find_build_dependencies()
-
-find_package(moveit_core REQUIRED)
-find_package(pluginlib REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(rclcpp_components REQUIRED)
-
 set(THIS_PACKAGE_INCLUDE_DEPENDS
-  rclcpp_components
+  ament_cmake
+  Boost
+  control_msgs
+  Eigen3
+  interactive_markers
   moveit_core
+  moveit_msgs
+  moveit_ros_planning
+  moveit_ros_planning_interface
+  moveit_common
+  moveit_servo
+  pluginlib
+  rclcpp
+  rclcpp_action
+  rviz_visual_tools
+  tf2_geometry_msgs
+  tf2_geometry_msgs
+  tf2_ros
 )
+
+foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
+  find_package(${Dependency} REQUIRED)
+endforeach()
+
+moveit_package()
 
 include_directories(include)
 
@@ -35,6 +45,9 @@ add_library(${MOVEIT_LIB_NAME}
   src/lerp_planner_manager.cpp
   src/lerp_planning_context.cpp
   )
+
+add_executable(lerp_example src/lerp_example.cpp)
+ament_target_dependencies(lerp_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
 
@@ -54,10 +67,17 @@ install(
   RUNTIME DESTINATION bin
 )
 
+install(TARGETS lerp_example
+  DESTINATION lib/${PROJECT_NAME})
+
 # Install config files.
 install(DIRECTORY
   config
   DESTINATION share/${PROJECT_NAME}/
+)
+
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}/launch
 )
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)

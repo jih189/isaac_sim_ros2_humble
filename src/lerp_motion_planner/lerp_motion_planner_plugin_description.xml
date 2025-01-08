@@ -1,4 +1,4 @@
-<library path="libmoveit_lerp_planner_plugin">
+<library path="moveit_lerp_planner_plugin">
   <class name="lerp_interface/LerpPlanner" type="lerp_interface::LerpPlannerManager" base_class_type="planning_interface::PlannerManager">
     <description>
       The lerp motion planner plugin which interpolates between two given start and goal joint state values.
