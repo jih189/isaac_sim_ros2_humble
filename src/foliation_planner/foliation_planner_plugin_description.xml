@@ -1,0 +1,7 @@
+<library path="moveit_foliation_planner_plugin">
+  <class name="foliation_interface/FoliationPlanner" type="foliation_interface::FoliationPlannerManager" base_class_type="planning_interface::PlannerManager">
+    <description>
+      The Foliation planner plugin which searching for solution trajectory across the foliation of the configuration space.
+    </description>
+  </class>
+</library>
