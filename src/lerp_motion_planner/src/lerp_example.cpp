@@ -7,6 +7,7 @@
 #include "moveit/robot_state/conversions.h"
 #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
+// #include <moveit_visual_tools/moveit_visual_tools.h>
 // #include <moveit/robot_state/joint_model_group.hpp>
 
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("lerp_example");
@@ -56,6 +57,9 @@ int main(int argc, char** argv)
     
     // Create a robot state
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(kinematic_model);
+
+    // Set the robot state to the current state
+    robot_state->setToDefaultValues();
     
     // Get the joint model group
     const moveit::core::JointModelGroup* joint_model_group = robot_state->getJointModelGroup(GROUP_NAME);
@@ -84,7 +88,7 @@ int main(int argc, char** argv)
 
     // Set the start and goal joint values
     std::vector<double> start_joint_vals = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    std::vector<double> goal_joint_vals = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2};
+    std::vector<double> goal_joint_vals = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.57};
 
     req.group_name = GROUP_NAME;
 
@@ -119,11 +123,22 @@ int main(int argc, char** argv)
         RCLCPP_INFO(lerp_example_node->get_logger(), "Available planner: %s", algorithm.c_str());
     }
 
-    // =================== planning ===================
+    // // =================== planning ===================
 
     // Use planning pipeline
     // planning_pipeline->displayComputedMotionPlans(false);
     planning_pipeline->generatePlan(psm->getPlanningScene(), req, res);
+
+    /* Check that the planning was successful */
+    if (res.error_code_.val == res.error_code_.SUCCESS)
+    {
+        RCLCPP_INFO(lerp_example_node->get_logger(), "Compute plan successfully");
+    }
+    else
+    {
+        RCLCPP_INFO(lerp_example_node->get_logger(), "Could not compute plan successfully");
+    }
+
 
     // // Use planning context
     // planning_interface::PlanningContextPtr context = planner_manager->getPlanningContext(psm->getPlanningScene(), req, res.error_code_);
@@ -131,6 +146,29 @@ int main(int argc, char** argv)
     // {
     //     context->solve(res);
     // }
+
+    std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>> display_publisher =
+      lerp_example_node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
+
+    moveit_msgs::msg::DisplayTrajectory display_trajectory;
+    /* Visualize the trajectory */
+    moveit_msgs::msg::MotionPlanResponse response;
+    res.getMessage(response);
+
+    display_trajectory.trajectory_start = response.trajectory_start;
+    display_trajectory.trajectory.push_back(response.trajectory);
+    
+    // use loop to publish the trajectory
+    while (rclcpp::ok())
+    {
+        display_publisher->publish(display_trajectory);
+        
+        rclcpp::spin_some(lerp_example_node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    }
 
     // deallocate the robot_state
     robot_state.reset();

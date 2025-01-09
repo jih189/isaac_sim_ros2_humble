@@ -41,6 +41,19 @@ def generate_launch_description():
         ]
     )
 
+    # Launch RViz
+    rviz_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="log",
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+        ],
+    )
+
     node_list.append(lerp_example_node)
+    node_list.append(rviz_node)
 
     return LaunchDescription(node_list)

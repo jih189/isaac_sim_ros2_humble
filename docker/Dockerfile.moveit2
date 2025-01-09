@@ -91,5 +91,15 @@ RUN apt-get -qq update && \
             --ament-cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             --event-handlers desktop_notification- status-
 
+# install moveit visual tools
+RUN cd /home/$USERNAME/ws_moveit/src && \
+    git clone https://github.com/PickNikRobotics/graph_msgs.git -b ros2 && \
+    cd /home/$USERNAME/ws_moveit && \
+    colcon build --install-base /opt/ros/$ROS_DISTRO --packages-select graph_msgs --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+    cd /home/$USERNAME/ws_moveit/src && \
+    git clone https://github.com/moveit/moveit_visual_tools.git -b ros2 && \
+    cd /home/$USERNAME/ws_moveit && \
+    colcon build --install-base /opt/ros/$ROS_DISTRO --packages-select moveit_visual_tools --cmake-args -DCMAKE_BUILD_TYPE=Release
+
 # back to ros2_ws
 WORKDIR /home/$USERNAME

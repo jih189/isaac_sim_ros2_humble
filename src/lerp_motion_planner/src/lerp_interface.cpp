@@ -94,11 +94,12 @@ void LerpInterface::interpolate(moveit::core::RobotStatePtr& rob_state,
       double joint_value = start_joint_vals[k] + step * dt_vector[k];
       joint_values.push_back(joint_value);
     }
+  
     rob_state->setJointGroupPositions(joint_model_group, joint_values);
     rob_state->update();
 
     // Add the state to the trajectory
-    joint_trajectory->addSuffixWayPoint(rob_state, 0.1);
+    joint_trajectory->addSuffixWayPoint(std::make_shared<moveit::core::RobotState>(*rob_state), 0.1);
   }
 }
 

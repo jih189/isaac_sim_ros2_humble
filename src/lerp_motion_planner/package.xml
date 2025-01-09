@@ -17,6 +17,7 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
   <depend>moveit_ros_planning</depend>
+  <depend>moveit_visual_tools</depend>
 
   <exec_depend>ros2launch</exec_depend>
 
