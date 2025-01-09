@@ -102,4 +102,31 @@ void LerpInterface::interpolate(moveit::core::RobotStatePtr& rob_state,
   }
 }
 
+// bool LerpInterface::loadPlannerConfiguration(const std::string & group_name, const std::string & planner_id,
+//                                 const std::map<std::string, std::string> &  group_params,
+//                                 planning_interface::PlannerConfigurationSettings & planner_config)
+// {
+//   return true;
+// }
+
+void LerpInterface::loadPlannerConfigurations()
+{
+  if (node_->has_parameter(parameter_namespace_ + ".planner_configs.lerp.num_step")){
+    RCLCPP_INFO(node_->get_logger(), "lerp planner_configs.num_step found");
+    const rclcpp::Parameter parameter = node_->get_parameter(parameter_namespace_ + ".planner_configs.lerp.num_step");
+    if (parameter.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER){
+      num_steps_ = parameter.as_int();
+    }
+    else{
+      RCLCPP_ERROR(node_->get_logger(), "lerp planner_configs.num_step is not an integer");
+    }
+  }
+  else{
+    RCLCPP_ERROR(node_->get_logger(), "lerp planner_configs.num_step not found");
+  }
+  
+  // // print the parameter value
+  // RCLCPP_INFO(node_->get_logger(), "Parameter value: %s", parameter.value_to_string().c_str());
+}
+
 }  // namespace lerp_interface

@@ -17,9 +17,11 @@ public:
   LerpPlanningContext(
     const std::string & context_name,
     const std::string & group_name,
-    const rclcpp::Node::SharedPtr & node)
+    const rclcpp::Node::SharedPtr & node,
+    const moveit::core::RobotModelConstPtr & model,
+    const std::string & parameter_namespace)
   : planning_interface::PlanningContext(context_name, group_name),
-    lerp_interface_(std::make_shared<LerpInterface>(node))
+    lerp_interface_(std::make_shared<LerpInterface>(node, group_name, model, parameter_namespace))
   {
   }
 

@@ -17,10 +17,8 @@ bool LerpPlannerManager::initialize(
   node_ = node;
   for (const std::string & group_name : model->getJointModelGroupNames()) {
     planning_contexts_[group_name] =
-      std::make_shared<LerpPlanningContext>("lerp_planning_context", group_name, node);
+      std::make_shared<LerpPlanningContext>("lerp_planning_context", group_name, node, model, parameter_namespace);
   }
-  static_cast<void>(model);  // Suppress "unused" warning.
-  static_cast<void>(parameter_namespace);  // Suppress "unused" warning.
   return true;
 }
 
