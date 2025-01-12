@@ -50,6 +50,9 @@ add_library(${MOVEIT_LIB_NAME}
 add_executable(foliation_example src/foliation_example.cpp)
 ament_target_dependencies(foliation_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
+add_executable(cuda_test src/cuda_test.cpp)
+ament_target_dependencies(cuda_test ${THIS_PACKAGE_INCLUDE_DEPENDS})
+
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
 
 ament_target_dependencies(${MOVEIT_LIB_NAME} ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -70,6 +73,10 @@ install(
 
 install(TARGETS foliation_example
   DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS cuda_test
+  DESTINATION lib/${PROJECT_NAME})
+
 
 # Install config files.
 install(DIRECTORY

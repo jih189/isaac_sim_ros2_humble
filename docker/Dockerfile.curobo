@@ -39,3 +39,6 @@ RUN pip3 install --upgrade pip setuptools
 
 # downgrade numpy. Otherwise, it will cause error with matplotlib.
 RUN pip3 install numpy==1.26.4
+
+# create a directory for cudampl
+RUN mkdir -p /home/$USERNAME/cudampl

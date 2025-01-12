@@ -50,6 +50,7 @@ RUN cd /home/$USERNAME/ws_moveit \
     rm -rf /var/lib/apt/lists/*
 
 # Export ROS_UNDERLAY for downstream docker containers
+
 ENV ROS_UNDERLAY=/home/$USERNAME/ws_moveit/install
 WORKDIR $ROS_UNDERLAY/..
 
@@ -60,8 +61,11 @@ RUN --mount=type=cache,target=/home/$USERNAME/.ccache/ \
     # Fetch required upstream sources for building
     vcs import src < src/moveit2/moveit2.repos && \
     if [ -r "src/moveit2/moveit2_${ROS_DISTRO}.repos" ] ; then vcs import src < "src/moveit2/moveit2_${ROS_DISTRO}.repos" ; fi && \
-    #
-    . "/opt/ros/${ROS_DISTRO}/setup.sh" &&\
+    . "/opt/ros/${ROS_DISTRO}/setup.sh" && \
+    # need to remove original moveit msgs package
+    cd $ROS_UNDERLAY/../src && rm -r moveit_msgs && \
+    # clone our own moveit_msgs package
+    git clone https://github.com/jih189/moveit_msgs.git && cd $ROS_UNDERLAY/.. && \
     colcon build --install-base /opt/ros/$ROS_DISTRO \
             --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DOMPL_DIR=/usr/share/ompl/cmake \
             --ament-cmake-args -DCMAKE_BUILD_TYPE=Release \
