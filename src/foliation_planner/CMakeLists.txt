@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(foliation_planner)
+project(foliation_planner LANGUAGES C CXX CUDA)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -24,7 +24,6 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   rclcpp_action
   rviz_visual_tools
   tf2_geometry_msgs
-  tf2_geometry_msgs
   tf2_ros
   moveit_visual_tools
 )
@@ -32,6 +31,8 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
 foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
   find_package(${Dependency} REQUIRED)
 endforeach()
+
+find_package(CUDAMPLib REQUIRED)
 
 moveit_package()
 
@@ -51,10 +52,10 @@ add_executable(foliation_example src/foliation_example.cpp)
 ament_target_dependencies(foliation_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 add_executable(cuda_test src/cuda_test.cpp)
+target_link_libraries(cuda_test CUDAMPLib)
 ament_target_dependencies(cuda_test ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
-
 ament_target_dependencies(${MOVEIT_LIB_NAME} ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 

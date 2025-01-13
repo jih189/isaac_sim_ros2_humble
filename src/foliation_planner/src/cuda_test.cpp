@@ -7,11 +7,8 @@
 #include "moveit/robot_state/conversions.h"
 #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
-// #include <moveit_visual_tools/moveit_visual_tools.h>
-// #include <moveit/robot_state/joint_model_group.hpp>
 
-#include "multiply.h"
-#include <cuda_runtime.h>
+#include <CUDAMPLib/multiply.h>
 
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("foliation_example");
 
@@ -107,7 +104,7 @@ int main(int argc, char** argv)
     }
 
     // try to use cuda to compute the forward kinematics
-    
+    test_multiplyByTwo();
 
     // stop the node
     rclcpp::shutdown();

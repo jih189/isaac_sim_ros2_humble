@@ -19,9 +19,33 @@ else()
 	add_library(${lib_name} STATIC ${src_files} ${include_files})
 endif()
 
-target_include_directories(${lib_name} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/")
+#target_include_directories(${lib_name} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/")
+target_include_directories(${lib_name}
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
 
 #Pass the flags to the library
 target_link_libraries( ${lib_name}
 	PUBLIC $<BUILD_INTERFACE:developer_flags>	
+)
+
+#--------------------------- install ---------------------------------------------
+
+# Install the library
+install(TARGETS ${lib_name}
+    EXPORT ${lib_name}Targets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+# Install include directory
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/ DESTINATION include/${lib_name})
+
+# Export targets
+install(EXPORT ${lib_name}Targets
+    FILE ${lib_name}Config.cmake
+    DESTINATION lib/cmake/${lib_name}
 )

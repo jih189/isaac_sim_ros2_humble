@@ -6,7 +6,7 @@ set(project_name "cudampl")
 project(${project_name} LANGUAGES CXX C CUDA)  
 
 #toggle between building a shared or static library
-option(MY_BUILD_SHARED_LIBS "Build as shared library" OFF)
+option(MY_BUILD_SHARED_LIBS "Build as shared library" ON)
 
 #default build type is Release
 if (CMAKE_BUILD_TYPE STREQUAL "")
