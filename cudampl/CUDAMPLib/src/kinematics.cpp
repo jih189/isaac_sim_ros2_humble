@@ -64,21 +64,21 @@ void kin_forward(
         switch(joint_types[i])
         {
             case REVOLUTE:
-                std::cout << "Joint type: REVOLUTE" << std::endl;
+                // std::cout << "Joint type: REVOLUTE" << std::endl;
                 revolute_joint_fn(parent_link_pose, joint_poses[i], joint_axes[i], current_joint_values[j], link_poses[i]);
                 j++;
                 break;
             case PRISMATIC:
-                std::cout << "Joint type: PRISMATIC" << std::endl;
+                // std::cout << "Joint type: PRISMATIC" << std::endl;
                 prism_joint_fn(parent_link_pose, joint_poses[i], joint_axes[i], current_joint_values[j], link_poses[i]);
                 j++;
                 break;
             case FIXED:
-                std::cout << "Joint type: FIXED" << std::endl;
+                // std::cout << "Joint type: FIXED" << std::endl;
                 fixed_joint_fn(parent_link_pose, joint_poses[i], link_poses[i]);
                 break;
             default:
-                std::cout << "Unknown joint type" << std::endl;
+                // std::cout << "Unknown joint type" << std::endl;
                 // Unknown joint type, throw an error
                 throw std::runtime_error("Unknown joint type");
                 break;
