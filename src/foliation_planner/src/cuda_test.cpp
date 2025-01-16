@@ -7,6 +7,8 @@
 #include "moveit/robot_state/conversions.h"
 #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
+#include <moveit_msgs/msg/display_robot_state.hpp>
+
 
 #include <CUDAMPLib/multiply.h>
 #include <CUDAMPLib/kinematics.h>
@@ -257,6 +259,60 @@ void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, bool deb
             std::cout << "\033[1;31m Task fail \033[0m" << std::endl;
         }
     }
+
+    robot_state.reset();
+}
+
+void DISPLAY_ROBOT_STATE_IN_RVIZ(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node::SharedPtr node)
+{
+
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+
+    // print robot model name
+    RCLCPP_INFO(LOGGER, "Robot model name: %s", robot_model->getName().c_str());
+
+    //************************************* */
+    // print link names of the robot model
+    const std::vector<std::string>& link_names = robot_model->getLinkModelNames();
+    std::cout << "Link names: " << std::endl;
+    for (const auto& link_name : link_names)
+    {
+        std::cout << link_name << std::endl;
+        // get link model
+        const moveit::core::LinkModel* link_model = robot_model->getLinkModel(link_name);
+        // get shape of the link
+        const std::vector<shapes::ShapeConstPtr> shapes = link_model->getShapes();
+        for (const auto& shape : shapes)
+        {
+            std::cout << "shape type: " << shape->type << std::endl;
+        }
+    }
+    //************************************* */
+
+    // random set joint values
+    robot_state->setToRandomPositions();
+    robot_state->update();
+
+    // Create a robot state publisher
+    auto robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("cuda_test_robot_state", 1);
+
+    // Create a DisplayRobotState message
+    moveit_msgs::msg::DisplayRobotState display_robot_state;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, display_robot_state.state);
+
+    // use loop to publish the trajectory
+    while (rclcpp::ok())
+    {
+        // Publish the message
+        robot_state_publisher->publish(display_robot_state);
+        
+        rclcpp::spin_some(node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    robot_state.reset();
 }
 
 int main(int argc, char** argv)
@@ -266,18 +322,18 @@ int main(int argc, char** argv)
     rclcpp::init(argc, argv);
     rclcpp::NodeOptions node_options;
     node_options.automatically_declare_parameters_from_overrides(true);
-    auto foliation_example_node = rclcpp::Node::make_shared("foliation_example_node", node_options);
+    auto cuda_test_node = rclcpp::Node::make_shared("cuda_test_node", node_options);
 
     // print out the node name
-    RCLCPP_INFO(LOGGER, "Node name: %s", foliation_example_node->get_name());
+    RCLCPP_INFO(LOGGER, "Node name: %s", cuda_test_node->get_name());
 
     // Create a robot model
     robot_model_loader::RobotModelLoaderPtr robot_model_loader(
-      new robot_model_loader::RobotModelLoader(foliation_example_node, "robot_description"));
+      new robot_model_loader::RobotModelLoader(cuda_test_node, "robot_description"));
     const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader->getModel();
     if (kinematic_model == nullptr)
     {
-        RCLCPP_ERROR(foliation_example_node->get_logger(), "Failed to load robot model");
+        RCLCPP_ERROR(cuda_test_node->get_logger(), "Failed to load robot model");
         return 1;
     }
 
@@ -286,7 +342,7 @@ int main(int argc, char** argv)
     // internal planning scene. We then call startSceneMonitor, startWorldGeometryMonitor and
     // startStateMonitor to fully initialize the planning scene monitor
     planning_scene_monitor::PlanningSceneMonitorPtr psm(
-        new planning_scene_monitor::PlanningSceneMonitor(foliation_example_node, robot_model_loader));
+        new planning_scene_monitor::PlanningSceneMonitor(cuda_test_node, robot_model_loader));
 
     /* listen for planning scene messages on topic /XXX and apply them to the internal planning scene
                        the internal planning scene accordingly */
@@ -300,7 +356,9 @@ int main(int argc, char** argv)
 
     // =========================================================================================
 
-    TEST_KINE_FORWARD(kinematic_model);
+    // TEST_KINE_FORWARD(kinematic_model);
+    
+    DISPLAY_ROBOT_STATE_IN_RVIZ(kinematic_model, cuda_test_node);
 
     // stop the node
     rclcpp::shutdown();
