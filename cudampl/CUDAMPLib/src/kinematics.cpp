@@ -1,19 +1,14 @@
 #include "kinematics.h"
-#include <iostream>
 
-#define UNKNOWN 0
-#define REVOLUTE 1
-#define PRISMATIC 2
-#define PLANAR 3 // This is not used
-#define FLOATING 4 // This is not used
-#define FIXED 5
-
-void fixed_joint_fn(const Eigen::Isometry3d& parent_link_pose, const Eigen::Isometry3d& joint_pose, Eigen::Isometry3d& link_pose)
+void CUDAMPLib::fixed_joint_fn(
+    const Eigen::Isometry3d& parent_link_pose, 
+    const Eigen::Isometry3d& joint_pose, 
+    Eigen::Isometry3d& link_pose)
 {
     link_pose = parent_link_pose * joint_pose;
 }
 
-void prism_joint_fn(
+void CUDAMPLib::prism_joint_fn(
     const Eigen::Isometry3d& parent_link_pose, 
     const Eigen::Isometry3d& joint_pose, 
     const Eigen::Vector3d& joint_axis, 
@@ -25,7 +20,7 @@ void prism_joint_fn(
     link_pose = parent_link_pose * joint_pose * joint_transform;
 }
 
-void revolute_joint_fn(
+void CUDAMPLib::revolute_joint_fn(
     const Eigen::Isometry3d& parent_link_pose, 
     const Eigen::Isometry3d& joint_pose, 
     const Eigen::Vector3d& joint_axis, 
@@ -37,7 +32,7 @@ void revolute_joint_fn(
     link_pose = parent_link_pose * joint_pose * joint_transform;
 }
 
-void kin_forward(
+void CUDAMPLib::kin_forward(
     const std::vector<std::vector<float>>& joint_values,
     const std::vector<int>& joint_types,
     const std::vector<Eigen::Isometry3d>& joint_poses,
@@ -63,17 +58,17 @@ void kin_forward(
         // Based on the joint type
         switch(joint_types[i])
         {
-            case REVOLUTE:
+            case CUDAMPLib_REVOLUTE:
                 // std::cout << "Joint type: REVOLUTE" << std::endl;
                 revolute_joint_fn(parent_link_pose, joint_poses[i], joint_axes[i], current_joint_values[j], link_poses[i]);
                 j++;
                 break;
-            case PRISMATIC:
+            case CUDAMPLib_PRISMATIC:
                 // std::cout << "Joint type: PRISMATIC" << std::endl;
                 prism_joint_fn(parent_link_pose, joint_poses[i], joint_axes[i], current_joint_values[j], link_poses[i]);
                 j++;
                 break;
-            case FIXED:
+            case CUDAMPLib_FIXED:
                 // std::cout << "Joint type: FIXED" << std::endl;
                 fixed_joint_fn(parent_link_pose, joint_poses[i], link_poses[i]);
                 break;

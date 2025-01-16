@@ -149,7 +149,7 @@ void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, bool deb
 
     // Generate test set
     std::vector<std::vector<float>> joint_values_test_set;
-    for (size_t t = 0; t < 1; t++)
+    for (size_t t = 0; t < 20; t++)
     {
         // Generate sampled configuration
         robot_state->setToRandomPositions();
@@ -168,8 +168,18 @@ void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, bool deb
     RobotInfo robot_info(robot_model, debug);
 
     std::vector<std::vector<Eigen::Isometry3d>> link_poses_from_kin_forward;
+    // std::vector<std::vector<Eigen::Isometry3d>> link_poses_from_kin_forward_cuda;
+    // CUDAMPLib::kin_forward(
+    //     joint_values_test_set,
+    //     robot_info.getJointTypes(),
+    //     robot_info.getJointPoses(),
+    //     robot_info.getJointAxes(),
+    //     robot_info.getLinkMaps(),
+    //     link_poses_from_kin_forward
+    // );
 
-    kin_forward(
+    // test cuda
+    CUDAMPLib::kin_forward_cuda(
         joint_values_test_set,
         robot_info.getJointTypes(),
         robot_info.getJointPoses(),
@@ -191,10 +201,10 @@ void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, bool deb
         std::cout << std::endl;
         robot_state->update();
 
+        bool equal = true;
+
         for (size_t j = 0; j < link_poses_from_kin_forward[i].size(); j++)
         {
-            
-
             const Eigen::Isometry3d& link_pose_from_robot_state = robot_state->getGlobalLinkTransform(robot_info.getLinkNames()[j]);
 
             if (debug)
@@ -206,12 +216,13 @@ void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, bool deb
                 std::cout << link_pose_from_robot_state.matrix() << std::endl;
             }
 
-            if (link_poses_from_kin_forward[i][j].isApprox(link_pose_from_robot_state, 1e-4))
-            {
-                // print above text with green color
-                std::cout << "\033[1;32mLink " << robot_info.getLinkNames()[j] << " poses are equal\033[0m" << std::endl;
-            }
-            else
+            // if (link_poses_from_kin_forward[i][j].isApprox(link_pose_from_robot_state, 1e-4))
+            // {
+            //     // print above text with green color
+            //     // std::cout << "\033[1;32mLink " << robot_info.getLinkNames()[j] << " poses are equal\033[0m" << std::endl;
+            // }
+            // else
+            if (not link_poses_from_kin_forward[i][j].isApprox(link_pose_from_robot_state, 1e-4))
             {
                 // print parent link
                 const moveit::core::LinkModel* link_model = robot_model->getLinkModel(robot_info.getLinkNames()[j]);
@@ -231,8 +242,19 @@ void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, bool deb
 
                 // print above text with red color
                 std::cout << "\033[1;31mLink " << robot_info.getLinkNames()[j] << " poses are not equal\033[0m" << std::endl;
+                
+                equal = false;
                 break;
             }
+        }
+
+        if (equal)
+        {
+            std::cout << "\033[1;32m Task pass \033[0m" << std::endl;
+        }
+        else
+        {
+            std::cout << "\033[1;31m Task fail \033[0m" << std::endl;
         }
     }
 }
