@@ -5,6 +5,19 @@ from launch_ros.substitutions import FindPackageShare
 from moveit_configs_utils import MoveItConfigsBuilder
 # import yaml
 
+# def load_yaml_recursively(file_path):
+#     def recursive_loader(data):
+#         if isinstance(data, dict):
+#             return {key: recursive_loader(value) for key, value in data.items()}
+#         if isinstance(data, list):
+#             return [recursive_loader(item) for item in data]
+#         else:
+#             return data
+
+#     with open(file_path, 'r') as file:
+#         data = yaml.safe_load(file)
+#         return recursive_loader(data)
+
 
 def generate_launch_description():
 
@@ -21,11 +34,13 @@ def generate_launch_description():
     srdf_file_path = 'config/fetch.srdf'
     rviz_file_path = 'rviz/fetch.rviz'
     moveit_controllers_file_path = 'config/controllers.yaml'
+    collision_spheres_file_path = 'robots/fetch.collision_spheres.yaml'
 
     urdf_model_path = os.path.join(pkg_share_description, urdf_file_path)
     srdf_model_path = os.path.join(pkg_share_moveit_config, srdf_file_path)
     rviz_config_path = os.path.join(pkg_share_foliation_planner, rviz_file_path)
     moveit_controllers_file_path = os.path.join(pkg_share_moveit_config, moveit_controllers_file_path)
+    collision_spheres_file_path = os.path.join(pkg_share_description, collision_spheres_file_path)
 
     moveit_config = (
         MoveItConfigsBuilder("fetch", package_name=package_name_foliation_planner)
@@ -44,23 +59,26 @@ def generate_launch_description():
         output='screen',
         parameters=[
             moveit_config.to_dict(),
+            {
+                "collision_spheres_file_path": collision_spheres_file_path
+            }
         ]
     )
 
-    # Launch RViz
-    rviz_node = Node(
-        package="rviz2",
-        executable="rviz2",
-        name="rviz2",
-        output="log",
-        arguments=["-d", rviz_config_path],
-        parameters=[
-            moveit_config.robot_description,
-            moveit_config.robot_description_semantic,
-        ],
-    )
+    # # Launch RViz
+    # rviz_node = Node(
+    #     package="rviz2",
+    #     executable="rviz2",
+    #     name="rviz2",
+    #     output="log",
+    #     arguments=["-d", rviz_config_path],
+    #     parameters=[
+    #         moveit_config.robot_description,
+    #         moveit_config.robot_description_semantic,
+    #     ],
+    # )
 
     node_list.append(cuda_test_node)
-    node_list.append(rviz_node)
+    # node_list.append(rviz_node)
 
     return LaunchDescription(node_list)

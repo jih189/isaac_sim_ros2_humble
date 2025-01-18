@@ -13,6 +13,8 @@
 #include <CUDAMPLib/multiply.h>
 #include <CUDAMPLib/kinematics.h>
 
+#include <yaml-cpp/yaml.h>
+
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("CUDAMPLib");
 
 /**
@@ -21,8 +23,11 @@ A class which take robot model and generate robot information for cudampl.
 class RobotInfo
 {
     public:
-    RobotInfo(const moveit::core::RobotModelPtr& robot_model, bool debug = false)
+    RobotInfo(const moveit::core::RobotModelPtr& robot_model, const std::string & collision_spheres_file_path, bool debug = false)
     {
+
+        
+
         // Initialize all variables
         joint_types.clear();
         joint_poses.clear();
@@ -32,6 +37,12 @@ class RobotInfo
 
         // Get all link names
         link_names = robot_model->getLinkModelNames();
+
+        if (! loadCollisionSpheres(collision_spheres_file_path)) // this requires the link_names is generated.
+        {
+            RCLCPP_ERROR(LOGGER, "Failed to load collision spheres from file");
+        }
+
         // Ready the input to kin_forward
         for (const auto& link_name : link_names)
         {
@@ -105,6 +116,79 @@ class RobotInfo
         }
     }
 
+    bool loadCollisionSpheres(const std::string & collision_spheres_file_path)
+    {
+        // load collision spheres from file
+
+        if (collision_spheres_file_path.empty()){
+            // print error message in red
+            std::cout << "\033[1;31mCollision spheres file path is empty\033[0m" << std::endl;
+            return false;
+        }
+
+        // load a yaml file
+        YAML::Node collision_spheres_yaml = YAML::LoadFile(collision_spheres_file_path);
+
+        // check if the yaml file contains collision_spheres
+        if (!collision_spheres_yaml["collision_spheres"]){
+            // print error message in red
+            std::cout << "\033[1;31mNo collision_spheres in the yaml file\033[0m" << std::endl;
+            return false;
+        }
+        else{
+            // std::cout << collision_spheres_yaml["collision_spheres"] << std::endl;
+
+            // print each collision sphere
+            for (const auto& collision_sphere : collision_spheres_yaml["collision_spheres"]){
+                // std::cout << collision_sphere << std::endl;
+                // print each key of the collision sphere
+                for (const auto& key : collision_sphere){
+                    // std::cout << key.first.as<std::string>() << std::endl;
+
+                    std::string collision_sphere_link_name = key.first.as<std::string>();
+
+                    // get collision_sphere_link_name index in link_names
+                    int collision_sphere_link_index = -1;
+                    for (size_t i = 0; i < link_names.size(); i++)
+                    {
+                        if (link_names[i] == collision_sphere_link_name)
+                        {
+                            collision_sphere_link_index = i;
+                            break;
+                        }
+                    }
+
+                    if (collision_sphere_link_index == -1){
+                        // print error message in red
+                        std::cout << "\033[1;31mCollision sphere link name is not in the link names\033[0m" << std::endl;
+                        return false;
+                    }
+
+                    // print each value of the key
+                    for (const auto& value : key.second){
+                        // std::cout << "center " << value["center"][0] << " " << value["center"][1] << " " << value["center"][2] << " " << value["center"][3] << " radius " << value["radius"] << std::endl;
+                        collision_spheres_map.push_back(collision_sphere_link_index);
+                        collision_spheres.push_back({value["center"][0].as<float>(), value["center"][1].as<float>(), value["center"][2].as<float>(), value["radius"].as<float>()});
+                    }
+                }
+                // std::cout << collision_sphere[0].first << std::endl;
+            }
+
+            // list all keys of collision_spheres_yaml["collision_spheres"]
+            // for (const auto& key : collision_spheres_yaml["collision_spheres"]){
+            //     std::cout << key.first.as<std::string>() << std::endl;
+            // }
+            // std::cout << "type: " << collision_spheres_yaml["collision_spheres"].Type() << std::endl;
+            // for (const auto& collision_sphere : collision_spheres_yaml["collision_spheres"]){
+            //     // each collision sphere is a map
+            //     // print map key of the collision sphere
+            //     std::cout << "key: " << collision_sphere.first.as<std::string>() << std::endl;
+            // }
+        }
+
+        return true;
+    }
+
     std::vector<int> getJointTypes() const
     {
         return joint_types;
@@ -130,21 +214,32 @@ class RobotInfo
         return link_names;
     }
 
+    void loadCollisionSpheres()
+    {
+
+    }
+
     private:
     std::vector<int> joint_types;
     std::vector<Eigen::Isometry3d> joint_poses;
     std::vector<Eigen::Vector3d> joint_axes;
     std::vector<int> link_maps;
     std::vector<std::string> link_names;
+    std::vector<int> collision_spheres_map; // define which link the collision sphere belongs to
+    std::vector<std::vector<float>> collision_spheres; // (x, y, z, radius)
 };
 
 /***
 Randomly generate a set of joint values and pass them to the kin_forward function.
 Then, we use the RobotState object to get the link poses and compare them with the link poses generated by the kin_forward function.
  */
-void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, bool debug = false){
+void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node::SharedPtr node, bool debug = false){
 
     std::cout << "TEST kine_forward with robot model " << robot_model->getName() << std::endl;
+
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RCLCPP_INFO(LOGGER, "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     const std::vector<std::string>& joint_names = robot_model->getActiveJointModelNames();
@@ -167,7 +262,7 @@ void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, bool deb
     }
 
     // Get robot information
-    RobotInfo robot_info(robot_model, debug);
+    RobotInfo robot_info(robot_model, collision_spheres_file_path, debug);
 
     std::vector<std::vector<Eigen::Isometry3d>> link_poses_from_kin_forward;
     // std::vector<std::vector<Eigen::Isometry3d>> link_poses_from_kin_forward_cuda;
@@ -263,8 +358,14 @@ void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, bool deb
     robot_state.reset();
 }
 
-void DISPLAY_ROBOT_STATE_IN_RVIZ(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node::SharedPtr node)
+void DISPLAY_ROBOT_STATE_IN_RVIZ(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node::SharedPtr node, bool debug = false)
 {
+
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RCLCPP_INFO(LOGGER, "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
+
+    RobotInfo robot_info(robot_model, collision_spheres_file_path, debug);
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
 
@@ -272,21 +373,21 @@ void DISPLAY_ROBOT_STATE_IN_RVIZ(const moveit::core::RobotModelPtr & robot_model
     RCLCPP_INFO(LOGGER, "Robot model name: %s", robot_model->getName().c_str());
 
     //************************************* */
-    // print link names of the robot model
-    const std::vector<std::string>& link_names = robot_model->getLinkModelNames();
-    std::cout << "Link names: " << std::endl;
-    for (const auto& link_name : link_names)
-    {
-        std::cout << link_name << std::endl;
-        // get link model
-        const moveit::core::LinkModel* link_model = robot_model->getLinkModel(link_name);
-        // get shape of the link
-        const std::vector<shapes::ShapeConstPtr> shapes = link_model->getShapes();
-        for (const auto& shape : shapes)
-        {
-            std::cout << "shape type: " << shape->type << std::endl;
-        }
-    }
+    // // print link names of the robot model
+    // const std::vector<std::string>& link_names = robot_model->getLinkModelNames();
+    // std::cout << "Link names: " << std::endl;
+    // for (const auto& link_name : link_names)
+    // {
+    //     std::cout << link_name << std::endl;
+    //     // get link model
+    //     const moveit::core::LinkModel* link_model = robot_model->getLinkModel(link_name);
+    //     // get shape of the link
+    //     const std::vector<shapes::ShapeConstPtr> shapes = link_model->getShapes();
+    //     for (const auto& shape : shapes)
+    //     {
+    //         std::cout << "shape type: " << shape->type << std::endl;
+    //     }
+    // }
     //************************************* */
 
     // random set joint values
@@ -354,11 +455,26 @@ int main(int argc, char** argv)
                             and update the internal planning scene accordingly*/
     psm->startStateMonitor();
 
+
+
     // =========================================================================================
 
-    // TEST_KINE_FORWARD(kinematic_model);
+    // // print collision_spheres_file_path from ros parameter server
+    // std::string collision_spheres_file_path;
+    // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
+
+    // TEST_KINE_FORWARD(kinematic_model, cuda_test_node);
     
     DISPLAY_ROBOT_STATE_IN_RVIZ(kinematic_model, cuda_test_node);
+
+    // list ros parameters
+    // RCLCPP_INFO(cuda_test_node->get_logger(), "List all parameters");
+    // auto parameters = cuda_test_node->list_parameters({""}, 5);
+    // for (const auto& parameter : parameters.names)
+    // {
+    //     RCLCPP_INFO(cuda_test_node->get_logger(), "Parameter name: %s", parameter.c_str());
+    // }
 
     // stop the node
     rclcpp::shutdown();
