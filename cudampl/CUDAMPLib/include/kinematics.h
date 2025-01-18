@@ -53,4 +53,16 @@ namespace CUDAMPLib
         const std::vector<int>& link_maps,
         std::vector<std::vector<Eigen::Isometry3d>>& link_poses_set
     );
+
+    void kin_forward_collision_spheres_cuda(
+        const std::vector<std::vector<float>>& joint_values,
+        const std::vector<int>& joint_types,
+        const std::vector<Eigen::Isometry3d>& joint_poses,
+        const std::vector<Eigen::Vector3d>& joint_axes,
+        const std::vector<int>& link_maps,
+        const std::vector<int>& collision_spheres_map,
+        const std::vector<std::vector<float>>& collision_spheres_pos,
+        std::vector<std::vector<Eigen::Isometry3d>>& link_poses_set,
+        std::vector<std::vector<std::vector<float>>>& collision_spheres_pos_in_baselink
+    );
 }

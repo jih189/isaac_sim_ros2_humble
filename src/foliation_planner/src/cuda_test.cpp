@@ -26,14 +26,15 @@ class RobotInfo
     RobotInfo(const moveit::core::RobotModelPtr& robot_model, const std::string & collision_spheres_file_path, bool debug = false)
     {
 
-        
-
         // Initialize all variables
         joint_types.clear();
         joint_poses.clear();
         joint_axes.clear();
         link_maps.clear();
         link_names.clear();
+        collision_spheres_map.clear();
+        collision_spheres_pos.clear();
+        collision_spheres_radius.clear();
 
         // Get all link names
         link_names = robot_model->getLinkModelNames();
@@ -168,7 +169,8 @@ class RobotInfo
                     for (const auto& value : key.second){
                         // std::cout << "center " << value["center"][0] << " " << value["center"][1] << " " << value["center"][2] << " " << value["center"][3] << " radius " << value["radius"] << std::endl;
                         collision_spheres_map.push_back(collision_sphere_link_index);
-                        collision_spheres.push_back({value["center"][0].as<float>(), value["center"][1].as<float>(), value["center"][2].as<float>(), value["radius"].as<float>()});
+                        collision_spheres_pos.push_back({value["center"][0].as<float>(), value["center"][1].as<float>(), value["center"][2].as<float>()});
+                        collision_spheres_radius.push_back(value["radius"].as<float>());
                     }
                 }
                 // std::cout << collision_sphere[0].first << std::endl;
@@ -214,9 +216,19 @@ class RobotInfo
         return link_names;
     }
 
-    void loadCollisionSpheres()
+    std::vector<int> getCollisionSpheresMap() const
     {
+        return collision_spheres_map;
+    }
 
+    std::vector<std::vector<float>> getCollisionSpheresPos() const
+    {
+        return collision_spheres_pos;
+    }
+
+    std::vector<float> getCollisionSpheresRadius() const
+    {
+        return collision_spheres_radius;
     }
 
     private:
@@ -226,7 +238,8 @@ class RobotInfo
     std::vector<int> link_maps;
     std::vector<std::string> link_names;
     std::vector<int> collision_spheres_map; // define which link the collision sphere belongs to
-    std::vector<std::vector<float>> collision_spheres; // (x, y, z, radius)
+    std::vector<std::vector<float>> collision_spheres_pos; // (x, y, z)
+    std::vector<float> collision_spheres_radius; // radius
 };
 
 /***
@@ -368,34 +381,83 @@ void DISPLAY_ROBOT_STATE_IN_RVIZ(const moveit::core::RobotModelPtr & robot_model
     RobotInfo robot_info(robot_model, collision_spheres_file_path, debug);
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    const std::vector<std::string>& joint_names = robot_model->getActiveJointModelNames();
 
     // print robot model name
     RCLCPP_INFO(LOGGER, "Robot model name: %s", robot_model->getName().c_str());
-
-    //************************************* */
-    // // print link names of the robot model
-    // const std::vector<std::string>& link_names = robot_model->getLinkModelNames();
-    // std::cout << "Link names: " << std::endl;
-    // for (const auto& link_name : link_names)
-    // {
-    //     std::cout << link_name << std::endl;
-    //     // get link model
-    //     const moveit::core::LinkModel* link_model = robot_model->getLinkModel(link_name);
-    //     // get shape of the link
-    //     const std::vector<shapes::ShapeConstPtr> shapes = link_model->getShapes();
-    //     for (const auto& shape : shapes)
-    //     {
-    //         std::cout << "shape type: " << shape->type << std::endl;
-    //     }
-    // }
-    //************************************* */
 
     // random set joint values
     robot_state->setToRandomPositions();
     robot_state->update();
 
+    // Generate test set with one configuration.
+    std::vector<std::vector<float>> joint_values_test_set;
+    std::vector<float> sampled_joint_values;
+    for (const auto& joint_name : joint_names)
+    {
+        sampled_joint_values.push_back((float)(robot_state->getJointPositions(joint_name)[0]));
+    }
+    joint_values_test_set.push_back(sampled_joint_values);
+
+    std::vector<std::vector<Eigen::Isometry3d>> link_poses_from_kin_forward;
+    std::vector<std::vector<std::vector<float>>> collision_spheres_pos_from_kin_forward;
+
+    // test cuda
+    CUDAMPLib::kin_forward_collision_spheres_cuda(
+        joint_values_test_set,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        link_poses_from_kin_forward,
+        collision_spheres_pos_from_kin_forward
+    );
+
+    std::vector<std::vector<float>> collision_spheres_pos_of_first_config;
+    for (const auto & collision_spheres_in_link : collision_spheres_pos_from_kin_forward[0])
+    {
+        for (size_t i = 0; i < collision_spheres_in_link.size(); i += 3)
+        {
+            collision_spheres_pos_of_first_config.push_back({collision_spheres_in_link[i], collision_spheres_in_link[i + 1], collision_spheres_in_link[i + 2]});
+            // std::cout << "cs pos: " << collision_spheres_in_link[i] << " " << collision_spheres_in_link[i + 1] << " " << collision_spheres_in_link[i + 2] << " radius " << robot_info.getCollisionSpheresRadius()[i] << std::endl;
+        }
+    }
+
+    // Create marker publisher
+    auto marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("collision_spheres", 1);
+
+    // Create a MarkerArray message
+    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array;
+    for (size_t i = 0; i < collision_spheres_pos_of_first_config.size(); i++)
+    {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = node->now();
+        marker.ns = "collision_spheres";
+        marker.id = i;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = collision_spheres_pos_of_first_config[i][0];
+        marker.pose.position.y = collision_spheres_pos_of_first_config[i][1];
+        marker.pose.position.z = collision_spheres_pos_of_first_config[i][2];
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 2 * robot_info.getCollisionSpheresRadius()[i];
+        marker.scale.y = 2 * robot_info.getCollisionSpheresRadius()[i];
+        marker.scale.z = 2 * robot_info.getCollisionSpheresRadius()[i];
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+        robot_collision_spheres_marker_array.markers.push_back(marker);
+    }
+
     // Create a robot state publisher
-    auto robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("cuda_test_robot_state", 1);
+    auto robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("display_robot_state", 1);
 
     // Create a DisplayRobotState message
     moveit_msgs::msg::DisplayRobotState display_robot_state;
@@ -406,6 +468,7 @@ void DISPLAY_ROBOT_STATE_IN_RVIZ(const moveit::core::RobotModelPtr & robot_model
     {
         // Publish the message
         robot_state_publisher->publish(display_robot_state);
+        marker_publisher->publish(robot_collision_spheres_marker_array);
         
         rclcpp::spin_some(node);
 

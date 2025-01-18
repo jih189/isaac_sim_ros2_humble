@@ -166,54 +166,6 @@ __global__ void kin_forward_kernel(
 {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if (idx < configuration_size) {
-    //     printf("Configuration %d: ", idx);
-    //     for (int i = 0; i < num_of_joint; i++)
-    //     {
-    //         printf("%f ", joint_values[idx * num_of_joint + i]);
-    //     }
-    //     printf("\n");
-
-    //     // print joint types
-    //     printf("Joint types: ");
-    //     for (int i = 0; i < num_of_joint; i++)
-    //     {
-    //         printf("%d ", joint_types[i]);
-    //     }
-
-    //     // print joint poses
-    //     printf("Joint poses: ");
-    //     for (int i = 0; i < num_of_joint; i++)
-    //     {
-    //         for (int j = 0; j < 4; j++)
-    //         {
-    //             for (int k = 0; k < 4; k++)
-    //             {
-    //                 printf("%f ", joint_poses[i * 16 + j * 4 + k]);
-    //             }
-    //             printf("\n");
-    //         }
-    //     }
-    //     printf("\n");
-
-    //     // print joint axes
-    //     printf("Joint axes: ");
-    //     for (int i = 0; i < num_of_joint; i++)
-    //     {
-    //         for (int j = 0; j < 3; j++)
-    //         {
-    //             printf("%f ", joint_axes[i * 3 + j]);
-    //         }
-    //         printf("\n");
-    //     }
-    //     printf("\n");
-
-    //     // print link maps
-    //     printf("Link maps: ");
-    //     for (int i = 0; i < num_of_links; i++)
-    //     {
-    //         printf("%d ", link_maps[i]);
-    //     }
-    //     printf("\n");
 
         // set the first link pose to identity matrix because it is the base link
         for (int i = 0; i < 4; i++)
@@ -249,6 +201,75 @@ __global__ void kin_forward_kernel(
                     printf("Unknown joint type: %d\n", joint_types[i]);
                     break;
             }
+        }
+    }
+}
+
+__global__ void kin_forward_collision_spheres_kernel(
+    float* joint_values, 
+    int num_of_joint,
+    int configuration_size,
+    int* joint_types,
+    float* joint_poses,
+    int num_of_links,
+    float* joint_axes,
+    int* link_maps,
+    int num_of_collision_spheres,
+    int* collision_spheres_map,
+    float* collision_spheres_pos,
+    float* link_poses_set,
+    float* collision_spheres_pos_in_baselink
+) 
+{
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < configuration_size) {
+
+        // set the first link pose to identity matrix because it is the base link
+        for (int i = 0; i < 4; i++)
+        {
+            for (int j = 0; j < 4; j++)
+            {
+                link_poses_set[idx * num_of_links * 16 + i * 4 + j] = 0.0f;
+            }
+            link_poses_set[idx * num_of_links * 16 + i * 4 + i] = 1.0f;
+        }
+
+        // Calculate forward kinematics for each link
+        size_t j = 0;
+        for (size_t i = 1; i < num_of_links; i++) // The first link is the base link, so we can skip it
+        {
+            float* parent_link_pose = &link_poses_set[idx * num_of_links * 16 + link_maps[i] * 16];
+            float* current_link_pose = &link_poses_set[idx * num_of_links * 16 + i * 16];
+            // based on the joint type, calculate the link pose
+            switch (joint_types[i])
+            {
+                case CUDAMPLib_REVOLUTE:
+                    revolute_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + j], current_link_pose);
+                    j++;
+                    break;
+                case CUDAMPLib_PRISMATIC:
+                    prism_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + j], current_link_pose);
+                    j++;
+                    break;
+                case CUDAMPLib_FIXED:
+                    fixed_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], current_link_pose);
+                    break;
+                default:
+                    printf("Unknown joint type: %d\n", joint_types[i]);
+                    break;
+            }
+        }
+
+        // Calculate the collision spheres position in the base link frame
+        for (size_t i = 0; i < num_of_collision_spheres; i++)
+        {
+            float* collision_sphere_pos = &collision_spheres_pos[i * 3]; // collision sphere position in link frame
+            float* collision_sphere_pos_in_baselink = &collision_spheres_pos_in_baselink[idx * num_of_collision_spheres * 3 + i * 3]; // collision sphere position in base link frame
+            float* link_pose = &link_poses_set[idx * num_of_links * 16 + collision_spheres_map[i] * 16]; // link pose in base link frame
+
+            collision_sphere_pos_in_baselink[0] = link_pose[0] * collision_sphere_pos[0] + link_pose[1] * collision_sphere_pos[1] + link_pose[2] * collision_sphere_pos[2] + link_pose[3];
+            collision_sphere_pos_in_baselink[1] = link_pose[4] * collision_sphere_pos[0] + link_pose[5] * collision_sphere_pos[1] + link_pose[6] * collision_sphere_pos[2] + link_pose[7];
+            collision_sphere_pos_in_baselink[2] = link_pose[8] * collision_sphere_pos[0] + link_pose[9] * collision_sphere_pos[1] + link_pose[10] * collision_sphere_pos[2] + link_pose[11];
         }
     }
 }
@@ -294,6 +315,28 @@ std::vector<float> IsometryVectorFlatten(const std::vector<Eigen::Isometry3d>& t
                 output.push_back(static_cast<float>(mat(row, col)));
             }
         }
+    }
+
+    return output;
+}
+
+std::vector<std::vector<float>> FromFloatVectorToVec3(const std::vector<float>& data, size_t size)
+{
+    // Check if the data size is a multiple of the given size
+    if (data.size() % size != 0)
+    {
+        std::cerr << "Invalid data size for conversion." << std::endl;
+        return {};
+    }
+
+    // Create the output vector
+    std::vector<std::vector<float>> output;
+    output.reserve(data.size() / size);
+
+    // Iterate over the data, extracting vectors of the given size
+    for (size_t i = 0; i < data.size(); i += size)
+    {
+        output.push_back(std::vector<float>(data.begin() + i, data.begin() + i + size));
     }
 
     return output;
@@ -432,4 +475,132 @@ void CUDAMPLib::kin_forward_cuda(
     cudaFree(d_joint_axes);
     cudaFree(d_link_maps);
     cudaFree(d_link_poses_set);
+}
+
+void CUDAMPLib::kin_forward_collision_spheres_cuda(
+    const std::vector<std::vector<float>>& joint_values,
+    const std::vector<int>& joint_types,
+    const std::vector<Eigen::Isometry3d>& joint_poses,
+    const std::vector<Eigen::Vector3d>& joint_axes,
+    const std::vector<int>& link_maps,
+    const std::vector<int>& collision_spheres_map,
+    const std::vector<std::vector<float>>& collision_spheres_pos,
+    std::vector<std::vector<Eigen::Isometry3d>>& link_poses_set,
+    std::vector<std::vector<std::vector<float>>>& collision_spheres_pos_in_baselink
+)
+{
+    if (joint_values.size() == 0)
+    {
+        std::cout << "No joint values provided." << std::endl;
+        return;
+    }
+
+    
+    
+    // Prepare cuda memory
+    int num_of_joints = joint_values[0].size();
+    int num_of_links = link_maps.size();
+    int num_of_config = joint_values.size();
+    int num_of_collision_spheres = collision_spheres_map.size();
+    int joint_values_size = num_of_config * num_of_joints;
+    int joint_values_bytes = joint_values_size * sizeof(float);
+    int joint_types_bytes = joint_types.size() * sizeof(int);
+    int size_of_pose_matrix = 4 * 4 * sizeof(float); // We do not need the last row of the matrix
+    int joint_poses_bytes = joint_poses.size() * size_of_pose_matrix;
+    int joint_axes_bytes = joint_axes.size() * sizeof(float) * 3;
+    int link_maps_bytes = link_maps.size() * sizeof(int);
+    int link_poses_set_size = num_of_links * num_of_config * size_of_pose_matrix;
+    int link_poses_set_bytes = link_poses_set_size * sizeof(float);
+    int collision_spheres_map_bytes = num_of_collision_spheres * sizeof(int);
+    int collision_spheres_pos_bytes = num_of_collision_spheres * sizeof(float) * 3;
+    int collision_spheres_pos_in_baselink_size = num_of_collision_spheres * num_of_config * 3;
+    int collision_spheres_pos_in_baselink_bytes = collision_spheres_pos_in_baselink_size * sizeof(float);
+
+    //******************* */
+    // std::cout << "input check" << std::endl;
+    // for (int i = 0; i < num_of_collision_spheres; i++)
+    // {
+    //     std::cout << "cs[" << i << "]: " << collision_spheres_pos[i][0] << " " << collision_spheres_pos[i][1] << " " << collision_spheres_pos[i][2] << " " << collision_spheres_map[i] << std::endl;
+    // }
+    // ******************* */
+
+
+    // Allocate device memory
+    float *d_joint_values;
+    int *d_joint_types;
+    float *d_joint_poses;
+    float *d_joint_axes;
+    int *d_link_maps;
+    int *d_collision_spheres_map;
+    float *d_collision_spheres_pos;
+    float *d_link_poses_set;
+    float *d_collision_spheres_pos_in_baselink;
+
+    cudaMalloc(&d_joint_values, joint_values_bytes);
+    cudaMalloc(&d_joint_types, joint_types_bytes);
+    cudaMalloc(&d_joint_poses, joint_poses_bytes);
+    cudaMalloc(&d_joint_axes, joint_axes_bytes);
+    cudaMalloc(&d_link_maps, link_maps_bytes);
+    cudaMalloc(&d_collision_spheres_map, collision_spheres_map_bytes);
+    cudaMalloc(&d_collision_spheres_pos, collision_spheres_pos_bytes);
+    cudaMalloc(&d_link_poses_set, link_poses_set_bytes);
+    cudaMalloc(&d_collision_spheres_pos_in_baselink, collision_spheres_pos_in_baselink_bytes);
+
+    // Copy data from host to device
+    cudaMemcpy(d_joint_values, floatVectorFlatten(joint_values).data(), joint_values_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_joint_types, joint_types.data(), joint_types_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_joint_poses, IsometryVectorFlatten(joint_poses).data(), joint_poses_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_joint_axes, Vector3dflatten(joint_axes).data(), joint_axes_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_link_maps, link_maps.data(), link_maps_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_collision_spheres_map, collision_spheres_map.data(), collision_spheres_map_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_collision_spheres_pos, floatVectorFlatten(collision_spheres_pos).data(), collision_spheres_pos_bytes, cudaMemcpyHostToDevice);
+
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (num_of_config + threadsPerBlock - 1) / threadsPerBlock;
+
+    kin_forward_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+        d_joint_values, 
+        num_of_joints,
+        num_of_config,
+        d_joint_types,
+        d_joint_poses,
+        num_of_links,
+        d_joint_axes,
+        d_link_maps,
+        num_of_collision_spheres,
+        d_collision_spheres_map,
+        d_collision_spheres_pos,
+        d_link_poses_set,
+        d_collision_spheres_pos_in_baselink
+    );
+    cudaDeviceSynchronize();
+
+    std::vector<float> h_link_poses_set(link_poses_set_size);
+    std::vector<float> h_collision_spheres_pos_in_baselink(collision_spheres_pos_in_baselink_size);
+    cudaMemcpy(h_link_poses_set.data(), d_link_poses_set, link_poses_set_bytes, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_collision_spheres_pos_in_baselink.data(), d_collision_spheres_pos_in_baselink, collision_spheres_pos_in_baselink_bytes, cudaMemcpyDeviceToHost);
+
+    link_poses_set.clear();
+    collision_spheres_pos_in_baselink.clear();
+    for (int i = 0; i < num_of_config; i++)
+    {
+        link_poses_set.push_back(fromFloatVector(std::vector<float>(h_link_poses_set.begin() + i * num_of_links * 16, h_link_poses_set.begin() + (i + 1) * num_of_links * 16)));
+        std::vector<std::vector<float>> collision_spheres_pos_in_baselink_of_current_config;
+        for ( int j = 0; j < num_of_collision_spheres; j++)
+        {
+            collision_spheres_pos_in_baselink_of_current_config.push_back(std::vector<float>(h_collision_spheres_pos_in_baselink.begin() + i * num_of_collision_spheres * 3 + j * 3, h_collision_spheres_pos_in_baselink.begin() + i * num_of_collision_spheres * 3 + (j + 1) * 3));
+        }
+        collision_spheres_pos_in_baselink.push_back(collision_spheres_pos_in_baselink_of_current_config);
+    }
+
+    // Free device memory
+    cudaFree(d_joint_values);
+    cudaFree(d_joint_types);
+    cudaFree(d_joint_poses);
+    cudaFree(d_joint_axes);
+    cudaFree(d_link_maps);
+    cudaFree(d_collision_spheres_map);
+    cudaFree(d_collision_spheres_pos);
+    cudaFree(d_link_poses_set);
+    cudaFree(d_collision_spheres_pos_in_baselink);
 }
