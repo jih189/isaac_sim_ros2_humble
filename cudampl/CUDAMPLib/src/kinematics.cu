@@ -494,7 +494,8 @@ void CUDAMPLib::evaluation_cuda(
     const std::vector<std::vector<float>>& collision_spheres_pos,
     const std::vector<float>& collision_spheres_radius,
     const std::vector<CostBasePtr>& costs,
-    std::vector<float>& costs_values
+    std::vector<float>& costs_values,
+    std::vector<std::vector<std::vector<float>>>& collision_spheres_pos_in_baselink_for_debug
 )
 {
     if (joint_values.size() == 0)
@@ -582,6 +583,21 @@ void CUDAMPLib::evaluation_cuda(
     );
     cudaDeviceSynchronize();
 
+    // ready the self collision spheres as output for debug
+    std::vector<float> h_collision_spheres_pos_in_baselink(collision_spheres_pos_in_baselink_size);
+    cudaMemcpy(h_collision_spheres_pos_in_baselink.data(), d_collision_spheres_pos_in_baselink, collision_spheres_pos_in_baselink_bytes, cudaMemcpyDeviceToHost);
+
+    collision_spheres_pos_in_baselink_for_debug.clear();
+    for (size_t i = 0; i < num_of_config; i++)
+    {
+        std::vector<std::vector<float>> collision_spheres_pos_in_baselink_of_current_config;
+        for ( int j = 0; j < num_of_collision_spheres; j++)
+        {
+            collision_spheres_pos_in_baselink_of_current_config.push_back(std::vector<float>(h_collision_spheres_pos_in_baselink.begin() + i * num_of_collision_spheres * 3 + j * 3, h_collision_spheres_pos_in_baselink.begin() + i * num_of_collision_spheres * 3 + (j + 1) * 3));
+        }
+        collision_spheres_pos_in_baselink_for_debug.push_back(collision_spheres_pos_in_baselink_of_current_config);
+    }
+
     for (size_t i = 0; i < costs.size(); i++)
     {
         float* d_current_cost = &d_cost[i * num_of_config];
@@ -601,7 +617,7 @@ void CUDAMPLib::evaluation_cuda(
         std::vector<float> current_cost_values(num_of_config);
         float* d_current_cost = &d_cost[i * num_of_config];
         cudaMemcpy(current_cost_values.data(), d_current_cost, single_cost_bytes, cudaMemcpyDeviceToHost);
-        for (size_t j = 0; j < num_of_config; j++)
+        for (int j = 0; j < num_of_config; j++)
         {
             costs_values[j] += current_cost_values[j];
         }

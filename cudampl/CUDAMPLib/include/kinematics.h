@@ -75,6 +75,7 @@ namespace CUDAMPLib
         const std::vector<std::vector<float>>& collision_spheres_pos,
         const std::vector<float>& collision_spheres_radius,
         const std::vector<CostBasePtr>& costs,
-        std::vector<float>& costs_values
+        std::vector<float>& costs_values,
+        std::vector<std::vector<std::vector<float>>>& collision_spheres_pos_in_baselink_for_debug
     );
 }

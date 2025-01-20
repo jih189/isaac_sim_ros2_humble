@@ -513,18 +513,19 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, rclcpp::No
     // robot_state->setToRandomPositions();
     // robot_state->update();
 
-    float ball_size = 0.1;
-    // randomly generate some (ball_size, ball_size, ball_size) size balls in base_link frame in range
-    // x range [0.0, 0.6], y range [0.3, 0.3], z range [0.4, 1.5]
+    float obstacle_spheres_radius = 0.06;
+    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
+    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
+    int num_of_obstacle_spheres = 20;
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    for (size_t i = 0; i < 7; i++)
+    for (int i = 0; i < num_of_obstacle_spheres; i++)
     {
-        float x = 0.6 * ((float)rand() / RAND_MAX);
-        float y = 2.0 * 0.3 * ((float)rand() / RAND_MAX) - 0.3;
-        float z = 1.1 * ((float)rand() / RAND_MAX) + 0.4;
+        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
+        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
+        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
         balls_pos.push_back({x, y, z});
-        ball_radius.push_back(ball_size);
+        ball_radius.push_back(obstacle_spheres_radius);
     }
 
     /***************************************** test */
@@ -532,7 +533,7 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, rclcpp::No
     // Generate test set with one configuration.
     std::vector<std::vector<float>> joint_values_test_set;
 
-    int num_of_sampled_configurations = 6000;
+    int num_of_sampled_configurations = 100;
 
     for (int t = 0; t < num_of_sampled_configurations; t++)
     {
@@ -563,6 +564,7 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, rclcpp::No
     std::vector<CUDAMPLib::CostBasePtr> cost_set;
     std::vector<float> cost_of_configurations;
     cost_set.push_back(collision_cost);
+    std::vector<std::vector<std::vector<float>>> collision_spheres_pos_in_base_link_for_debug;
 
     CUDAMPLib::evaluation_cuda(
         joint_values_test_set,
@@ -574,7 +576,8 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, rclcpp::No
         robot_info.getCollisionSpheresPos(),
         robot_info.getCollisionSpheresRadius(),
         cost_set,
-        cost_of_configurations
+        cost_of_configurations,
+        collision_spheres_pos_in_base_link_for_debug
     );
 
     int collision_free_configuration_index = -1;
@@ -594,6 +597,15 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, rclcpp::No
         std::cout << "cost of the first configuration: " << cost_of_configurations[0] << std::endl;
     }
 
+    std::vector<std::vector<float>> collision_spheres_pos_of_selected_config;
+    for (const auto & collision_spheres_in_link : collision_spheres_pos_in_base_link_for_debug[collision_free_configuration_index])
+    {
+        for (size_t i = 0; i < collision_spheres_in_link.size(); i += 3)
+        {
+            collision_spheres_pos_of_selected_config.push_back({collision_spheres_in_link[i], collision_spheres_in_link[i + 1], collision_spheres_in_link[i + 2]});
+        }
+    }
+
     // set the robot state to the collision free configuration
     for (size_t j = 0; j < joint_names.size(); j++)
     {
@@ -607,23 +619,54 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, rclcpp::No
     /********************************************** */
 
     // Create marker publisher
-    auto marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("balls", 1);
+    auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
 
     // Create a robot state publisher
     auto robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("display_robot_state", 1);
+
+    // Create marker publisher
+    auto self_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("self_collision_spheres", 1);
 
     // Create a DisplayRobotState message
     moveit_msgs::msg::DisplayRobotState display_robot_state;
     moveit::core::robotStateToRobotStateMsg(*robot_state, display_robot_state.state);
 
-    // Create a MarkerArray message
-    visualization_msgs::msg::MarkerArray robot_balls_marker_array;
+    // Create a self MarkerArray message
+    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array;
+    for (size_t i = 0; i < collision_spheres_pos_of_selected_config.size(); i++)
+    {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = node->now();
+        marker.ns = "self_collision_spheres";
+        marker.id = i;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = collision_spheres_pos_of_selected_config[i][0];
+        marker.pose.position.y = collision_spheres_pos_of_selected_config[i][1];
+        marker.pose.position.z = collision_spheres_pos_of_selected_config[i][2];
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 2 * robot_info.getCollisionSpheresRadius()[i];
+        marker.scale.y = 2 * robot_info.getCollisionSpheresRadius()[i];
+        marker.scale.z = 2 * robot_info.getCollisionSpheresRadius()[i];
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+        robot_collision_spheres_marker_array.markers.push_back(marker);
+    }
+
+    // Create a obstacle MarkerArray message
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
     for (size_t i = 0; i < balls_pos.size(); i++)
     {
         visualization_msgs::msg::Marker marker;
         marker.header.frame_id = "base_link";
         marker.header.stamp = node->now();
-        marker.ns = "spheres";
+        marker.ns = "obstacle_collision_spheres";
         marker.id = i;
         marker.type = visualization_msgs::msg::Marker::SPHERE;
         marker.action = visualization_msgs::msg::Marker::ADD;
@@ -634,23 +677,22 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, rclcpp::No
         marker.pose.orientation.y = 0.0;
         marker.pose.orientation.z = 0.0;
         marker.pose.orientation.w = 1.0;
-        marker.scale.x = ball_size;
-        marker.scale.y = ball_size;
-        marker.scale.z = ball_size;
+        marker.scale.x = 2 * obstacle_spheres_radius;
+        marker.scale.y = 2 * obstacle_spheres_radius;
+        marker.scale.z = 2 * obstacle_spheres_radius;
         marker.color.a = 1.0; // Don't forget to set the alpha!
         marker.color.r = 1.0;
         marker.color.g = 0.0;
         marker.color.b = 0.0;
-        robot_balls_marker_array.markers.push_back(marker);
+        obstacle_collision_spheres_marker_array.markers.push_back(marker);
     }
 
     // use loop to publish the trajectory
     while (rclcpp::ok())
     {
         // Publish the message
-        marker_publisher->publish(robot_balls_marker_array);
-
-        // Publish the message
+        obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
+        self_marker_publisher->publish(robot_collision_spheres_marker_array);
         robot_state_publisher->publish(display_robot_state);
         
         rclcpp::spin_some(node);
