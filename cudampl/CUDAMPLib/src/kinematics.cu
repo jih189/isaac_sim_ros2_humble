@@ -274,125 +274,6 @@ __global__ void kin_forward_collision_spheres_kernel(
     }
 }
 
-std::vector<float> floatVectorFlatten(const std::vector<std::vector<float>>& input)
-{
-    // 1. Calculate the total number of elements
-    size_t totalSize = 0;
-    for (const auto& sub : input) {
-        totalSize += sub.size();
-    }
-
-    // 2. Create the output vector, reserving the exact needed capacity
-    std::vector<float> output;
-    output.reserve(totalSize);
-
-    // 3. Copy each element from the sub-vectors into 'output'
-    for (const auto& sub : input) {
-        for (float value : sub) {
-            output.push_back(value);
-        }
-    }
-
-    return output;
-}
-
-std::vector<float> IsometryVectorFlatten(const std::vector<Eigen::Isometry3d>& transforms)
-{
-    // Each Isometry3d is effectively a 4x4 matrix (16 elements).
-    // Reserve enough space for all transforms upfront.
-    std::vector<float> output;
-    output.reserve(transforms.size() * 4 * 4);
-
-    // Copy each transform's 4x4 matrix into 'output', converting double->float.
-    for (const auto& iso : transforms)
-    {
-        // Extract as a 4x4 double matrix
-        Eigen::Matrix4d mat = iso.matrix();
-
-        // Push each element (row-major) as float
-        for (int row = 0; row < 4; ++row) {
-            for (int col = 0; col < 4; ++col) {
-                output.push_back(static_cast<float>(mat(row, col)));
-            }
-        }
-    }
-
-    return output;
-}
-
-std::vector<std::vector<float>> FromFloatVectorToVec3(const std::vector<float>& data, size_t size)
-{
-    // Check if the data size is a multiple of the given size
-    if (data.size() % size != 0)
-    {
-        std::cerr << "Invalid data size for conversion." << std::endl;
-        return {};
-    }
-
-    // Create the output vector
-    std::vector<std::vector<float>> output;
-    output.reserve(data.size() / size);
-
-    // Iterate over the data, extracting vectors of the given size
-    for (size_t i = 0; i < data.size(); i += size)
-    {
-        output.push_back(std::vector<float>(data.begin() + i, data.begin() + i + size));
-    }
-
-    return output;
-}
-
-std::vector<Eigen::Isometry3d> fromFloatVector(const std::vector<float>& data)
-{
-    // Check if the data size is a multiple of 16
-    if (data.size() % 16 != 0)
-    {
-        std::cerr << "Invalid data size for Isometry3d conversion." << std::endl;
-        return {};
-    }
-
-    // Create the output vector
-    std::vector<Eigen::Isometry3d> output;
-    output.reserve(data.size() / 16);
-
-    // Iterate over the data, extracting 4x4 matrices
-    for (size_t i = 0; i < data.size(); i += 16)
-    {
-        // Create a 4x4 matrix from the data
-        Eigen::Matrix4d mat;
-        for (int row = 0; row < 4; ++row)
-        {
-            for (int col = 0; col < 4; ++col)
-            {
-                mat(row, col) = static_cast<double>(data[i + row * 4 + col]);
-            }
-        }
-
-        // Convert the matrix to an Isometry3d and add it to the output
-        output.push_back(Eigen::Isometry3d(mat));
-    }
-
-    return output;
-}
-
-std::vector<float> Vector3dflatten(const std::vector<Eigen::Vector3d>& vectors)
-{
-    // Each Vector3d has 3 elements (double precision).
-    // Reserve space to avoid multiple allocations.
-    std::vector<float> output;
-    output.reserve(vectors.size() * 3);
-
-    // Copy each coordinate (convert from double to float).
-    for (const auto& v : vectors)
-    {
-        output.push_back(static_cast<float>(v.x()));
-        output.push_back(static_cast<float>(v.y()));
-        output.push_back(static_cast<float>(v.z()));
-    }
-
-    return output;
-}
-
 void CUDAMPLib::kin_forward_cuda(
     const std::vector<std::vector<float>>& joint_values,
     const std::vector<int>& joint_types,
@@ -495,8 +376,6 @@ void CUDAMPLib::kin_forward_collision_spheres_cuda(
         return;
     }
 
-    
-    
     // Prepare cuda memory
     int num_of_joints = joint_values[0].size();
     int num_of_links = link_maps.size();
@@ -603,4 +482,141 @@ void CUDAMPLib::kin_forward_collision_spheres_cuda(
     cudaFree(d_collision_spheres_pos);
     cudaFree(d_link_poses_set);
     cudaFree(d_collision_spheres_pos_in_baselink);
+}
+
+void CUDAMPLib::evaluation_cuda(
+    const std::vector<std::vector<float>>& joint_values,
+    const std::vector<int>& joint_types,
+    const std::vector<Eigen::Isometry3d>& joint_poses,
+    const std::vector<Eigen::Vector3d>& joint_axes,
+    const std::vector<int>& link_maps,
+    const std::vector<int>& collision_spheres_map,
+    const std::vector<std::vector<float>>& collision_spheres_pos,
+    const std::vector<float>& collision_spheres_radius,
+    const std::vector<CostBasePtr>& costs,
+    std::vector<float>& costs_values
+)
+{
+    if (joint_values.size() == 0)
+    {
+        std::cout << "No joint values provided." << std::endl;
+        return;
+    }
+
+    // Prepare cuda memory
+    int num_of_joints = joint_values[0].size();
+    int num_of_links = link_maps.size();
+    int num_of_config = joint_values.size();
+    int num_of_collision_spheres = collision_spheres_map.size();
+    int joint_values_size = num_of_config * num_of_joints;
+    int joint_values_bytes = joint_values_size * sizeof(float);
+    int joint_types_bytes = joint_types.size() * sizeof(int);
+    int size_of_pose_matrix = 4 * 4 * sizeof(float); // We do not need the last row of the matrix
+    int joint_poses_bytes = joint_poses.size() * size_of_pose_matrix;
+    int joint_axes_bytes = joint_axes.size() * sizeof(float) * 3;
+    int link_maps_bytes = link_maps.size() * sizeof(int);
+    int link_poses_set_size = num_of_links * num_of_config * size_of_pose_matrix;
+    int link_poses_set_bytes = link_poses_set_size * sizeof(float);
+    int collision_spheres_map_bytes = num_of_collision_spheres * sizeof(int);
+    int collision_spheres_pos_bytes = num_of_collision_spheres * sizeof(float) * 3;
+    int collision_spheres_radius_bytes = num_of_collision_spheres * sizeof(float);
+    int collision_spheres_pos_in_baselink_size = num_of_collision_spheres * num_of_config * 3;
+    int collision_spheres_pos_in_baselink_bytes = collision_spheres_pos_in_baselink_size * sizeof(float);
+    int num_of_costs = costs.size();
+    int single_cost_bytes = num_of_config * sizeof(float);
+    int cost_bytes = single_cost_bytes * num_of_costs; // for each configuration and each cost, we have a cost value
+    
+
+    // Allocate device memory
+    float *d_joint_values;
+    int *d_joint_types;
+    float *d_joint_poses;
+    float *d_joint_axes;
+    int *d_link_maps;
+    int *d_collision_spheres_map;
+    float *d_collision_spheres_pos;
+    float *d_collision_spheres_radius;
+    float *d_link_poses_set;
+    float *d_collision_spheres_pos_in_baselink;
+    float *d_cost;
+
+    cudaMalloc(&d_joint_values, joint_values_bytes);
+    cudaMalloc(&d_joint_types, joint_types_bytes);
+    cudaMalloc(&d_joint_poses, joint_poses_bytes);
+    cudaMalloc(&d_joint_axes, joint_axes_bytes);
+    cudaMalloc(&d_link_maps, link_maps_bytes);
+    cudaMalloc(&d_collision_spheres_map, collision_spheres_map_bytes);
+    cudaMalloc(&d_collision_spheres_pos, collision_spheres_pos_bytes);
+    cudaMalloc(&d_collision_spheres_radius, collision_spheres_radius_bytes);
+    cudaMalloc(&d_link_poses_set, link_poses_set_bytes);
+    cudaMalloc(&d_collision_spheres_pos_in_baselink, collision_spheres_pos_in_baselink_bytes);
+    cudaMalloc(&d_cost, cost_bytes);
+
+    // Copy data from host to device
+    cudaMemcpy(d_joint_values, floatVectorFlatten(joint_values).data(), joint_values_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_joint_types, joint_types.data(), joint_types_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_joint_poses, IsometryVectorFlatten(joint_poses).data(), joint_poses_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_joint_axes, Vector3dflatten(joint_axes).data(), joint_axes_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_link_maps, link_maps.data(), link_maps_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_collision_spheres_map, collision_spheres_map.data(), collision_spheres_map_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_collision_spheres_pos, floatVectorFlatten(collision_spheres_pos).data(), collision_spheres_pos_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_collision_spheres_radius, collision_spheres_radius.data(), collision_spheres_radius_bytes, cudaMemcpyHostToDevice);
+
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (num_of_config + threadsPerBlock - 1) / threadsPerBlock;
+
+    kin_forward_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+        d_joint_values, 
+        num_of_joints,
+        num_of_config,
+        d_joint_types,
+        d_joint_poses,
+        num_of_links,
+        d_joint_axes,
+        d_link_maps,
+        num_of_collision_spheres,
+        d_collision_spheres_map,
+        d_collision_spheres_pos,
+        d_link_poses_set,
+        d_collision_spheres_pos_in_baselink
+    );
+    cudaDeviceSynchronize();
+
+    for (size_t i = 0; i < costs.size(); i++)
+    {
+        float* d_current_cost = &d_cost[i * num_of_config];
+        costs[i]->computeCost(
+            d_joint_values, // joint values
+            num_of_config, // number of configurations
+            d_collision_spheres_pos_in_baselink, // robot collision spheres position in base link frame
+            d_collision_spheres_radius, // robot collision spheres radius
+            num_of_collision_spheres, // number of robot collision spheres
+            d_current_cost);
+    }
+
+    // Copy the cost values from device to host
+    costs_values.resize(num_of_config);
+    for (size_t i = 0; i < costs.size(); i++)
+    {
+        std::vector<float> current_cost_values(num_of_config);
+        float* d_current_cost = &d_cost[i * num_of_config];
+        cudaMemcpy(current_cost_values.data(), d_current_cost, single_cost_bytes, cudaMemcpyDeviceToHost);
+        for (size_t j = 0; j < num_of_config; j++)
+        {
+            costs_values[j] += current_cost_values[j];
+        }
+    }
+
+    // Free device memory
+    cudaFree(d_joint_values);
+    cudaFree(d_joint_types);
+    cudaFree(d_joint_poses);
+    cudaFree(d_joint_axes);
+    cudaFree(d_link_maps);
+    cudaFree(d_collision_spheres_map);
+    cudaFree(d_collision_spheres_pos);
+    cudaFree(d_collision_spheres_radius);
+    cudaFree(d_link_poses_set);
+    cudaFree(d_collision_spheres_pos_in_baselink);
+    cudaFree(d_cost);
 }

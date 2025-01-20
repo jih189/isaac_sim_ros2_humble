@@ -12,6 +12,7 @@
 
 #include <CUDAMPLib/multiply.h>
 #include <CUDAMPLib/kinematics.h>
+#include <CUDAMPLib/cost.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -508,37 +509,100 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, rclcpp::No
     // print robot model name
     RCLCPP_INFO(LOGGER, "Robot model name: %s", robot_model->getName().c_str());
 
-    // random set joint values
-    robot_state->setToRandomPositions();
-    robot_state->update();
+    // // random set joint values
+    // robot_state->setToRandomPositions();
+    // robot_state->update();
 
     float ball_size = 0.1;
     // randomly generate some (ball_size, ball_size, ball_size) size balls in base_link frame in range
     // x range [0.0, 0.6], y range [0.3, 0.3], z range [0.4, 1.5]
     std::vector<std::vector<float>> balls_pos;
-    for (size_t i = 0; i < 10; i++)
+    std::vector<float> ball_radius;
+    for (size_t i = 0; i < 7; i++)
     {
         float x = 0.6 * ((float)rand() / RAND_MAX);
         float y = 2.0 * 0.3 * ((float)rand() / RAND_MAX) - 0.3;
         float z = 1.1 * ((float)rand() / RAND_MAX) + 0.4;
         balls_pos.push_back({x, y, z});
+        ball_radius.push_back(ball_size);
     }
 
     /***************************************** test */
 
-    // print joint values
-    std::vector<float> sampled_joint_values;
-    for (const auto& joint_name : joint_names)
+    // Generate test set with one configuration.
+    std::vector<std::vector<float>> joint_values_test_set;
+
+    int num_of_sampled_configurations = 6000;
+
+    for (int t = 0; t < num_of_sampled_configurations; t++)
     {
-        sampled_joint_values.push_back((float)(robot_state->getJointPositions(joint_name)[0]));
-        std::cout << "joint name: " << joint_name << " joint value: " << robot_state->getJointPositions(joint_name)[0] << std::endl;
+        // Generate sampled configuration
+        robot_state->setToRandomPositions();
+        robot_state->update();
+
+        std::vector<float> sampled_joint_values;
+        for (const auto& joint_name : joint_names)
+        {
+            sampled_joint_values.push_back((float)(robot_state->getJointPositions(joint_name)[0]));
+        }
+        joint_values_test_set.push_back(sampled_joint_values);
     }
 
     // print ball positions
     for (size_t i = 0; i < balls_pos.size(); i++)
     {
-        std::cout << "ball " << i << " position: " << balls_pos[i][0] << " " << balls_pos[i][1] << " " << balls_pos[i][2] << std::endl;
+        std::cout << "ball " << i << " position: " << balls_pos[i][0] << " " << balls_pos[i][1] << " " << balls_pos[i][2] << " radius: " << ball_radius[i] << std::endl;
     }
+
+    // create collision cost as a shared pointer
+    CUDAMPLib::CollisionCostPtr collision_cost = std::make_shared<CUDAMPLib::CollisionCost>(
+        balls_pos,
+        ball_radius
+    );
+
+    std::vector<CUDAMPLib::CostBasePtr> cost_set;
+    std::vector<float> cost_of_configurations;
+    cost_set.push_back(collision_cost);
+
+    CUDAMPLib::evaluation_cuda(
+        joint_values_test_set,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        cost_set,
+        cost_of_configurations
+    );
+
+    int collision_free_configuration_index = -1;
+    for (int i = 0; i < num_of_sampled_configurations; i++)
+    {
+        if (cost_of_configurations[i] == 0.0)
+        {
+            collision_free_configuration_index = i;
+            break;
+        }
+    }
+
+    if (collision_free_configuration_index == -1)
+    {
+        std::cout << "=========================No collision free configuration==============================" << std::endl;
+        collision_free_configuration_index = 0;
+        std::cout << "cost of the first configuration: " << cost_of_configurations[0] << std::endl;
+    }
+
+    // set the robot state to the collision free configuration
+    for (size_t j = 0; j < joint_names.size(); j++)
+    {
+        robot_state->setJointPositions(joint_names[j], std::vector<double>{(double)joint_values_test_set[collision_free_configuration_index][j]});
+    }
+    robot_state->update();
+
+    // print collision_free_configuration_index
+    std::cout << "collision_free_configuration_index: " << collision_free_configuration_index << std::endl;
 
     /********************************************** */
 

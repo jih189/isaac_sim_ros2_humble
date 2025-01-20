@@ -1,8 +1,7 @@
 #pragma once
 
-#include <vector>
-#include <eigen3/Eigen/Dense>
-#include <iostream>
+#include "util.h"
+#include "cost.h"
 
 namespace CUDAMPLib
 {
@@ -64,5 +63,18 @@ namespace CUDAMPLib
         const std::vector<std::vector<float>>& collision_spheres_pos,
         std::vector<std::vector<Eigen::Isometry3d>>& link_poses_set,
         std::vector<std::vector<std::vector<float>>>& collision_spheres_pos_in_baselink
+    );
+
+    void evaluation_cuda(
+        const std::vector<std::vector<float>>& joint_values,
+        const std::vector<int>& joint_types,
+        const std::vector<Eigen::Isometry3d>& joint_poses,
+        const std::vector<Eigen::Vector3d>& joint_axes,
+        const std::vector<int>& link_maps,
+        const std::vector<int>& collision_spheres_map,
+        const std::vector<std::vector<float>>& collision_spheres_pos,
+        const std::vector<float>& collision_spheres_radius,
+        const std::vector<CostBasePtr>& costs,
+        std::vector<float>& costs_values
     );
 }
