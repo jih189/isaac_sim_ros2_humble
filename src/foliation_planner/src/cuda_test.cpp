@@ -36,6 +36,7 @@ class RobotInfo
         collision_spheres_map.clear();
         collision_spheres_pos.clear();
         collision_spheres_radius.clear();
+        self_collision_enabled_map.clear();
 
         // Get all link names
         link_names = robot_model->getLinkModelNames();
@@ -43,6 +44,42 @@ class RobotInfo
         if (! loadCollisionSpheres(collision_spheres_file_path)) // this requires the link_names is generated.
         {
             RCLCPP_ERROR(LOGGER, "Failed to load collision spheres from file");
+        }
+
+        // initialize self_collision_enabled_map with true with size of link_names
+        self_collision_enabled_map.resize(link_names.size(), std::vector<bool>(link_names.size(), true));
+        auto srdf_model_ptr = robot_model->getSRDF();
+        // print distabled collision pair
+        for (const auto& disabled_collision_pair : srdf_model_ptr->getDisabledCollisionPairs())
+        {
+            // get index of link1_ and link2_
+            int link1_index = -1;
+            for (size_t i = 0; i < link_names.size(); i++)
+            {
+                if (link_names[i] == disabled_collision_pair.link1_)
+                {
+                    link1_index = i;
+                    break;
+                }
+            }
+            int link2_index = -1;
+            for (size_t i = 0; i < link_names.size(); i++)
+            {
+                if (link_names[i] == disabled_collision_pair.link2_)
+                {
+                    link2_index = i;
+                    break;
+                }
+            }
+            if (link1_index == -1 || link2_index == -1)
+            {
+                // print error message in red
+                std::cout << "\033[1;31mDisabled collision pair link name is not in the link names\033[0m" << std::endl;
+                continue;
+            }
+
+            self_collision_enabled_map[link1_index][link2_index] = false;
+            self_collision_enabled_map[link2_index][link1_index] = false;
         }
 
         // Ready the input to kin_forward
@@ -232,11 +269,17 @@ class RobotInfo
         return collision_spheres_radius;
     }
 
+    std::vector<std::vector<bool>> getSelfCollisionEnabledMap() const
+    {
+        return self_collision_enabled_map;
+    }
+
     private:
     std::vector<int> joint_types;
     std::vector<Eigen::Isometry3d> joint_poses;
     std::vector<Eigen::Vector3d> joint_axes;
-    std::vector<int> link_maps;
+    std::vector<int> link_maps; // the index of parent link in link_names
+    std::vector<std::vector<bool>> self_collision_enabled_map;
     std::vector<std::string> link_names;
     std::vector<int> collision_spheres_map; // define which link the collision sphere belongs to
     std::vector<std::vector<float>> collision_spheres_pos; // (x, y, z)
@@ -549,21 +592,21 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, rclcpp::No
         joint_values_test_set.push_back(sampled_joint_values);
     }
 
-    // print ball positions
-    for (size_t i = 0; i < balls_pos.size(); i++)
-    {
-        std::cout << "ball " << i << " position: " << balls_pos[i][0] << " " << balls_pos[i][1] << " " << balls_pos[i][2] << " radius: " << ball_radius[i] << std::endl;
-    }
-
     // create collision cost as a shared pointer
     CUDAMPLib::CollisionCostPtr collision_cost = std::make_shared<CUDAMPLib::CollisionCost>(
         balls_pos,
         ball_radius
     );
+    // create self collision cost as a shared pointer
+    CUDAMPLib::SelfCollisionCostPtr self_collision_cost = std::make_shared<CUDAMPLib::SelfCollisionCost>(
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getSelfCollisionEnabledMap()
+    );
 
     std::vector<CUDAMPLib::CostBasePtr> cost_set;
     std::vector<float> cost_of_configurations;
     cost_set.push_back(collision_cost);
+    cost_set.push_back(self_collision_cost);
     std::vector<std::vector<std::vector<float>>> collision_spheres_pos_in_base_link_for_debug;
 
     CUDAMPLib::evaluation_cuda(

@@ -121,3 +121,26 @@ std::vector<float> CUDAMPLib::Vector3dflatten(const std::vector<Eigen::Vector3d>
 
     return output;
 }
+
+std::vector<int> CUDAMPLib::boolVectorFlatten(const std::vector<std::vector<bool>>& input)
+{
+    // 1. Calculate the total number of elements
+    size_t totalSize = 0;
+    for (const auto& sub : input) {
+        totalSize += sub.size();
+    }
+
+    // 2. Create the output vector, reserving the exact needed capacity
+    std::vector<int> output;
+    output.reserve(totalSize);
+
+    // 3. Copy each element from the sub-vectors into 'output'
+    for (const auto& sub : input) {
+        for (bool value : sub) {
+            // Convert bool to int
+            output.push_back(value ? 1 : 0);
+        }
+    }
+
+    return output;
+}

@@ -588,7 +588,7 @@ void CUDAMPLib::evaluation_cuda(
     cudaMemcpy(h_collision_spheres_pos_in_baselink.data(), d_collision_spheres_pos_in_baselink, collision_spheres_pos_in_baselink_bytes, cudaMemcpyDeviceToHost);
 
     collision_spheres_pos_in_baselink_for_debug.clear();
-    for (size_t i = 0; i < num_of_config; i++)
+    for (int i = 0; i < num_of_config; i++)
     {
         std::vector<std::vector<float>> collision_spheres_pos_in_baselink_of_current_config;
         for ( int j = 0; j < num_of_collision_spheres; j++)
