@@ -2,21 +2,24 @@
 
 #include <States.h>
 
-class BaseMotions
+namespace CUDAMPLib
 {
-    public:
-        virtual ~BaseMotions() {}
+    class BaseMotions
+    {
+        public:
+            virtual ~BaseMotions() {}
 
-        float * getCosts() {
-            return d_costs;
-        }
+            float * getCosts() {
+                return d_costs;
+            }
 
-        void setCosts(float * d_costs) {
-            this->d_costs = d_costs;
-        }
+            void setCosts(float * d_costs) {
+                this->d_costs = d_costs;
+            }
 
-    private:
-        float * d_costs; // costs of each motion
-};
+        private:
+            float * d_costs; // costs of each motion
+    };
 
-typedef std::shared_ptr<BaseMotions> BaseMotionsPtr;
+    typedef std::shared_ptr<BaseMotions> BaseMotionsPtr;
+} // namespace CUDAMPLibs

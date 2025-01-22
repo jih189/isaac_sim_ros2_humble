@@ -6,13 +6,12 @@ set(lib_name "CUDAMPLib")
 file(GLOB_RECURSE src_files
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/base/*.cpp
 )
 
 # Collect all header files from the include directory
 file(GLOB_RECURSE include_files
     ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/base/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/planners/*.h
 )
 
 find_package(Eigen3 REQUIRED)

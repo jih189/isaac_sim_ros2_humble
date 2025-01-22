@@ -1,23 +1,26 @@
 #pragma once
 
-/**
-    A base state class which has no any member variables.
- */
-class BaseStates
+namespace CUDAMPLib
 {
-    public:
-        virtual ~BaseStates() {}
+    /**
+        A base state class which has no any member variables.
+    */
+    class BaseStates
+    {
+        public:
+            virtual ~BaseStates() {}
 
-        float * getCosts() {
-            return d_costs;
-        }
+            float * getCosts() {
+                return d_costs;
+            }
 
-        void setCosts(float * d_costs) {
-            this->d_costs = d_costs;
-        }
+            void setCosts(float * d_costs) {
+                this->d_costs = d_costs;
+            }
 
-    private:
-        float * d_costs; // costs of each state
-};
+        private:
+            float * d_costs; // costs of each state
+    };
 
-typedef std::shared_ptr<BaseStates> BaseStatesPtr;
+    typedef std::shared_ptr<BaseStates> BaseStatesPtr;
+} // namespace CUDAMPLibs
