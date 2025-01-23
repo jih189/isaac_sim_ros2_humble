@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Planner.h>
+#include <base/Planner.h>
 
 namespace CUDAMPLib
 {
@@ -13,4 +13,6 @@ namespace CUDAMPLib
             void setMotionTask(BaseTaskPtr task) override;
             void solve() override;
     };
+
+    typedef std::shared_ptr<RRG> RRGPtr;
 } // namespace CUDAMPLibs

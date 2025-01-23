@@ -49,29 +49,7 @@ std::vector<float> CUDAMPLib::IsometryVectorFlatten(const std::vector<Eigen::Iso
     return output;
 }
 
-std::vector<std::vector<float>> CUDAMPLib::FromFloatVectorToVec3(const std::vector<float>& data, size_t size)
-{
-    // Check if the data size is a multiple of the given size
-    if (data.size() % size != 0)
-    {
-        std::cerr << "Invalid data size for conversion." << std::endl;
-        return {};
-    }
-
-    // Create the output vector
-    std::vector<std::vector<float>> output;
-    output.reserve(data.size() / size);
-
-    // Iterate over the data, extracting vectors of the given size
-    for (size_t i = 0; i < data.size(); i += size)
-    {
-        output.push_back(std::vector<float>(data.begin() + i, data.begin() + i + size));
-    }
-
-    return output;
-}
-
-std::vector<Eigen::Isometry3d> CUDAMPLib::fromFloatVector(const std::vector<float>& data)
+std::vector<Eigen::Isometry3d> CUDAMPLib::fromFloatVectorToIsometry3d(const std::vector<float>& data)
 {
     // Check if the data size is a multiple of 16
     if (data.size() % 16 != 0)

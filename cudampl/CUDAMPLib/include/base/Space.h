@@ -1,6 +1,7 @@
 #pragma once
 
-#include <Constraint.h>
+#include <base/Constraint.h>
+#include <vector>
 
 namespace CUDAMPLib
 {

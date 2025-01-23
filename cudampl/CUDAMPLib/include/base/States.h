@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 namespace CUDAMPLib
 {
     /**
@@ -18,7 +20,8 @@ namespace CUDAMPLib
                 this->d_costs = d_costs;
             }
 
-        private:
+        protected:
+            int num_of_states;
             float * d_costs; // costs of each state
     };
 

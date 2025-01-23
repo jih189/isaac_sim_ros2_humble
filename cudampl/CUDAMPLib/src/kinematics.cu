@@ -346,7 +346,7 @@ void CUDAMPLib::kin_forward_cuda(
     link_poses_set.clear();
     for (int i = 0; i < num_of_config; i++)
     {
-        link_poses_set.push_back(fromFloatVector(std::vector<float>(h_link_poses_set.begin() + i * num_of_links * 16, h_link_poses_set.begin() + (i + 1) * num_of_links * 16)));
+        link_poses_set.push_back(fromFloatVectorToIsometry3d(std::vector<float>(h_link_poses_set.begin() + i * num_of_links * 16, h_link_poses_set.begin() + (i + 1) * num_of_links * 16)));
     }
 
     // Free device memory
@@ -463,7 +463,7 @@ void CUDAMPLib::kin_forward_collision_spheres_cuda(
     collision_spheres_pos_in_baselink.clear();
     for (int i = 0; i < num_of_config; i++)
     {
-        link_poses_set.push_back(fromFloatVector(std::vector<float>(h_link_poses_set.begin() + i * num_of_links * 16, h_link_poses_set.begin() + (i + 1) * num_of_links * 16)));
+        link_poses_set.push_back(fromFloatVectorToIsometry3d(std::vector<float>(h_link_poses_set.begin() + i * num_of_links * 16, h_link_poses_set.begin() + (i + 1) * num_of_links * 16)));
         std::vector<std::vector<float>> collision_spheres_pos_in_baselink_of_current_config;
         for ( int j = 0; j < num_of_collision_spheres; j++)
         {

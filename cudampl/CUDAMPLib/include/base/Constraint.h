@@ -1,6 +1,7 @@
 #pragma once
-#include <States.h>
-#include <Motions.h>
+
+#include <base/States.h>
+#include <base/Motions.h>
 
 namespace CUDAMPLib
 {
