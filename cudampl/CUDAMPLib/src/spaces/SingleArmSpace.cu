@@ -13,7 +13,8 @@ namespace CUDAMPLib {
         const std::vector<int>& link_parent_link_maps,
         const std::vector<int>& collision_spheres_to_link_map,
         const std::vector<std::vector<float>>& collision_spheres_pos_in_link,
-        const std::vector<float>& collision_spheres_radius
+        const std::vector<float>& collision_spheres_radius,
+        const std::vector<bool>& active_joint_map
     )
         : BaseSpace(dim)
     {
@@ -32,6 +33,7 @@ namespace CUDAMPLib {
         int collision_spheres_to_link_map_bytes = sizeof(int) * num_of_self_collision_spheres;
         int collision_spheres_pos_in_link_bytes = sizeof(float) * 3 * num_of_self_collision_spheres;
         int collision_spheres_radius_bytes = sizeof(float) * num_of_self_collision_spheres;
+        int active_joint_map_bytes = sizeof(int) * num_of_joints;
         
         // allocate device memory
         cudaMalloc(&d_joint_types, joint_types_bytes);
@@ -41,6 +43,7 @@ namespace CUDAMPLib {
         cudaMalloc(&d_collision_spheres_to_link_map, collision_spheres_to_link_map_bytes);
         cudaMalloc(&d_collision_spheres_pos_in_link, collision_spheres_pos_in_link_bytes);
         cudaMalloc(&d_collision_spheres_radius, collision_spheres_radius_bytes);
+        cudaMalloc(&d_active_joint_map, active_joint_map_bytes);
 
         // copy data to device memory
         cudaMemcpy(d_joint_types, joint_types.data(), joint_types_bytes, cudaMemcpyHostToDevice);
@@ -50,6 +53,7 @@ namespace CUDAMPLib {
         cudaMemcpy(d_collision_spheres_to_link_map, collision_spheres_to_link_map.data(), collision_spheres_to_link_map_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_collision_spheres_pos_in_link, floatVectorFlatten(collision_spheres_pos_in_link).data(), collision_spheres_pos_in_link_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_collision_spheres_radius, collision_spheres_radius.data(), collision_spheres_radius_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_active_joint_map, boolVectorFlatten(active_joint_map).data(), active_joint_map_bytes, cudaMemcpyHostToDevice);
     }
 
     SingleArmSpace::~SingleArmSpace()
@@ -62,6 +66,7 @@ namespace CUDAMPLib {
         cudaFree(d_collision_spheres_to_link_map);
         cudaFree(d_collision_spheres_pos_in_link);
         cudaFree(d_collision_spheres_radius);
+        cudaFree(d_active_joint_map);
     }
 
     void SingleArmSpace::sample(int num_of_config, std::vector<std::vector<float>>& samples)

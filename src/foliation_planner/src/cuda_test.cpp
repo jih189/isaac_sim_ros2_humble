@@ -40,6 +40,7 @@ class RobotInfo
         collision_spheres_radius.clear();
         self_collision_enabled_map.clear();
         active_joint_map.clear();
+        dimension = 0;
 
         // Get all link names
         link_names = robot_model->getLinkModelNames();
@@ -172,6 +173,7 @@ class RobotInfo
             {
                 if (joint_name == active_joint_name)
                 {
+                    dimension++;
                     active = true;
                     break;
                 }
@@ -304,6 +306,11 @@ class RobotInfo
         return active_joint_map;
     }
 
+    int getDimension() const
+    {
+        return dimension;
+    }
+
     private:
     std::vector<int> joint_types;
     std::vector<Eigen::Isometry3d> joint_poses;
@@ -316,6 +323,7 @@ class RobotInfo
     std::vector<std::vector<float>> collision_spheres_pos; // (x, y, z)
     std::vector<float> collision_spheres_radius; // radius
     std::vector<bool> active_joint_map;
+    int dimension;
 };
 
 /***
@@ -783,30 +791,19 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RCLCPP_INFO(LOGGER, "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
-
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
-    std::vector<bool> active_joint_map = robot_info.getActiveJointMap();
-    // print active_joint_map
-    for (size_t i = 0; i < active_joint_map.size(); i++)
-    {
-        std::cout << "active_joint_map[" << i << "]: " << active_joint_map[i] << std::endl;
-    }
-
-    // SingleArmSpace(
-    //     size_t dim,
-    //     const std::vector<int>& joint_types,
-    //     const std::vector<Eigen::Isometry3d>& joint_poses,
-    //     const std::vector<Eigen::Vector3d>& joint_axes,
-    //     const std::vector<int>& link_parent_link_maps,
-    //     const std::vector<int>& collision_spheres_to_link_map,
-    //     const std::vector<std::vector<float>>& collision_spheres_pos_in_link,
-    //     const std::vector<float>& collision_spheres_radius
-    // );
-    // CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
-        
-    // );
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap()
+    );
 
 }
 

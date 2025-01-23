@@ -107,7 +107,7 @@ CUDAMPLib::SelfCollisionCost::SelfCollisionCost(
 
     // Copy the self collision spheres to the device
     cudaMemcpy(d_self_collision_spheres_map, robot_collision_spheres_map.data(), self_collision_spheres_map_bytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_self_collision_enables_map, boolVectorFlatten(robot_collision_enables_map).data(), self_collision_enables_map_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_self_collision_enables_map, boolMatrixFlatten(robot_collision_enables_map).data(), self_collision_enables_map_bytes, cudaMemcpyHostToDevice);
 }
 
 CUDAMPLib::SelfCollisionCost::~SelfCollisionCost()

@@ -17,7 +17,8 @@ namespace CUDAMPLib
                 const std::vector<int>& link_parent_link_maps,
                 const std::vector<int>& collision_spheres_to_link_map,
                 const std::vector<std::vector<float>>& collision_spheres_pos_in_link,
-                const std::vector<float>& collision_spheres_radius
+                const std::vector<float>& collision_spheres_radius,
+                const std::vector<bool>& active_joint_map
             );
 
             ~SingleArmSpace() override;
@@ -55,6 +56,7 @@ namespace CUDAMPLib
             int * d_collision_spheres_to_link_map;
             float * d_collision_spheres_pos_in_link;
             float * d_collision_spheres_radius;
+            int * d_active_joint_map;
     };
 
     typedef std::shared_ptr<SingleArmSpace> SingleArmSpacePtr;

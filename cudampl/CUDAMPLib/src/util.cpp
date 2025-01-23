@@ -100,7 +100,7 @@ std::vector<float> CUDAMPLib::Vector3dflatten(const std::vector<Eigen::Vector3d>
     return output;
 }
 
-std::vector<int> CUDAMPLib::boolVectorFlatten(const std::vector<std::vector<bool>>& input)
+std::vector<int> CUDAMPLib::boolMatrixFlatten(const std::vector<std::vector<bool>>& input)
 {
     // 1. Calculate the total number of elements
     size_t totalSize = 0;
@@ -118,6 +118,20 @@ std::vector<int> CUDAMPLib::boolVectorFlatten(const std::vector<std::vector<bool
             // Convert bool to int
             output.push_back(value ? 1 : 0);
         }
+    }
+
+    return output;
+}
+
+std::vector<int> CUDAMPLib::boolVectorFlatten(const std::vector<bool>& input)
+{
+    // Create the output vector, reserving the exact needed capacity
+    std::vector<int> output;
+    output.reserve(input.size());
+
+    // Copy each element from the input vector, converting bool->int
+    for (bool value : input) {
+        output.push_back(value ? 1 : 0);
     }
 
     return output;
