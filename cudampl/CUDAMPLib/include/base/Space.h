@@ -8,11 +8,11 @@ namespace CUDAMPLib
     // A base space class
     class BaseSpace {
         public:
-            BaseSpace(int dim) : dim(dim) {}
+            BaseSpace(size_t dim) : dim(dim) {}
 
             virtual ~BaseSpace() {}
 
-            int getDim() const { return dim; }
+            size_t getDim() const { return dim; }
 
             void setBounds(const std::vector<float>& lower, const std::vector<float>& upper) {
                 this->lower = lower;
@@ -70,8 +70,8 @@ namespace CUDAMPLib
                 std::vector<bool>& state_feasibility
             ) = 0;
 
-        private:
-            int dim;
+        protected:
+            size_t dim;
             std::vector<float> lower;
             std::vector<float> upper;
     };

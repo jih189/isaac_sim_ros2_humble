@@ -8,10 +8,7 @@ file(GLOB_RECURSE src_files
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
 )
 
-# Collect all header files from the include directory
-file(GLOB_RECURSE include_files
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h
-)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 find_package(Eigen3 REQUIRED)
 
@@ -26,7 +23,7 @@ endif()
 target_include_directories(${lib_name}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:include/${lib_name}>
 )
 
 #Pass the flags to the library

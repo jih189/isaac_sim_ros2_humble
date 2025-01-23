@@ -1,3 +1,5 @@
+#pragma once
+
 #include <base/States.h>
 #include <vector>
 #include <stdexcept>
@@ -25,4 +27,6 @@ namespace CUDAMPLib
             int num_of_joints;
             float * d_joint_states; // joint states of each state
     };
+
+    typedef std::shared_ptr<SingleArmStates> SingleArmStatesPtr;
 } // namespace CUDAMPLibs
