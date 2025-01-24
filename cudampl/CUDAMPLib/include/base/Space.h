@@ -58,7 +58,7 @@ namespace CUDAMPLib
                 * @param state_feasibility The feasibility of the states.
             */
             virtual void checkStates(
-                const std::vector<std::vector<float>>& states,
+                const BaseStatesPtr & states,
                 std::vector<bool>& state_feasibility
             ) = 0;
 

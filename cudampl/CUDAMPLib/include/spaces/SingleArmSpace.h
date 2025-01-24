@@ -52,7 +52,7 @@ namespace CUDAMPLib
             ) override;
 
             void checkStates(
-                const std::vector<std::vector<float>>& states, 
+                const BaseStatesPtr & states, 
                 std::vector<bool>& state_feasibility
             ) override;
 

@@ -174,10 +174,12 @@ namespace CUDAMPLib {
     }
 
     void SingleArmSpace::checkStates(
-        const std::vector<std::vector<float>>& states,
+        const BaseStatesPtr & states,
         std::vector<bool>& state_feasibility
     )
     {
+        // based on all the constraints, check if the states are feasible
+        
 
     }
 
