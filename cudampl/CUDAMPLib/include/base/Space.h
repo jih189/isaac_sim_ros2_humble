@@ -1,6 +1,7 @@
 #pragma once
 
 #include <base/Constraint.h>
+#include <base/States.h>
 #include <vector>
 
 namespace CUDAMPLib
@@ -14,21 +15,12 @@ namespace CUDAMPLib
 
             size_t getDim() const { return dim; }
 
-            void setBounds(const std::vector<float>& lower, const std::vector<float>& upper) {
-                this->lower = lower;
-                this->upper = upper;
-            }
-
-            const std::vector<float>& getLower() const { return lower; }
-
-            const std::vector<float>& getUpper() const { return upper; }
-
             /**
-                * @brief Sample a set of configurations.
-                * @param num_of_config The number of configurations to sample.
-                * @param samples The sampled configurations.
+                * @brief Sample a set of states.
+                * @param num_of_config The number of states to sample.
+                * @return A set of states.
             */
-            virtual void sample(int num_of_config, std::vector<std::vector<float>>& samples) = 0;
+            virtual BaseStatesPtr sample(int num_of_config) = 0;
 
             /**
                 * @brief Get the waypoints between a set of configuration pairs.
@@ -72,8 +64,6 @@ namespace CUDAMPLib
 
         protected:
             size_t dim;
-            std::vector<float> lower;
-            std::vector<float> upper;
     };
 
     typedef std::shared_ptr<BaseSpace> BaseSpacePtr;

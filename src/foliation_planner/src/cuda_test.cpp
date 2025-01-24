@@ -40,6 +40,8 @@ class RobotInfo
         collision_spheres_radius.clear();
         self_collision_enabled_map.clear();
         active_joint_map.clear();
+        upper_bounds.clear();
+        lower_bounds.clear();
         dimension = 0;
 
         // Get all link names
@@ -160,12 +162,10 @@ class RobotInfo
                 std::cout << " ===================================== " << std::endl;
         }
     
-        // get active joint map
-        // get the joint model group
         const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
-        // get the joint model names
         const std::vector<std::string>& active_joint_model_names = joint_model_group->getActiveJointModelNames();
-
+        
+        // get the active joint map
         for (const auto& joint_name : joint_name_to_parent_link)
         {
             bool active = false;
@@ -179,6 +179,17 @@ class RobotInfo
                 }
             }
             active_joint_map.push_back(active);
+        }
+
+        // get joint bounds
+        const moveit::core::JointBoundsVector& joint_bounds_vector = joint_model_group->getActiveJointModelsBounds();
+        for (const std::vector<moveit::core::VariableBounds>* joint_bounds : joint_bounds_vector)
+        {
+            for (const moveit::core::VariableBounds & joint_bound : *joint_bounds)
+            {
+                lower_bounds.push_back((float)(joint_bound.min_position_));
+                upper_bounds.push_back((float)(joint_bound.max_position_));
+            }
         }
     }
 
@@ -311,6 +322,16 @@ class RobotInfo
         return dimension;
     }
 
+    std::vector<float> getUpperBounds() const
+    {
+        return upper_bounds;
+    }
+
+    std::vector<float> getLowerBounds() const
+    {
+        return lower_bounds;
+    }
+
     private:
     std::vector<int> joint_types;
     std::vector<Eigen::Isometry3d> joint_poses;
@@ -324,6 +345,8 @@ class RobotInfo
     std::vector<float> collision_spheres_radius; // radius
     std::vector<bool> active_joint_map;
     int dimension;
+    std::vector<float> upper_bounds;
+    std::vector<float> lower_bounds;
 };
 
 /***
@@ -802,7 +825,9 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
         robot_info.getCollisionSpheresMap(),
         robot_info.getCollisionSpheresPos(),
         robot_info.getCollisionSpheresRadius(),
-        robot_info.getActiveJointMap()
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds()
     );
 
 }

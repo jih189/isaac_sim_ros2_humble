@@ -2,24 +2,18 @@
 
 namespace CUDAMPLib
 {
-    SingleArmStates::SingleArmStates(const std::vector<std::vector<float>> & joint_values)
+    SingleArmStates::SingleArmStates(int num_of_states, int num_of_joints)
+    : BaseStates(num_of_states)
     {
-        // Given a set of joint values, we need to allocate cuda memory for them.
-        num_of_states = joint_values.size();
+        this->num_of_joints = num_of_joints;
 
-        // If there are no joint values, raise an error
-        if (num_of_states == 0)
-        {
-            throw std::runtime_error("No joint values provided.");
-        }
-
-        num_of_joints = joint_values[0].size();
-
+        // Allocate memory for the joint states
+        cudaMalloc(&d_joint_states, num_of_states * num_of_joints * sizeof(float));
     }
 
     SingleArmStates::~SingleArmStates()
     {
-        // Cleanup code here, if needed
-        
+        // Free the memory
+        cudaFree(d_joint_states);
     }
 } // namespace CUDAMPLib

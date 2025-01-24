@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <cuda_runtime.h>
 
 namespace CUDAMPLib
 {
@@ -10,19 +11,24 @@ namespace CUDAMPLib
     class BaseStates
     {
         public:
-            virtual ~BaseStates() {}
+            BaseStates(int num_of_states) {
 
-            float * getCosts() {
-                return d_costs;
+                this->num_of_states = num_of_states;
+
+                // Allocate memory for the costs
+                cudaMalloc(&d_costs, num_of_states * sizeof(float));
             }
 
-            void setCosts(float * d_costs) {
-                this->d_costs = d_costs;
+            ~BaseStates() {
+                // Free the memory
+                cudaFree(d_costs);
             }
+
+            int getNumOfStates() const { return num_of_states; }
 
         protected:
             int num_of_states;
-            float * d_costs; // costs of each state
+            float * d_costs; // cost of each state
     };
 
     typedef std::shared_ptr<BaseStates> BaseStatesPtr;

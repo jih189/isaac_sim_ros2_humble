@@ -10,16 +10,11 @@ namespace CUDAMPLib
     class SingleArmStates : public BaseStates
     {
         public:
-
-            SingleArmStates(const std::vector<std::vector<float>> & joint_values);
+            SingleArmStates(int num_of_states, int num_of_joints);
             
-            ~SingleArmStates() override;
+            ~SingleArmStates();
 
-            void setJointStates(float * d_joint_states) {
-                this->d_joint_states = d_joint_states;
-            }
-
-            float * getJointStates() {
+            float * getJointStatesCuda() {
                 return d_joint_states;
             }
 
