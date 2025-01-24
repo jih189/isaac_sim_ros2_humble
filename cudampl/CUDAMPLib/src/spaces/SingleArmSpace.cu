@@ -13,7 +13,8 @@ namespace CUDAMPLib {
         const std::vector<float>& collision_spheres_radius,
         const std::vector<bool>& active_joint_map,
         const std::vector<float>& lower,
-        const std::vector<float>& upper
+        const std::vector<float>& upper,
+        const std::vector<float>& default_joint_values
     )
         : BaseSpace(dim)
     {
@@ -39,6 +40,7 @@ namespace CUDAMPLib {
         int active_joint_map_bytes = sizeof(int) * num_of_joints;
         int lower_bound_bytes = sizeof(float) * num_of_joints;
         int upper_bound_bytes = sizeof(float) * num_of_joints;
+        int default_joint_values_bytes = sizeof(float) * num_of_joints;
         
         // allocate device memory
         cudaMalloc(&d_joint_types, joint_types_bytes);
@@ -51,6 +53,7 @@ namespace CUDAMPLib {
         cudaMalloc(&d_active_joint_map, active_joint_map_bytes);
         cudaMalloc(&d_lower_bound, lower_bound_bytes);
         cudaMalloc(&d_upper_bound, upper_bound_bytes);
+        cudaMalloc(&d_default_joint_values, default_joint_values_bytes);
 
         // copy data to device memory
         cudaMemcpy(d_joint_types, joint_types.data(), joint_types_bytes, cudaMemcpyHostToDevice);
@@ -63,6 +66,7 @@ namespace CUDAMPLib {
         cudaMemcpy(d_active_joint_map, boolVectorFlatten(active_joint_map).data(), active_joint_map_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_lower_bound, lower.data(), lower_bound_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_upper_bound, upper.data(), upper_bound_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_default_joint_values, default_joint_values.data(), default_joint_values_bytes, cudaMemcpyHostToDevice);
     }
 
     SingleArmSpace::~SingleArmSpace()
@@ -78,6 +82,7 @@ namespace CUDAMPLib {
         cudaFree(d_active_joint_map);
         cudaFree(d_lower_bound);
         cudaFree(d_upper_bound);
+        cudaFree(d_default_joint_values);
     }
 
     __global__ void initCurand(curandState * state, unsigned long seed)
@@ -93,7 +98,8 @@ namespace CUDAMPLib {
         int num_of_joints,
         int * d_active_joint_map,
         float * d_lower_bound,
-        float * d_upper_bound
+        float * d_upper_bound,
+        float * d_default_joint_values
     )
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -104,7 +110,7 @@ namespace CUDAMPLib {
         // if joint is not active, then set the value to 0
         if (d_active_joint_map[joint_idx] == 0)
         {
-            d_sampled_states[idx] = 0.0;
+            d_sampled_states[idx] = d_default_joint_values[joint_idx];
         }
         else
         {
@@ -138,7 +144,8 @@ namespace CUDAMPLib {
             num_of_joints,
             d_active_joint_map,
             d_lower_bound, 
-            d_upper_bound
+            d_upper_bound,
+            d_default_joint_values
         );
 
         // free device memory

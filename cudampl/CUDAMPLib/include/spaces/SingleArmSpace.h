@@ -26,7 +26,8 @@ namespace CUDAMPLib
                 const std::vector<float>& collision_spheres_radius,
                 const std::vector<bool>& active_joint_map,
                 const std::vector<float>& lower,
-                const std::vector<float>& upper
+                const std::vector<float>& upper,
+                const std::vector<float>& default_joint_values
             );
 
             ~SingleArmSpace() override;
@@ -73,6 +74,7 @@ namespace CUDAMPLib
             int * d_active_joint_map;
             float * d_lower_bound;
             float * d_upper_bound;
+            float * d_default_joint_values;
     };
 
     typedef std::shared_ptr<SingleArmSpace> SingleArmSpacePtr;

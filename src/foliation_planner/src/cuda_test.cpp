@@ -43,6 +43,7 @@ class RobotInfo
         active_joint_map.clear();
         upper_bounds.clear();
         lower_bounds.clear();
+        default_joint_values.clear();
         dimension = 0;
 
         // Get all link names
@@ -89,6 +90,12 @@ class RobotInfo
             self_collision_enabled_map[link2_index][link1_index] = false;
         }
 
+        std::vector<double> default_joint_values_double;
+        // get default joint values
+        robot_model->getVariableDefaultPositions(default_joint_values_double);
+
+        size_t non_fixed_joint_index = 0;
+
         // Ready the input to kin_forward
         for (const auto& link_name : link_names)
         {
@@ -131,6 +138,8 @@ class RobotInfo
                 {
                     const moveit::core::RevoluteJointModel* revolute_joint_model = dynamic_cast<const moveit::core::RevoluteJointModel*>(joint_model);
                     joint_axes.push_back(revolute_joint_model->getAxis());
+                    default_joint_values.push_back((float)default_joint_values_double[non_fixed_joint_index]);
+                    non_fixed_joint_index++;
                     if (debug)
                         std::cout << "Joint axis: " << revolute_joint_model->getAxis().transpose() << std::endl;
                 }
@@ -138,12 +147,15 @@ class RobotInfo
                 {
                     const moveit::core::PrismaticJointModel* prismatic_joint_model = dynamic_cast<const moveit::core::PrismaticJointModel*>(joint_model);
                     joint_axes.push_back(prismatic_joint_model->getAxis());
+                    default_joint_values.push_back((float)default_joint_values_double[non_fixed_joint_index]);
+                    non_fixed_joint_index++;
                     if (debug)
                         std::cout << "Joint axis: " << prismatic_joint_model->getAxis().transpose() << std::endl;
                 }
                 else
                 {
                     joint_axes.push_back(Eigen::Vector3d::Zero());
+                    default_joint_values.push_back(0.0);
                     if (debug)
                         std::cout << "Joint axis: " << Eigen::Vector3d::Zero().transpose() << std::endl;
                 }
@@ -157,6 +169,7 @@ class RobotInfo
                 joint_types.push_back(0); // 0 means unknown joint type
                 joint_poses.push_back(Eigen::Isometry3d::Identity());
                 joint_axes.push_back(Eigen::Vector3d::Zero());
+                default_joint_values.push_back(0.0);
                 link_maps.push_back(-1);
             }
             if (debug)
@@ -211,6 +224,16 @@ class RobotInfo
                 upper_bounds.push_back(0.0);
             }
         }
+
+        // std::vector<double> default_joint_values_double;
+        // // get default joint values
+        // robot_model->getVariableDefaultPositions(default_joint_values_double);
+
+        // // for (size_t i = 0; i < default_joint_values_double.size(); i++)
+        // // {
+        // //     // default_joint_values.push_back((float)default_joint_values_double[i]);
+        // //     default_joint_values.push_back((float)i);
+        // // }
     }
 
     bool loadCollisionSpheres(const std::string & collision_spheres_file_path)
@@ -352,6 +375,11 @@ class RobotInfo
         return lower_bounds;
     }
 
+    std::vector<float> getDefaultJointValues() const
+    {
+        return default_joint_values;
+    }
+
     private:
     std::vector<int> joint_types;
     std::vector<Eigen::Isometry3d> joint_poses;
@@ -367,6 +395,7 @@ class RobotInfo
     int dimension;
     std::vector<float> upper_bounds;
     std::vector<float> lower_bounds;
+    std::vector<float> default_joint_values;
 };
 
 /***
@@ -847,25 +876,26 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
         robot_info.getCollisionSpheresRadius(),
         robot_info.getActiveJointMap(),
         robot_info.getLowerBounds(),
-        robot_info.getUpperBounds()
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues()
     );
 
     // sample a set of states
-    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(1));
+    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(5));
 
     // get matrix from sampled states
     std::vector<std::vector<float>> sampled_states_matrix = sampled_states->getJointStatesHost();
 
-    // print sampled states
-    for (size_t i = 0; i < sampled_states_matrix.size(); i++)
-    {
-        std::cout << "Sampled state " << i << ": ";
-        for (size_t j = 0; j < sampled_states_matrix[i].size(); j++)
-        {
-            std::cout << sampled_states_matrix[i][j] << " ";
-        }
-        std::cout << std::endl;
-    }
+    // // print sampled states
+    // for (size_t i = 0; i < sampled_states_matrix.size(); i++)
+    // {
+    //     std::cout << "Sampled state " << i << ": ";
+    //     for (size_t j = 0; j < sampled_states_matrix[i].size(); j++)
+    //     {
+    //         std::cout << sampled_states_matrix[i][j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
 
 }
 
