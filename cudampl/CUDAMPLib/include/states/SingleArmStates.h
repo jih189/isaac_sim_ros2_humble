@@ -18,6 +18,8 @@ namespace CUDAMPLib
                 return d_joint_states;
             }
 
+            std::vector<std::vector<float>> getJointStatesHost();
+
         private:
             int num_of_joints;
             float * d_joint_states; // joint states of each state

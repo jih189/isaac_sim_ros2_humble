@@ -14,6 +14,7 @@
 #include <CUDAMPLib/kinematics.h>
 #include <CUDAMPLib/cost.h>
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
+#include <CUDAMPLib/states/SingleArmStates.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -829,6 +830,23 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
         robot_info.getLowerBounds(),
         robot_info.getUpperBounds()
     );
+
+    // sample a set of states
+    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(3));
+
+    // get matrix from sampled states
+    std::vector<std::vector<float>> sampled_states_matrix = sampled_states->getJointStatesHost();
+
+    // print sampled states
+    for (size_t i = 0; i < sampled_states_matrix.size(); i++)
+    {
+        std::cout << "Sampled state " << i << ": ";
+        for (size_t j = 0; j < sampled_states_matrix[i].size(); j++)
+        {
+            std::cout << sampled_states_matrix[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
 
 }
 

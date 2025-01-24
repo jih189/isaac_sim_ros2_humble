@@ -1,7 +1,7 @@
 #pragma once
 
-#include <memory>
 #include <cuda_runtime.h>
+#include <memory>
 
 namespace CUDAMPLib
 {

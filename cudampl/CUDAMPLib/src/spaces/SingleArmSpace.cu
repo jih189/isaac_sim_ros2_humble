@@ -80,28 +80,30 @@ namespace CUDAMPLib {
         cudaFree(d_upper_bound);
     }
 
-    // __global__ void initCurand(curandState * state, unsigned long seed)
-    // {
-    //     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    //     curand_init(seed, idx, 0, &state[idx]);
-    // }
+    __global__ void initCurand(curandState * state, unsigned long seed)
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        curand_init(seed, idx, 0, &state[idx]);
+    }
 
-    // __global__ void sample_kernel(
-    //     float * d_sampled_states,
-    //     int num_of_config,
-    //     int num_of_joints,
-    //     float * d_lower_bound,
-    //     float * d_upper_bound
-    // )
-    // {
-    //     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    //     if (idx >= num_of_config) return;
+    __global__ void sample_kernel(
+        curandState_t * d_random_state,
+        float * d_sampled_states,
+        int num_of_config,
+        int num_of_joints,
+        float * d_lower_bound,
+        float * d_upper_bound
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_config * num_of_joints) return;
 
-    //     for (int i = 0; i < num_of_joints; i++)
-    //     {
-    //         d_sampled_states[idx * num_of_joints + i] = d_lower_bound[i] + (d_upper_bound[i] - d_lower_bound[i]) * (float)rand() / RAND_MAX;
-    //     }
-    // }
+        int joint_idx = idx % num_of_joints;
+
+        curandState_t local_state = d_random_state[idx];
+        d_sampled_states[idx] = curand_uniform(&local_state) * (d_upper_bound[joint_idx] - d_lower_bound[joint_idx]) + d_lower_bound[joint_idx];
+        d_random_state[idx] = local_state; // not sure if this is necessary
+    }
 
     BaseStatesPtr SingleArmSpace::sample(int num_of_config)
     {
@@ -112,19 +114,26 @@ namespace CUDAMPLib {
         float * d_sampled_states = sampled_states->getJointStatesCuda();
 
         int threadsPerBlock = 256;
-        int blocksPerGrid = (num_of_config + threadsPerBlock - 1) / threadsPerBlock;
+        int blocksPerGrid = (num_of_config * num_of_joints + threadsPerBlock - 1) / threadsPerBlock;
 
-        // // set random seed
-        // unsigned long seed = 1234;
-        // curandState *d_state;
-        // cudaMalloc(&d_state, num_of_config * num_of_joints * sizeof(curandState));
-        // initCurand<<<blocksPerGrid, threadsPerBlock>>>(d_state, seed);
+        // set random seed
+        unsigned long seed = time(0);
+        curandState *d_random_state;
+        cudaMalloc(&d_random_state, num_of_config * num_of_joints * sizeof(curandState));
+        initCurand<<<blocksPerGrid, threadsPerBlock>>>(d_random_state, seed);
 
-        // // call kernel
-        // sample_kernel<<<blocksPerGrid, threadsPerBlock>>>(d_sampled_states, num_of_config, num_of_joints, d_lower_bound, d_upper_bound);
+        // call kernel
+        sample_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            d_random_state, 
+            d_sampled_states, 
+            num_of_config, 
+            num_of_joints, 
+            d_lower_bound, 
+            d_upper_bound
+        );
 
-        // // wait for kernel to finish
-        // cudaDeviceSynchronize();
+        // free device memory
+        cudaFree(d_random_state);
 
         return sampled_states;
     }
