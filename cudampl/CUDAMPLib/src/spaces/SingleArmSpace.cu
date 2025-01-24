@@ -37,8 +37,8 @@ namespace CUDAMPLib {
         int collision_spheres_pos_in_link_bytes = sizeof(float) * 3 * num_of_self_collision_spheres;
         int collision_spheres_radius_bytes = sizeof(float) * num_of_self_collision_spheres;
         int active_joint_map_bytes = sizeof(int) * num_of_joints;
-        int lower_bound_bytes = sizeof(float) * dim;
-        int upper_bound_bytes = sizeof(float) * dim;
+        int lower_bound_bytes = sizeof(float) * num_of_joints;
+        int upper_bound_bytes = sizeof(float) * num_of_joints;
         
         // allocate device memory
         cudaMalloc(&d_joint_types, joint_types_bytes);
@@ -91,6 +91,7 @@ namespace CUDAMPLib {
         float * d_sampled_states,
         int num_of_config,
         int num_of_joints,
+        int * d_active_joint_map,
         float * d_lower_bound,
         float * d_upper_bound
     )
@@ -100,9 +101,16 @@ namespace CUDAMPLib {
 
         int joint_idx = idx % num_of_joints;
 
-        curandState_t local_state = d_random_state[idx];
-        d_sampled_states[idx] = curand_uniform(&local_state) * (d_upper_bound[joint_idx] - d_lower_bound[joint_idx]) + d_lower_bound[joint_idx];
-        d_random_state[idx] = local_state; // not sure if this is necessary
+        // if joint is not active, then set the value to 0
+        if (d_active_joint_map[joint_idx] == 0)
+        {
+            d_sampled_states[idx] = 0.0;
+        }
+        else
+        {
+            curandState_t local_state = d_random_state[idx];
+            d_sampled_states[idx] = curand_uniform(&local_state);// * (d_upper_bound[joint_idx] - d_lower_bound[joint_idx]) + d_lower_bound[joint_idx];
+        }
     }
 
     BaseStatesPtr SingleArmSpace::sample(int num_of_config)
@@ -127,7 +135,8 @@ namespace CUDAMPLib {
             d_random_state, 
             d_sampled_states, 
             num_of_config, 
-            num_of_joints, 
+            num_of_joints,
+            d_active_joint_map,
             d_lower_bound, 
             d_upper_bound
         );

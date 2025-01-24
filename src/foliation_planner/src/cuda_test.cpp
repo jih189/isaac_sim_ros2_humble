@@ -182,14 +182,33 @@ class RobotInfo
             active_joint_map.push_back(active);
         }
 
+        std::vector<float> lower_bounds_temp;
+        std::vector<float> upper_bounds_temp;
+
         // get joint bounds
         const moveit::core::JointBoundsVector& joint_bounds_vector = joint_model_group->getActiveJointModelsBounds();
         for (const std::vector<moveit::core::VariableBounds>* joint_bounds : joint_bounds_vector)
         {
             for (const moveit::core::VariableBounds & joint_bound : *joint_bounds)
             {
-                lower_bounds.push_back((float)(joint_bound.min_position_));
-                upper_bounds.push_back((float)(joint_bound.max_position_));
+                lower_bounds_temp.push_back((float)(joint_bound.min_position_));
+                upper_bounds_temp.push_back((float)(joint_bound.max_position_));
+            }
+        }
+
+        int active_joint_index = 0;
+        for (size_t i = 0; i < active_joint_map.size(); i++)
+        {
+            if (active_joint_map[i])
+            {
+                lower_bounds.push_back(lower_bounds_temp[active_joint_index]);
+                upper_bounds.push_back(upper_bounds_temp[active_joint_index]);
+                active_joint_index++;
+            }
+            else
+            {
+                lower_bounds.push_back(0.0);
+                upper_bounds.push_back(0.0);
             }
         }
     }
@@ -832,7 +851,7 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
     );
 
     // sample a set of states
-    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(3));
+    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(1));
 
     // get matrix from sampled states
     std::vector<std::vector<float>> sampled_states_matrix = sampled_states->getJointStatesHost();
