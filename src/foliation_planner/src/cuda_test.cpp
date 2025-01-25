@@ -881,15 +881,20 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
         ball_radius.push_back(obstacle_spheres_radius);
     }
 
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
     CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
         "obstacle_constraint",
         balls_pos,
         ball_radius
     );
 
+    constraints.push_back(env_constraint);
+
     // Create space
     CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
         robot_info.getDimension(),
+        constraints,
         robot_info.getJointTypes(),
         robot_info.getJointPoses(),
         robot_info.getJointAxes(),

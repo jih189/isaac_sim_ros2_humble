@@ -10,7 +10,7 @@ namespace CUDAMPLib
     class SingleArmStates : public BaseStates
     {
         public:
-            SingleArmStates(int num_of_states, int num_of_joints);
+            SingleArmStates(int num_of_states, int num_of_joints, int num_of_constraints);
             
             ~SingleArmStates();
 

@@ -123,7 +123,7 @@ namespace CUDAMPLib {
     BaseStatesPtr SingleArmSpace::sample(int num_of_config)
     {
         // Create a state
-        SingleArmStatesPtr sampled_states = std::make_shared<SingleArmStates>(num_of_config, num_of_joints);
+        SingleArmStatesPtr sampled_states = std::make_shared<SingleArmStates>(num_of_config, num_of_joints, constraints.size());
 
         // get device memory with size of num_of_config * num_of_joints * sizeof(float)
         float * d_sampled_states = sampled_states->getJointStatesCuda();
@@ -179,13 +179,14 @@ namespace CUDAMPLib {
         std::vector<bool>& state_feasibility
     )
     {
-        // based on all the constraints, check if the states are feasible
-        for(BaseConstraintPtr constraint : constraints)
-        {
-            std::cout << "check constraint: " << constraint->getName() << std::endl;
-        }
-        
+        int number_of_states = states->getNumOfStates();
 
+        // based on all the constraints, check if the states are feasible
+        for (size_t i = 0; i < constraints.size(); i++)
+        {
+            BaseConstraintPtr constraint = constraints[i];
+            constraint->computeCost(states, &(states->getCostsCuda()[number_of_states * i]));
+        }
     }
 
 } // namespace cudampl

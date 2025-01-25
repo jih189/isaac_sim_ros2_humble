@@ -2,8 +2,8 @@
 
 namespace CUDAMPLib
 {
-    SingleArmStates::SingleArmStates(int num_of_states, int num_of_joints)
-    : BaseStates(num_of_states)
+    SingleArmStates::SingleArmStates(int num_of_states, int num_of_joints, int num_of_constraints)
+    : BaseStates(num_of_states, num_of_constraints)
     {
         this->num_of_joints = num_of_joints;
 

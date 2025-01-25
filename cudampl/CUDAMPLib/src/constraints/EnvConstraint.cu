@@ -33,12 +33,13 @@ namespace CUDAMPLib{
         cudaFree(d_env_collision_spheres_radius);
     }
 
-    void EnvConstraint::computeCost(BaseStatesPtr states)
+    void EnvConstraint::computeCost(BaseStatesPtr states, float* d_cost)
     {
+        printf("Computing cost for EnvConstraint\n");
         
     }
 
-    void EnvConstraint::computeCost(BaseMotionsPtr motions)
+    void EnvConstraint::computeCost(BaseMotionsPtr motions, float* d_cost)
     {
 
     }

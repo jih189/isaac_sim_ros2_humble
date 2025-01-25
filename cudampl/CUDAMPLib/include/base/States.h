@@ -11,12 +11,13 @@ namespace CUDAMPLib
     class BaseStates
     {
         public:
-            BaseStates(int num_of_states) {
+            BaseStates(int num_of_states, int num_of_constraints) {
 
                 this->num_of_states = num_of_states;
+                this->num_of_constraints = num_of_constraints;
 
                 // Allocate memory for the costs
-                cudaMalloc(&d_costs, num_of_states * sizeof(float));
+                cudaMalloc(&d_costs, num_of_states * num_of_constraints * sizeof(float));
             }
 
             ~BaseStates() {
@@ -26,8 +27,13 @@ namespace CUDAMPLib
 
             int getNumOfStates() const { return num_of_states; }
 
+            float * getCostsCuda() {
+                return d_costs;
+            }
+
         protected:
             int num_of_states;
+            int num_of_constraints;
             float * d_costs; // cost of each state
     };
 
