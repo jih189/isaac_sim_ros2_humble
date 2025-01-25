@@ -6,9 +6,11 @@
 namespace CUDAMPLib{
 
     EnvConstraint::EnvConstraint(
+        const std::string& constraint_name,
         const std::vector<std::vector<float>>& env_collision_spheres_pos,
         const std::vector<float>& env_collision_spheres_radius
     )
+    : BaseConstraint(constraint_name)
     {
         // Prepare the cuda memory for the collision cost
         num_of_env_collision_spheres = env_collision_spheres_pos.size();

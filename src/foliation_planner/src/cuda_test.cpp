@@ -14,7 +14,7 @@
 #include <CUDAMPLib/kinematics.h>
 #include <CUDAMPLib/cost.h>
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
-#include <CUDAMPLib/states/SingleArmStates.h>
+#include <CUDAMPLib/constraints/EnvConstraint.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -865,6 +865,29 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
+    // Prepare obstacle constraint
+    float obstacle_spheres_radius = 0.06;
+    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
+    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
+    int num_of_obstacle_spheres = 20;
+    std::vector<std::vector<float>> balls_pos;
+    std::vector<float> ball_radius;
+    for (int i = 0; i < num_of_obstacle_spheres; i++)
+    {
+        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
+        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
+        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
+        balls_pos.push_back({x, y, z});
+        ball_radius.push_back(obstacle_spheres_radius);
+    }
+
+    CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+        "obstacle_constraint",
+        balls_pos,
+        ball_radius
+    );
+
+    // Create space
     CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
         robot_info.getDimension(),
         robot_info.getJointTypes(),
@@ -883,8 +906,12 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
     // sample a set of states
     CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(5));
 
-    // get matrix from sampled states
-    std::vector<std::vector<float>> sampled_states_matrix = sampled_states->getJointStatesHost();
+    // check states
+    std::vector<bool> valid_of_states;
+    single_arm_space->checkStates(sampled_states, valid_of_states);    
+
+    // // get matrix from sampled states
+    // std::vector<std::vector<float>> sampled_states_matrix = sampled_states->getJointStatesHost();
 
     // // print sampled states
     // for (size_t i = 0; i < sampled_states_matrix.size(); i++)

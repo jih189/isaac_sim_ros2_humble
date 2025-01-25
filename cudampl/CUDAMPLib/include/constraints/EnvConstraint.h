@@ -15,6 +15,7 @@ namespace CUDAMPLib
                 * @param env_collision_spheres_radius The radii of the environment collision spheres.
              */
             EnvConstraint(
+                const std::string& constraint_name,
                 const std::vector<std::vector<float>>& env_collision_spheres_pos,
                 const std::vector<float>& env_collision_spheres_radius
             );
@@ -28,4 +29,6 @@ namespace CUDAMPLib
             float *d_env_collision_spheres_pos_in_base_link;
             float *d_env_collision_spheres_radius;
     };
+
+    typedef std::shared_ptr<EnvConstraint> EnvConstraintPtr;
 } // namespace CUDAMPLibs

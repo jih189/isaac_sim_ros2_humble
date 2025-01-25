@@ -4,6 +4,7 @@ namespace CUDAMPLib {
 
     SingleArmSpace::SingleArmSpace(
         size_t dim,
+        const std::vector<BaseConstraintPtr>& constraints,
         const std::vector<int>& joint_types,
         const std::vector<Eigen::Isometry3d>& joint_poses,
         const std::vector<Eigen::Vector3d>& joint_axes,
@@ -16,7 +17,7 @@ namespace CUDAMPLib {
         const std::vector<float>& upper,
         const std::vector<float>& default_joint_values
     )
-        : BaseSpace(dim)
+        : BaseSpace(dim, constraints)
     {
         // need to allocate device memory for joint_types, joint_poses, joint_axes, 
         // parent_link_maps, collision_spheres_to_link_map, collision_spheres_pos_in_link, 
@@ -179,6 +180,10 @@ namespace CUDAMPLib {
     )
     {
         // based on all the constraints, check if the states are feasible
+        for(BaseConstraintPtr constraint : constraints)
+        {
+            std::cout << "check constraint: " << constraint->getName() << std::endl;
+        }
         
 
     }

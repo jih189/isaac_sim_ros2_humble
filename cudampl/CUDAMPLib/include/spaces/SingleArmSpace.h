@@ -17,6 +17,7 @@ namespace CUDAMPLib
         public:
             SingleArmSpace(
                 size_t dim,
+                std::vector<BaseConstraintPtr> constraints,
                 const std::vector<int>& joint_types,
                 const std::vector<Eigen::Isometry3d>& joint_poses,
                 const std::vector<Eigen::Vector3d>& joint_axes,

@@ -9,7 +9,14 @@ namespace CUDAMPLib
     // A base space class
     class BaseSpace {
         public:
-            BaseSpace(size_t dim) : dim(dim) {}
+            /**
+                Warning: We should set the constraints for the space with constructor only. It is
+                bad idea to have function for adding constraints later. Because when we create the
+                states in spaces, the states should be aware of the constraints. If we add constraints
+                later, the states will not be aware of the new constraints. Or we have to update all
+                generated states with the new constraints which is not efficient.
+             */
+            BaseSpace(size_t dim, std::vector<BaseConstraintPtr> constraints) : dim(dim), constraints(constraints) {}
 
             virtual ~BaseSpace() {}
 
@@ -64,6 +71,7 @@ namespace CUDAMPLib
 
         protected:
             size_t dim;
+            std::vector<BaseConstraintPtr> constraints;
     };
 
     typedef std::shared_ptr<BaseSpace> BaseSpacePtr;
