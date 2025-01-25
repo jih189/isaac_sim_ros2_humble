@@ -66,7 +66,7 @@ namespace CUDAMPLib
             */
             virtual void checkStates(
                 const BaseStatesPtr & states,
-                std::vector<bool>& state_feasibility
+                std::vector<bool> & state_feasibility
             ) = 0;
 
         protected:
