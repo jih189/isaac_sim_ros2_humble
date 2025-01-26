@@ -910,55 +910,91 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
 
     // sample a set of states
     CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(1));
-    
     sampled_states->update();
 
-    std::vector<std::vector<std::vector<float>>> self_collision_spheres_pos =  sampled_states->getSelfCollisionSpheresPosInBaseLinkHost();
+    std::vector<bool> state_feasibility;
 
-    std::vector<std::vector<float>> collision_spheres_pos_of_selected_config = self_collision_spheres_pos[0];
+    // check states
+    single_arm_space->checkStates(sampled_states, state_feasibility);
 
-    // Create marker publisher
-    auto self_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("self_collision_spheres", 1);
+    // std::vector<std::vector<std::vector<float>>> self_collision_spheres_pos =  sampled_states->getSelfCollisionSpheresPosInBaseLinkHost();
 
-    // Create a self MarkerArray message
-    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array;
-    for( int i = 0 ; i < collision_spheres_pos_of_selected_config.size(); i++)
-    {
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "base_link";
-        marker.header.stamp = node->now();
-        marker.ns = "self_collision_spheres";
-        marker.id = i;
-        marker.type = visualization_msgs::msg::Marker::SPHERE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.pose.position.x = collision_spheres_pos_of_selected_config[i][0];
-        marker.pose.position.y = collision_spheres_pos_of_selected_config[i][1];
-        marker.pose.position.z = collision_spheres_pos_of_selected_config[i][2];
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.scale.y = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.scale.z = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
-        robot_collision_spheres_marker_array.markers.push_back(marker);
-    }
+    // std::vector<std::vector<float>> collision_spheres_pos_of_selected_config = self_collision_spheres_pos[0];
 
-    // use loop to publish the trajectory
-    while (rclcpp::ok())
-    {
-        // Publish the message
-        self_marker_publisher->publish(robot_collision_spheres_marker_array);
+    // // Create marker publisher
+    // auto self_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("self_collision_spheres", 1);
+    
+    // auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
+
+    // // Create a self MarkerArray message
+    // visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array;
+    // for( size_t i = 0 ; i < collision_spheres_pos_of_selected_config.size(); i++)
+    // {
+    //     visualization_msgs::msg::Marker marker;
+    //     marker.header.frame_id = "base_link";
+    //     marker.header.stamp = node->now();
+    //     marker.ns = "self_collision_spheres";
+    //     marker.id = i;
+    //     marker.type = visualization_msgs::msg::Marker::SPHERE;
+    //     marker.action = visualization_msgs::msg::Marker::ADD;
+    //     marker.pose.position.x = collision_spheres_pos_of_selected_config[i][0];
+    //     marker.pose.position.y = collision_spheres_pos_of_selected_config[i][1];
+    //     marker.pose.position.z = collision_spheres_pos_of_selected_config[i][2];
+    //     marker.pose.orientation.x = 0.0;
+    //     marker.pose.orientation.y = 0.0;
+    //     marker.pose.orientation.z = 0.0;
+    //     marker.pose.orientation.w = 1.0;
+    //     marker.scale.x = 2 * robot_info.getCollisionSpheresRadius()[i];
+    //     marker.scale.y = 2 * robot_info.getCollisionSpheresRadius()[i];
+    //     marker.scale.z = 2 * robot_info.getCollisionSpheresRadius()[i];
+    //     marker.color.a = 1.0; // Don't forget to set the alpha!
+    //     marker.color.r = 0.0;
+    //     marker.color.g = 1.0;
+    //     marker.color.b = 0.0;
+    //     robot_collision_spheres_marker_array.markers.push_back(marker);
+    // }
+
+    // // Create a obstacle MarkerArray message
+    // visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
+    // for (size_t i = 0; i < balls_pos.size(); i++)
+    // {
+    //     visualization_msgs::msg::Marker marker;
+    //     marker.header.frame_id = "base_link";
+    //     marker.header.stamp = node->now();
+    //     marker.ns = "obstacle_collision_spheres";
+    //     marker.id = i;
+    //     marker.type = visualization_msgs::msg::Marker::SPHERE;
+    //     marker.action = visualization_msgs::msg::Marker::ADD;
+    //     marker.pose.position.x = balls_pos[i][0];
+    //     marker.pose.position.y = balls_pos[i][1];
+    //     marker.pose.position.z = balls_pos[i][2];
+    //     marker.pose.orientation.x = 0.0;
+    //     marker.pose.orientation.y = 0.0;
+    //     marker.pose.orientation.z = 0.0;
+    //     marker.pose.orientation.w = 1.0;
+    //     marker.scale.x = 2 * ball_radius[i];
+    //     marker.scale.y = 2 * ball_radius[i];
+    //     marker.scale.z = 2 * ball_radius[i];
+    //     marker.color.a = 1.0; // Don't forget to set the alpha!
+    //     marker.color.r = 1.0;
+    //     marker.color.g = 0.0;
+    //     marker.color.b = 0.0;
+    //     obstacle_collision_spheres_marker_array.markers.push_back(marker);
+    // }
+
+    // // use loop to publish the trajectory
+    // while (rclcpp::ok())
+    // {
+    //     // Publish the message
+    //     self_marker_publisher->publish(robot_collision_spheres_marker_array);
+
+    //     obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
         
-        rclcpp::spin_some(node);
+    //     rclcpp::spin_some(node);
 
-        // sleep for 1 second
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
+    //     // sleep for 1 second
+    //     std::this_thread::sleep_for(std::chrono::seconds(1));
+    // }
 }
 
 int main(int argc, char** argv)

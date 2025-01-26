@@ -64,46 +64,45 @@ namespace CUDAMPLib{
     }
 
 
-    void EnvConstraint::computeCost(BaseStatesPtr states, float* d_cost)
+    void EnvConstraint::computeCost(BaseStatesPtr states)
     {
+        // Cast the states and space information for SingleArmSpace
+        SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
+        SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
+
+        // check the cost location of this constraint
+        int constraint_index = -1;
+        for (size_t i = 0; i < space_info->constraint_names.size(); i++){
+            if (space_info->constraint_names[i] == this->constraint_name){
+                constraint_index = i;
+                break;
+            }
+        }
+
+        if (constraint_index == -1){
+            // raise an error
+            printf("Constraint %s is not found in the space\n", this->constraint_name.c_str());
+            return;
+        }
+
+        float * d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
+
         int threadsPerBlock = 256;
-        int blocksPerGrid = (states->getNumOfStates() + threadsPerBlock - 1) / threadsPerBlock;
+        int blocksPerGrid = (single_arm_states->getNumOfStates() + threadsPerBlock - 1) / threadsPerBlock;
 
-        // // print information
-        // std::cout << "computeCost" << std::endl;
-        // std::cout << "Number of states: " << states->getNumOfStates() << std::endl;
-        // SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
-
-        // // Get the self collision spheres
-        // std::cout << "num_of_self_collision_spheres: " << space_info->num_of_self_collision_spheres << std::endl;
-
-        // // Print bounds
-        // std::cout << "Lower bound: ";
-        // for (int i = 0; i < space_info->num_of_joints; i++){
-        //     std::cout << space_info->lower_bound[i] << " ";
-        // }
-        // std::cout << std::endl;
-        // std::cout << "Upper bound: ";
-        // for (int i = 0; i < space_info->num_of_joints; i++){
-        //     std::cout << space_info->upper_bound[i] << " ";
-        // }
-        // std::cout << std::endl;
-
-
-        // computeCollisionCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
-        //     d_self_collision_spheres_pos_in_base_link,
-        //     d_self_collision_spheres_radius,
-        //     num_of_self_collision_spheres,
-        //     num_of_configurations,
-        //     d_env_collision_spheres_pos_in_base_link,
-        //     d_env_collision_spheres_radius,
-        //     num_of_env_collision_spheres,
-        //     d_cost
-        // );
-        
+        computeCollisionCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
+            single_arm_states->getSelfCollisionSpheresPosInBaseLinkCuda(), 
+            space_info->d_self_collision_spheres_radius, 
+            space_info->num_of_self_collision_spheres, 
+            single_arm_states->getNumOfStates(), 
+            d_env_collision_spheres_pos_in_base_link, 
+            d_env_collision_spheres_radius, 
+            num_of_env_collision_spheres, 
+            d_cost_of_current_constraint 
+        );
     }
 
-    void EnvConstraint::computeCost(BaseMotionsPtr motions, float* d_cost)
+    void EnvConstraint::computeCost(BaseMotionsPtr motions)
     {
 
     }

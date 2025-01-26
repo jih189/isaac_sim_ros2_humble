@@ -2,6 +2,8 @@
 
 #include <cuda_runtime.h>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace CUDAMPLib
 {
@@ -15,6 +17,7 @@ namespace CUDAMPLib
     {
         int dim;
         int num_of_constraints;
+        std::vector<std::string> constraint_names;
     };
     typedef std::shared_ptr<SpaceInfo> SpaceInfoPtr;
 

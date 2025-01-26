@@ -294,7 +294,7 @@ namespace CUDAMPLib
             space_info_single_arm_space->d_link_parent_link_maps,
             space_info_single_arm_space->num_of_self_collision_spheres,
             space_info_single_arm_space->d_collision_spheres_to_link_map,
-            space_info_single_arm_space->d_collision_spheres_pos_in_link,
+            space_info_single_arm_space->d_self_collision_spheres_pos_in_link,
             d_link_poses_in_base_link,
             d_self_collision_spheres_pos_in_base_link
         );

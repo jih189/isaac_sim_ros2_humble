@@ -2,7 +2,6 @@
 
 #include <base/Constraint.h>
 #include <base/States.h>
-#include <vector>
 
 namespace CUDAMPLib
 {
@@ -76,6 +75,9 @@ namespace CUDAMPLib
             void getSpaceInfo(SpaceInfoPtr space_info) {
                 space_info->dim = dim;
                 space_info->num_of_constraints = constraints.size();
+                for (const auto & constraint : constraints) {
+                    space_info->constraint_names.push_back(constraint->getName());
+                }
             }
 
         protected:

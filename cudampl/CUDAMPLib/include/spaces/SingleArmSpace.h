@@ -72,8 +72,8 @@ namespace CUDAMPLib
             float * d_joint_axes;
             int * d_link_parent_link_maps;
             int * d_collision_spheres_to_link_map;
-            float * d_collision_spheres_pos_in_link;
-            float * d_collision_spheres_radius;
+            float * d_self_collision_spheres_pos_in_link;
+            float * d_self_collision_spheres_radius;
             int * d_active_joint_map;
             float * d_lower_bound;
             float * d_upper_bound;
