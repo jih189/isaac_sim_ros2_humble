@@ -909,13 +909,23 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
     );
 
     // sample a set of states
-    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(1));
+    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(10));
     sampled_states->update();
 
     std::vector<bool> state_feasibility;
 
     // check states
     single_arm_space->checkStates(sampled_states, state_feasibility);
+
+    // std::vector<std::vector<float>> states_joint_values = sampled_states->getJointStatesHost();
+    // for (size_t i = 0; i < states_joint_values.size(); i++)
+    // {
+    //     for (size_t j = 0; j < states_joint_values[i].size(); j++)
+    //     {
+    //         std::cout << states_joint_values[i][j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
 
     // std::vector<std::vector<std::vector<float>>> self_collision_spheres_pos =  sampled_states->getSelfCollisionSpheresPosInBaseLinkHost();
 

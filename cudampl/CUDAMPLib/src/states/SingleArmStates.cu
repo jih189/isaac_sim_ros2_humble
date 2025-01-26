@@ -275,7 +275,6 @@ namespace CUDAMPLib
         return self_collision_spheres_pos_in_base_link;
     }
 
-
     void SingleArmStates::update()
     {
         int threadsPerBlock = 256;

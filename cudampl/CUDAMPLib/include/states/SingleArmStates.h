@@ -46,8 +46,8 @@ namespace CUDAMPLib
             ~SingleArmStates();
 
             /**
-                * @brief Get the joint states in device memory.
-                * @return The joint states in device memory.
+                @brief Get the joint states in device memory.
+                @return The joint states in device memory.
              */
             float * getJointStatesCuda() {
                 return d_joint_states;
