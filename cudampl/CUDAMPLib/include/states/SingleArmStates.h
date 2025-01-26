@@ -7,6 +7,13 @@
 
 namespace CUDAMPLib
 {
+    #define CUDAMPLib_UNKNOWN 0
+    #define CUDAMPLib_REVOLUTE 1
+    #define CUDAMPLib_PRISMATIC 2
+    #define CUDAMPLib_PLANAR 3
+    #define CUDAMPLib_FLOATING 4
+    #define CUDAMPLib_FIXED 5
+
     struct SingleArmSpaceInfo : public SpaceInfo
     {
         // The information of the space
@@ -47,15 +54,36 @@ namespace CUDAMPLib
             }
 
             /**
+                @brief Get the link poses in base link in device memory.
+             */
+            float * getLinkPosesInBaseLinkCuda() {
+                return d_link_poses_in_base_link;
+            }
+
+            /**
+                @brief Get the collision spheres in base link in device memory.
+             */
+            float * getCollisionSpheresPosInBaseLinkCuda() {
+                return d_collision_spheres_pos_in_base_link;
+            }
+
+            /**
                 * @brief Get the joint states in host memory.
                 * @return The joint states in host memory. The joint states are represented as a 
                           list of configurations, each represented as a list of floats.
              */
             std::vector<std::vector<float>> getJointStatesHost();
 
+            /**
+                * Based on the current states, update link poses, joint poses, and joint axes, collision spheres in base link, etc.
+             */
+            void update() override;
+
         private:
             int num_of_joints; // number of joints. This includes fixed joints.
             float * d_joint_states; // joint states of each state
+            float * d_link_poses_in_base_link; // link poses in base link
+            float * d_collision_spheres_pos_in_base_link; // collision spheres in base link
     };
 
     typedef std::shared_ptr<SingleArmStates> SingleArmStatesPtr;

@@ -44,6 +44,11 @@ namespace CUDAMPLib
                 return d_costs;
             }
 
+            /**
+                Based on the current states, update robot information and states.
+             */
+            virtual void update() = 0;
+
             SpaceInfoPtr getSpaceInfo() const { return space_info; }
 
         protected:

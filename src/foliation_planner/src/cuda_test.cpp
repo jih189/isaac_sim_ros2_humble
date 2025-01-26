@@ -909,11 +909,13 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
     );
 
     // sample a set of states
-    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(5));
+    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(1));
+    sampled_states->update();
 
-    // check states
-    std::vector<bool> valid_of_states;
-    single_arm_space->checkStates(sampled_states, valid_of_states);    
+    
+    // // check states
+    // std::vector<bool> valid_of_states;
+    // single_arm_space->checkStates(sampled_states, valid_of_states);    
 
     // // get matrix from sampled states
     // std::vector<std::vector<float>> sampled_states_matrix = sampled_states->getJointStatesHost();
