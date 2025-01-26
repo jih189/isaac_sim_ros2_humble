@@ -61,11 +61,16 @@ namespace CUDAMPLib
             }
 
             /**
-                @brief Get the collision spheres in base link in device memory.
+                @brief Get the self collision spheres in base link in device memory.
              */
-            float * getCollisionSpheresPosInBaseLinkCuda() {
-                return d_collision_spheres_pos_in_base_link;
+            float * getSelfCollisionSpheresPosInBaseLinkCuda() {
+                return d_self_collision_spheres_pos_in_base_link;
             }
+
+            /**
+                @brief Get the self collision spheres in base link in host memory.
+             */
+            std::vector<std::vector<std::vector<float>>> getSelfCollisionSpheresPosInBaseLinkHost();
 
             /**
                 * @brief Get the joint states in host memory.
@@ -83,7 +88,7 @@ namespace CUDAMPLib
             int num_of_joints; // number of joints. This includes fixed joints.
             float * d_joint_states; // joint states of each state
             float * d_link_poses_in_base_link; // link poses in base link
-            float * d_collision_spheres_pos_in_base_link; // collision spheres in base link
+            float * d_self_collision_spheres_pos_in_base_link; // collision spheres in base link
     };
 
     typedef std::shared_ptr<SingleArmStates> SingleArmStatesPtr;

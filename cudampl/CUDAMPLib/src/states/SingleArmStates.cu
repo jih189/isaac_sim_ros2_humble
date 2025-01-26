@@ -169,7 +169,7 @@ namespace CUDAMPLib
             }
 
             // Calculate forward kinematics for each link
-            size_t j = 0;
+            // size_t j = 0;
             for (size_t i = 1; i < num_of_links; i++) // The first link is the base link, so we can skip it
             {
                 float* parent_link_pose = &link_poses_set[idx * num_of_links * 16 + link_maps[i] * 16];
@@ -178,12 +178,12 @@ namespace CUDAMPLib
                 switch (joint_types[i])
                 {
                     case CUDAMPLib_REVOLUTE:
-                        revolute_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + j], current_link_pose);
-                        j++;
+                        revolute_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
+                        // j++;
                         break;
                     case CUDAMPLib_PRISMATIC:
-                        prism_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + j], current_link_pose);
-                        j++;
+                        prism_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
+                        // j++;
                         break;
                     case CUDAMPLib_FIXED:
                         fixed_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], current_link_pose);
@@ -216,7 +216,7 @@ namespace CUDAMPLib
         // Allocate memory for the joint states
         cudaMalloc(&d_joint_states, num_of_states * num_of_joints * sizeof(float));
         cudaMalloc(&d_link_poses_in_base_link, num_of_states * space_info->num_of_links * 4 * 4 * sizeof(float));
-        cudaMalloc(&d_collision_spheres_pos_in_base_link, num_of_states * space_info->num_of_self_collision_spheres * 3 * sizeof(float));
+        cudaMalloc(&d_self_collision_spheres_pos_in_base_link, num_of_states * space_info->num_of_self_collision_spheres * 3 * sizeof(float));
     }
 
     SingleArmStates::~SingleArmStates()
@@ -224,7 +224,7 @@ namespace CUDAMPLib
         // Free the memory
         cudaFree(d_joint_states);
         cudaFree(d_link_poses_in_base_link);
-        cudaFree(d_collision_spheres_pos_in_base_link);
+        cudaFree(d_self_collision_spheres_pos_in_base_link);
     }
 
     std::vector<std::vector<float>> SingleArmStates::getJointStatesHost()
@@ -248,11 +248,40 @@ namespace CUDAMPLib
         return joint_states;
     }
 
+    std::vector<std::vector<std::vector<float>>> SingleArmStates::getSelfCollisionSpheresPosInBaseLinkHost()
+    {
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+
+        // Allocate memory for the self collision spheres position in base link frame
+        std::vector<float> self_collision_spheres_pos_in_base_link_flatten(num_of_states * space_info_single_arm_space->num_of_self_collision_spheres * 3, 0.0);
+
+        // Copy the self collision spheres position in base link frame from device to host
+        cudaMemcpy(self_collision_spheres_pos_in_base_link_flatten.data(), d_self_collision_spheres_pos_in_base_link, num_of_states * space_info_single_arm_space->num_of_self_collision_spheres * 3 * sizeof(float), cudaMemcpyDeviceToHost);
+
+        // Reshape the self collision spheres position in base link frame
+        std::vector<std::vector<std::vector<float>>> self_collision_spheres_pos_in_base_link(num_of_states, std::vector<std::vector<float>>(space_info_single_arm_space->num_of_self_collision_spheres, std::vector<float>(3, 0.0)));
+
+        for (int i = 0; i < num_of_states; i++)
+        {
+            for (int j = 0; j < space_info_single_arm_space->num_of_self_collision_spheres; j++)
+            {
+                for (int k = 0; k < 3; k++)
+                {
+                    self_collision_spheres_pos_in_base_link[i][j][k] = self_collision_spheres_pos_in_base_link_flatten[i * space_info_single_arm_space->num_of_self_collision_spheres * 3 + j * 3 + k];
+                }
+            }
+        }
+
+        return self_collision_spheres_pos_in_base_link;
+    }
+
+
     void SingleArmStates::update()
     {
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_states + threadsPerBlock - 1) / threadsPerBlock;
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+        
         // Update the states
         kin_forward_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
             d_joint_states,
@@ -267,11 +296,10 @@ namespace CUDAMPLib
             space_info_single_arm_space->d_collision_spheres_to_link_map,
             space_info_single_arm_space->d_collision_spheres_pos_in_link,
             d_link_poses_in_base_link,
-            d_collision_spheres_pos_in_base_link
+            d_self_collision_spheres_pos_in_base_link
         );
-        
+
         // Wait for the kernel to finish
         cudaDeviceSynchronize();
-
     }
 } // namespace CUDAMPLib
