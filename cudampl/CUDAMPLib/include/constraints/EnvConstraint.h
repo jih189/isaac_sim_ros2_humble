@@ -1,8 +1,13 @@
 #pragma once
 
+#pragma nv_diag_suppress 20012
+#pragma nv_diag_suppress 20014
+
 #include <base/Constraint.h>
+#include <states/SingleArmStates.h>
 #include <util.h>
 #include <vector>
+#include <cuda_runtime.h>
 
 namespace CUDAMPLib
 {

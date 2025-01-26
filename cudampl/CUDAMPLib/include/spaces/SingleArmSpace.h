@@ -57,6 +57,8 @@ namespace CUDAMPLib
                 std::vector<bool>& state_feasibility
             ) override;
 
+            void getSpaceInfo(SingleArmSpaceInfoPtr space_info);
+
         private:
             int num_of_joints; // number of joints where joints include fixed joints.
             int num_of_links;

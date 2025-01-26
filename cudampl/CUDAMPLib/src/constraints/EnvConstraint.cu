@@ -1,7 +1,4 @@
-#pragma nv_diag_suppress 20012
-#pragma nv_diag_suppress 20014
 #include <constraints/EnvConstraint.h>
-#include <cuda_runtime.h>
 
 namespace CUDAMPLib{
 
@@ -71,6 +68,26 @@ namespace CUDAMPLib{
     {
         int threadsPerBlock = 256;
         int blocksPerGrid = (states->getNumOfStates() + threadsPerBlock - 1) / threadsPerBlock;
+
+        // print information
+        std::cout << "computeCost" << std::endl;
+        std::cout << "Number of states: " << states->getNumOfStates() << std::endl;
+        SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
+
+        // Get the self collision spheres
+        std::cout << "num_of_self_collision_spheres: " << space_info->num_of_self_collision_spheres << std::endl;
+
+        // Print bounds
+        std::cout << "Lower bound: ";
+        for (int i = 0; i < space_info->num_of_joints; i++){
+            std::cout << space_info->lower_bound[i] << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "Upper bound: ";
+        for (int i = 0; i < space_info->num_of_joints; i++){
+            std::cout << space_info->upper_bound[i] << " ";
+        }
+        std::cout << std::endl;
 
         // computeCollisionCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
         //     d_self_collision_spheres_pos_in_base_link,

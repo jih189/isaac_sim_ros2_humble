@@ -122,8 +122,11 @@ namespace CUDAMPLib {
 
     BaseStatesPtr SingleArmSpace::sample(int num_of_config)
     {
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        getSpaceInfo(space_info);
+
         // Create a state
-        SingleArmStatesPtr sampled_states = std::make_shared<SingleArmStates>(num_of_config, num_of_joints, constraints.size());
+        SingleArmStatesPtr sampled_states = std::make_shared<SingleArmStates>(num_of_config, space_info, num_of_joints);
 
         // get device memory with size of num_of_config * num_of_joints * sizeof(float)
         float * d_sampled_states = sampled_states->getJointStatesCuda();
@@ -179,14 +182,38 @@ namespace CUDAMPLib {
         std::vector<bool>& state_feasibility
     )
     {
-        int number_of_states = states->getNumOfStates();
-
         // based on all the constraints, check if the states are feasible
         for (size_t i = 0; i < constraints.size(); i++)
         {
             BaseConstraintPtr constraint = constraints[i];
-            constraint->computeCost(states, &(states->getCostsCuda()[number_of_states * i]));
+            constraint->computeCost(states, &(states->getCostsCuda()[states->getNumOfStates() * i]));
         }
     }
 
+    void SingleArmSpace::getSpaceInfo(SingleArmSpaceInfoPtr space_info)
+    {
+        // call the base class function
+        BaseSpace::getSpaceInfo(space_info);
+
+        // set the additional information for single arm space
+        space_info->d_joint_types = d_joint_types;
+        space_info->d_joint_poses = d_joint_poses;
+        space_info->d_joint_axes = d_joint_axes;
+        space_info->d_link_parent_link_maps = d_link_parent_link_maps;
+        space_info->d_collision_spheres_to_link_map = d_collision_spheres_to_link_map;
+        space_info->d_collision_spheres_pos_in_link = d_collision_spheres_pos_in_link;
+        space_info->d_collision_spheres_radius = d_collision_spheres_radius;
+        space_info->d_active_joint_map = d_active_joint_map;
+        space_info->d_lower_bound = d_lower_bound;
+        space_info->d_upper_bound = d_upper_bound;
+        space_info->d_default_joint_values = d_default_joint_values;
+
+        space_info->num_of_joints = num_of_joints;
+        space_info->num_of_links = num_of_links;
+        space_info->num_of_self_collision_spheres = num_of_self_collision_spheres;
+
+        // set the bounds
+        space_info->lower_bound = lower_bound;
+        space_info->upper_bound = upper_bound;
+    }
 } // namespace cudampl

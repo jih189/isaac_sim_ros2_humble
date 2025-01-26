@@ -69,6 +69,15 @@ namespace CUDAMPLib
                 std::vector<bool> & state_feasibility
             ) = 0;
 
+            /** 
+                @brief Get space information.
+                @return The space information.
+             */
+            void getSpaceInfo(SpaceInfoPtr space_info) {
+                space_info->dim = dim;
+                space_info->num_of_constraints = constraints.size();
+            }
+
         protected:
             size_t dim;
             std::vector<BaseConstraintPtr> constraints;
