@@ -189,16 +189,17 @@ namespace CUDAMPLib {
             constraint->computeCost(states);
         }
 
-        // print the cost
-        std::vector<std::vector<float>> costs = states->getCostsHost();
-        for (size_t i = 0; i < costs.size(); i++)
+        // wait for the kernel to finish
+        cudaDeviceSynchronize();
+
+        // get the total cost
+        states->calculateTotalCosts();
+
+        std::vector<float> total_costs = states->getTotalCostsHost();
+
+        for (size_t i = 0; i < total_costs.size(); i++)
         {
-            std::cout << "Cost: ";
-            for (size_t j = 0; j < costs[i].size(); j++)
-            {
-                std::cout << costs[i][j] << " ";
-            }
-            std::cout << std::endl;
+            state_feasibility.push_back(total_costs[i] == 0.0f);
         }
     }
 

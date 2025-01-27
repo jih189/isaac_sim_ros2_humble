@@ -34,11 +34,13 @@ namespace CUDAMPLib
 
                 // Allocate memory for the costs
                 cudaMalloc(&d_costs, num_of_states * space_info->num_of_constraints * sizeof(float));
+                cudaMalloc(&d_total_costs, num_of_states * sizeof(float));
             }
 
             ~BaseStates() {
                 // Free the memory
                 cudaFree(d_costs);
+                cudaFree(d_total_costs);
             }
 
             int getNumOfStates() const { return num_of_states; }
@@ -47,16 +49,30 @@ namespace CUDAMPLib
                 return d_costs;
             }
 
+            float * getTotalCostsCuda() {
+                return d_total_costs;
+            }
+
+            void calculateTotalCosts();
+
             std::vector<std::vector<float>> getCostsHost() {
                 std::vector<std::vector<float>> costs_host(num_of_states, std::vector<float>(space_info->num_of_constraints, 0.0));
                 std::vector<float> costs_host_flatten(num_of_states * space_info->num_of_constraints, 0.0);
                 cudaMemcpy(costs_host_flatten.data(), d_costs, num_of_states * space_info->num_of_constraints * sizeof(float), cudaMemcpyDeviceToHost);
+
                 for (int i = 0; i < num_of_states; i++) {
                     for (int j = 0; j < space_info->num_of_constraints; j++) {
-                        costs_host[i][j] = costs_host_flatten[i * space_info->num_of_constraints + j];
+                        costs_host[i][j] = costs_host_flatten[j * num_of_states + i];
                     }
                 }
+
                 return costs_host;
+            }
+
+            std::vector<float> getTotalCostsHost() {
+                std::vector<float> total_costs_host(num_of_states, 0.0);
+                cudaMemcpy(total_costs_host.data(), d_total_costs, num_of_states * sizeof(float), cudaMemcpyDeviceToHost);
+                return total_costs_host;
             }
 
             /**
@@ -69,6 +85,7 @@ namespace CUDAMPLib
         protected:
             int num_of_states;
             float * d_costs; // cost of each state and different constraints
+            float * d_total_costs; // total cost of each state
             SpaceInfoPtr space_info;
     };
     typedef std::shared_ptr<BaseStates> BaseStatesPtr;
