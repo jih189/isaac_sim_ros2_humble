@@ -152,6 +152,9 @@ namespace CUDAMPLib {
             d_default_joint_values
         );
 
+        // wait for the kernel to finish
+        cudaDeviceSynchronize();
+
         // free device memory
         cudaFree(d_random_state);
 
