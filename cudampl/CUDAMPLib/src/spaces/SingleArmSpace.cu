@@ -189,17 +189,17 @@ namespace CUDAMPLib {
             constraint->computeCost(states);
         }
 
-        // // print the cost
-        // std::vector<std::vector<float>> costs = states->getCostsHost();
-        // for (size_t i = 0; i < costs.size(); i++)
-        // {
-        //     std::cout << "Cost: ";
-        //     for (size_t j = 0; j < costs[i].size(); j++)
-        //     {
-        //         std::cout << costs[i][j] << " ";
-        //     }
-        //     std::cout << std::endl;
-        // }
+        // print the cost
+        std::vector<std::vector<float>> costs = states->getCostsHost();
+        for (size_t i = 0; i < costs.size(); i++)
+        {
+            std::cout << "Cost: ";
+            for (size_t j = 0; j < costs[i].size(); j++)
+            {
+                std::cout << costs[i][j] << " ";
+            }
+            std::cout << std::endl;
+        }
     }
 
     void SingleArmSpace::getSpaceInfo(SingleArmSpaceInfoPtr space_info)

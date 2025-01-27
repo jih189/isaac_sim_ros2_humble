@@ -6,7 +6,6 @@
 #include <base/Constraint.h>
 #include <states/SingleArmStates.h>
 #include <util.h>
-#include <vector>
 #include <cuda_runtime.h>
 
 namespace CUDAMPLib

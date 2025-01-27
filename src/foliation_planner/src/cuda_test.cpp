@@ -15,6 +15,7 @@
 #include <CUDAMPLib/cost.h>
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
 #include <CUDAMPLib/constraints/EnvConstraint.h>
+#include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -888,8 +889,13 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
         balls_pos,
         ball_radius
     );
-
     constraints.push_back(env_constraint);
+
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
 
     // Create space
     CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(

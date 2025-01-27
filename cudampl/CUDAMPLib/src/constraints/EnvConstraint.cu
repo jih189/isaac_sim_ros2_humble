@@ -63,7 +63,6 @@ namespace CUDAMPLib{
         }
     }
 
-
     void EnvConstraint::computeCost(BaseStatesPtr states)
     {
         // Cast the states and space information for SingleArmSpace
@@ -71,14 +70,7 @@ namespace CUDAMPLib{
         SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
 
         // check the cost location of this constraint
-        int constraint_index = -1;
-        for (size_t i = 0; i < space_info->constraint_names.size(); i++){
-            if (space_info->constraint_names[i] == this->constraint_name){
-                constraint_index = i;
-                break;
-            }
-        }
-
+        int constraint_index = getConstraintIndex(space_info);
         if (constraint_index == -1){
             // raise an error
             printf("Constraint %s is not found in the space\n", this->constraint_name.c_str());
