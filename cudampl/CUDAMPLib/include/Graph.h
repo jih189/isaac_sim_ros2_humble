@@ -74,14 +74,14 @@ namespace CUDAMPLib
         >;
 
         // Convenience typedef for a vertex descriptor.
-        using Vertex = boost::graph_traits<BoostGraph>::vertex_descriptor;
+        using BoostVertex = boost::graph_traits<BoostGraph>::vertex_descriptor;
 
         // The underlying Boost graph instance.
         BoostGraph g;
 
         // Helper: find a vertex by comparing its stored configuration.
         // Returns the vertex descriptor if found, or null_vertex() if not.
-        Vertex find_vertex_by_config(const std::vector<float>& q) const;
+        BoostVertex find_vertex_by_config(const std::vector<float>& q) const;
 
         // add state to the graph
         void add_state(const std::vector<float>& q);

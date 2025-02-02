@@ -54,7 +54,7 @@ namespace CUDAMPLib{
     }
 
     // Helper: find a vertex by comparing its stored configuration.
-    Graph::Vertex Graph::find_vertex_by_config(const std::vector<float>& q) const {
+    Graph::BoostVertex Graph::find_vertex_by_config(const std::vector<float>& q) const {
         
         if (dim != q.size()) {
             throw std::runtime_error("Configuration dimension does not match the graph dimension.");
@@ -73,7 +73,7 @@ namespace CUDAMPLib{
     }
 
     void Graph::add_state(const std::vector<float>& q) {
-        Vertex v = boost::add_vertex(g);
+        BoostVertex v = boost::add_vertex(g);
         g[v].configuration = q;
     }
 
@@ -163,8 +163,8 @@ namespace CUDAMPLib{
     }
 
     void Graph::connect(const std::vector<float>& q1, const std::vector<float>& q2, float weight) {
-        Vertex v1 = find_vertex_by_config(q1);
-        Vertex v2 = find_vertex_by_config(q2);
+        BoostVertex v1 = find_vertex_by_config(q1);
+        BoostVertex v2 = find_vertex_by_config(q2);
         if (v1 == boost::graph_traits<BoostGraph>::null_vertex() ||
             v2 == boost::graph_traits<BoostGraph>::null_vertex())
         {
@@ -178,8 +178,8 @@ namespace CUDAMPLib{
     }
 
     bool Graph::is_connect(const std::vector<float>& q1, const std::vector<float>& q2) const {
-        Vertex v1 = find_vertex_by_config(q1);
-        Vertex v2 = find_vertex_by_config(q2);
+        BoostVertex v1 = find_vertex_by_config(q1);
+        BoostVertex v2 = find_vertex_by_config(q2);
         if (v1 == boost::graph_traits<BoostGraph>::null_vertex() ||
             v2 == boost::graph_traits<BoostGraph>::null_vertex())
         {
@@ -190,8 +190,8 @@ namespace CUDAMPLib{
 
     std::vector<std::vector<float>> Graph::find_path(const std::vector<float>& q1, const std::vector<float>& q2) const {
         std::vector<std::vector<float>> path;
-        Vertex source = find_vertex_by_config(q1);
-        Vertex target = find_vertex_by_config(q2);
+        BoostVertex source = find_vertex_by_config(q1);
+        BoostVertex target = find_vertex_by_config(q2);
         if (source == boost::graph_traits<BoostGraph>::null_vertex() ||
             target == boost::graph_traits<BoostGraph>::null_vertex())
         {
@@ -201,7 +201,7 @@ namespace CUDAMPLib{
 
         const auto num_vertices = boost::num_vertices(g);
         std::vector<double> distances(num_vertices, std::numeric_limits<double>::max());
-        std::vector<Vertex> predecessors(num_vertices, boost::graph_traits<BoostGraph>::null_vertex());
+        std::vector<BoostVertex> predecessors(num_vertices, boost::graph_traits<BoostGraph>::null_vertex());
 
         auto indexMap = boost::get(boost::vertex_index, g);
         // Get the weight map explicitly from the bundled edge property.
@@ -221,8 +221,8 @@ namespace CUDAMPLib{
         }
 
         // Reconstruct the path from target back to source using the predecessor map.
-        std::vector<Vertex> vertexPath;
-        for (Vertex v = target; v != source; v = predecessors[indexMap[v]]) {
+        std::vector<BoostVertex> vertexPath;
+        for (BoostVertex v = target; v != source; v = predecessors[indexMap[v]]) {
             if (predecessors[indexMap[v]] == boost::graph_traits<BoostGraph>::null_vertex()){
                 std::cerr << "No path found between the given states." << std::endl;
                 return std::vector<std::vector<float>>();
