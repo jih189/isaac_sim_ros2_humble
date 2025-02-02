@@ -40,11 +40,11 @@ int main() {
     // }
 
     // // Connect the states.
-    g.connect(q1, q2);
-    g.connect(q2, q3);
-    g.connect(q3, q4);
-    g.connect(q4, q5);
-    g.connect(q5, q6);
+    g.connect(q1, q2, 1.0);
+    g.connect(q2, q3, 1.0);
+    g.connect(q3, q4, 1.0);
+    g.connect(q4, q5, 1.0);
+    g.connect(q5, q6, 1.0);
     // // // Also add a direct edge from q1 to q3 for an alternative path.
     // // g.connect(q1, q3);
 

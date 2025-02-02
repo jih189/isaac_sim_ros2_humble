@@ -31,7 +31,7 @@ namespace CUDAMPLib
 
         // Connect two states (configurations) by adding an edge between them.
         // The edge weight is the Euclidean distance between the configurations.
-        void connect(const std::vector<float>& q1, const std::vector<float>& q2);
+        void connect(const std::vector<float>& q1, const std::vector<float>& q2, float weight);
 
         // Check if two states are directly connected by an edge.
         bool is_connect(const std::vector<float>& q1, const std::vector<float>& q2) const;

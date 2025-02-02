@@ -53,21 +53,13 @@ namespace CUDAMPLib{
         return distance_map;
     }
 
-    // Compute the Euclidean distance between two configurations.
-    double euclidean_distance(const std::vector<float>& a, const std::vector<float>& b) {
-        if(a.size() != b.size()){
-            throw std::runtime_error("Configurations must have the same dimension.");
-        }
-        double sum = 0.0;
-        for (size_t i = 0; i < a.size(); ++i) {
-            double diff = static_cast<double>(a[i]) - static_cast<double>(b[i]);
-            sum += diff * diff;
-        }
-        return std::sqrt(sum);
-    }
-
     // Helper: find a vertex by comparing its stored configuration.
     Graph::Vertex Graph::find_vertex_by_config(const std::vector<float>& q) const {
+        
+        if (dim != q.size()) {
+            throw std::runtime_error("Configuration dimension does not match the graph dimension.");
+        }
+
         // compute distance between q and all vertices
         std::vector<float> distance_map = compute_distance(q);
 
@@ -170,7 +162,7 @@ namespace CUDAMPLib{
         return std::find(distance_map.begin(), distance_map.end(), 0) != distance_map.end();
     }
 
-    void Graph::connect(const std::vector<float>& q1, const std::vector<float>& q2) {
+    void Graph::connect(const std::vector<float>& q1, const std::vector<float>& q2, float weight) {
         Vertex v1 = find_vertex_by_config(q1);
         Vertex v2 = find_vertex_by_config(q2);
         if (v1 == boost::graph_traits<BoostGraph>::null_vertex() ||
@@ -181,7 +173,6 @@ namespace CUDAMPLib{
         }
         // Avoid duplicate edges.
         if (!boost::edge(v1, v2, g).second) {
-            double weight = euclidean_distance(q1, q2);
             boost::add_edge(v1, v2, Graph::EdgeProperties{weight}, g);
         }
     }
