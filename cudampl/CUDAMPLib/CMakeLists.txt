@@ -11,6 +11,7 @@ file(GLOB_RECURSE src_files
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 find_package(Eigen3 REQUIRED)
+find_package(Boost REQUIRED)
 
 #Executable
 if(${MY_BUILD_SHARED_LIBS})
