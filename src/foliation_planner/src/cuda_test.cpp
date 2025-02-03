@@ -1031,6 +1031,80 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
     }
 }
 
+void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    // create planning scene
+    auto world = std::make_shared<collision_detection::World>();
+    auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
+
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+    
+    // generate random state on the joint model group
+    robot_state->setToRandomPositions(joint_model_group);
+    robot_state->update();
+
+    while(not planning_scene->isStateValid(*robot_state, group_name))
+    {
+        robot_state->setToRandomPositions(joint_model_group);
+        robot_state->update();
+    }
+
+    // set start state
+    moveit_msgs::msg::RobotState start_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
+    
+    // generate random state on the joint model group
+    robot_state->setToRandomPositions(joint_model_group);
+    robot_state->update();
+
+    while(not planning_scene->isStateValid(*robot_state, group_name))
+    {
+        robot_state->setToRandomPositions(joint_model_group);
+        robot_state->update();
+    }
+
+    // set goal state
+    moveit_msgs::msg::RobotState goal_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, goal_state_msg);
+
+    // Create a start robot state publisher
+    auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
+
+    // Create a goal robot state publisher
+    auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+
+    // Create a DisplayRobotState message
+    moveit_msgs::msg::DisplayRobotState start_display_robot_state;
+    start_display_robot_state.state = start_state_msg;
+
+    // Create a DisplayRobotState message
+    moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
+    goal_display_robot_state.state = goal_state_msg;
+
+    std::cout << "publishing start and goal robot state" << std::endl;
+
+    // Publish the message in a loop
+    while (rclcpp::ok())
+    {
+        // Publish the message
+        start_robot_state_publisher->publish(start_display_robot_state);
+        goal_robot_state_publisher->publish(goal_display_robot_state);
+        
+        rclcpp::spin_some(node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    // clear the robot state
+    robot_state.reset();
+}
+
 int main(int argc, char** argv)
 {
     const std::string GROUP_NAME = "arm";
@@ -1066,7 +1140,9 @@ int main(int argc, char** argv)
 
     // TEST_COLLISIONS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_CUDAMPLib(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_CUDAMPLib(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // list ros parameters
     // RCLCPP_INFO(cuda_test_node->get_logger(), "List all parameters");
