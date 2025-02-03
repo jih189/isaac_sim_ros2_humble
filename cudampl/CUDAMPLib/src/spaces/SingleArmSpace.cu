@@ -126,7 +126,7 @@ namespace CUDAMPLib {
         getSpaceInfo(space_info);
 
         // Create a state
-        SingleArmStatesPtr sampled_states = std::make_shared<SingleArmStates>(num_of_config, space_info, num_of_joints);
+        SingleArmStatesPtr sampled_states = std::make_shared<SingleArmStates>(num_of_config, space_info);
 
         // get device memory with size of num_of_config * num_of_joints * sizeof(float)
         float * d_sampled_states = sampled_states->getJointStatesCuda();
@@ -157,6 +157,25 @@ namespace CUDAMPLib {
 
         // free device memory
         cudaFree(d_random_state);
+
+        return sampled_states;
+    }
+
+    BaseStatesPtr SingleArmSpace::createStatesFromVector(const std::vector<std::vector<float>>& joint_values)
+    {
+        int num_of_config = joint_values.size();
+
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        getSpaceInfo(space_info);
+
+        // Create a state
+        SingleArmStatesPtr sampled_states = std::make_shared<SingleArmStates>(num_of_config, space_info);
+
+        // get device memory with size of num_of_config * num_of_joints * sizeof(float)
+        float * d_sampled_states = sampled_states->getJointStatesCuda();
+
+        // copy data to device memory
+        cudaMemcpy(d_sampled_states, floatVectorFlatten(joint_values).data(), num_of_config * num_of_joints * sizeof(float), cudaMemcpyHostToDevice);
 
         return sampled_states;
     }

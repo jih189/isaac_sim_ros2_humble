@@ -208,13 +208,13 @@ namespace CUDAMPLib
         }
     }
     
-    SingleArmStates::SingleArmStates(int num_of_states, SingleArmSpaceInfoPtr space_info, int num_of_joints)
+    SingleArmStates::SingleArmStates(int num_of_states, SingleArmSpaceInfoPtr space_info)
     : BaseStates(num_of_states, space_info)
     {
-        this->num_of_joints = num_of_joints;
+        this->num_of_joints = space_info->num_of_joints;
 
         // Allocate memory for the joint states
-        cudaMalloc(&d_joint_states, num_of_states * num_of_joints * sizeof(float));
+        cudaMalloc(&d_joint_states, num_of_states * this->num_of_joints * sizeof(float));
         cudaMalloc(&d_link_poses_in_base_link, num_of_states * space_info->num_of_links * 4 * 4 * sizeof(float));
         cudaMalloc(&d_self_collision_spheres_pos_in_base_link, num_of_states * space_info->num_of_self_collision_spheres * 3 * sizeof(float));
     }

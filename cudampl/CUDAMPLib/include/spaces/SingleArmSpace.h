@@ -60,6 +60,13 @@ namespace CUDAMPLib
             void getSpaceInfo(SingleArmSpaceInfoPtr space_info);
 
         private:
+
+            /**
+                * @brief Create a set of states from a vector of joint values.
+                This is used later to create start states and goal states. Try not to make this function public.
+             */
+            BaseStatesPtr createStatesFromVector(const std::vector<std::vector<float>>& joint_values);
+
             int num_of_joints; // number of joints where joints include fixed joints.
             int num_of_links;
             int num_of_self_collision_spheres;

@@ -7,7 +7,7 @@ namespace CUDAMPLib
     class RRG : public BasePlanner
     {
         public:
-            RRG();
+            RRG(BaseSpacePtr space);
             ~RRG() override;
 
             void setMotionTask(BaseTaskPtr task) override;

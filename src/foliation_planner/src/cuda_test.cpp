@@ -9,13 +9,15 @@
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit_msgs/msg/display_robot_state.hpp>
 
-
+// cudampl include
 #include <CUDAMPLib/multiply.h>
 #include <CUDAMPLib/kinematics.h>
 #include <CUDAMPLib/cost.h>
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
 #include <CUDAMPLib/constraints/EnvConstraint.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
+#include <CUDAMPLib/tasks/SingleArmTask.h>
+#include <CUDAMPLib/planners/RRG.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -1054,6 +1056,14 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_state->update();
     }
 
+    std::vector<double> start_joint_values_double;
+    std::vector<float> start_joint_values;
+    robot_state->copyJointGroupPositions(joint_model_group, start_joint_values_double);
+    for (size_t i = 0; i < start_joint_values_double.size(); i++)
+    {
+        start_joint_values.push_back((float)start_joint_values_double[i]);
+    }
+
     // set start state
     moveit_msgs::msg::RobotState start_state_msg;
     moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
@@ -1068,9 +1078,87 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_state->update();
     }
 
+    std::vector<double> goal_joint_values_double;
+    std::vector<float> goal_joint_values;
+    robot_state->copyJointGroupPositions(joint_model_group, goal_joint_values_double);
+    for (size_t i = 0; i < goal_joint_values_double.size(); i++)
+    {
+        goal_joint_values.push_back((float)goal_joint_values_double[i]);
+    }
+
     // set goal state
     moveit_msgs::msg::RobotState goal_state_msg;
     moveit::core::robotStateToRobotStateMsg(*robot_state, goal_state_msg);
+
+    /**************************************************************************************************** */
+
+    // Prepare obstacle constraint
+    float obstacle_spheres_radius = 0.06;
+    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
+    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
+    int num_of_obstacle_spheres = 20;
+    std::vector<std::vector<float>> balls_pos;
+    std::vector<float> ball_radius;
+    for (int i = 0; i < num_of_obstacle_spheres; i++)
+    {
+        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
+        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
+        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
+        balls_pos.push_back({x, y, z});
+        ball_radius.push_back(obstacle_spheres_radius);
+    }
+
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
+    CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+        "obstacle_constraint",
+        balls_pos,
+        ball_radius
+    );
+    // skip it for now.
+    // constraints.push_back(env_constraint);
+
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues()
+    );
+
+    std::vector<std::vector<float>> start_joint_values_set;
+    start_joint_values_set.push_back(start_joint_values);
+
+    std::vector<std::vector<float>> goal_joint_values_set;
+    goal_joint_values_set.push_back(goal_joint_values);
+    // create the task
+    CUDAMPLib::SingleArmTaskPtr task = std::make_shared<CUDAMPLib::SingleArmTask>(
+        start_joint_values_set,
+        goal_joint_values_set
+    );
+
+    // create the planner
+    CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
+
+    // set the task
+    planner->setMotionTask(task);    
+
+    /**************************************************************************************************** */
 
     // Create a start robot state publisher
     auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);

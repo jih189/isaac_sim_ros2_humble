@@ -1,7 +1,6 @@
 #pragma once
 
 #include "base/Task.h"
-#include "states/SingleArmStates.h"
 
 namespace CUDAMPLib
 {
@@ -10,10 +9,12 @@ namespace CUDAMPLib
         public:
             SingleArmTask(const std::vector<std::vector<float>>& start_joint_values, const std::vector<std::vector<float>>& goal_joint_values);
             ~SingleArmTask();
-            BaseStatesPtr getStartStates() override;
-            BaseStatesPtr getGoalStates() override;
+            std::vector<std::vector<float>> getStartStatesVector();
+            std::vector<std::vector<float>> getGoalStatesVector();
         private:
-            SingleArmStatesPtr start_states;
-            SingleArmStatesPtr goal_states;
+            std::vector<std::vector<float>> start_states_vector;
+            std::vector<std::vector<float>> goal_states_vector;
     };
+
+    typedef std::shared_ptr<SingleArmTask> SingleArmTaskPtr;
 } // namespace CUDAMPLibs

@@ -41,7 +41,7 @@ namespace CUDAMPLib
     class SingleArmStates : public BaseStates
     {
         public:
-            SingleArmStates(int num_of_states, SingleArmSpaceInfoPtr space_info, int num_of_joints);
+            SingleArmStates(int num_of_states, SingleArmSpaceInfoPtr space_info);
             
             ~SingleArmStates();
 
@@ -78,6 +78,7 @@ namespace CUDAMPLib
                           list of configurations, each represented as a list of floats.
              */
             std::vector<std::vector<float>> getJointStatesHost();
+            
 
             /**
                 * Based on the current states, update link poses, joint poses, and joint axes, collision spheres in base link, etc.

@@ -3,7 +3,8 @@
 namespace CUDAMPLib
 {
     // Constructor
-    RRG::RRG()
+    RRG::RRG(BaseSpacePtr space)
+        : BasePlanner(space)
     {
         // Initialization code here, if needed
     }
