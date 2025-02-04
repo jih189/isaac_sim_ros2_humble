@@ -1,4 +1,4 @@
-#include "Graph.h"
+#include "TestGraph.h"
 #include <algorithm>   // for std::reverse
 #include <limits>
 #include <cmath>
@@ -20,7 +20,7 @@ namespace CUDAMPLib{
         d_distance_map[idx] = sqrt(sum);
     }
 
-    std::vector<float> Graph::compute_distance(const std::vector<float> &q) const
+    std::vector<float> TestGraph::compute_distance(const std::vector<float> &q) const
     {
         if(dim != q.size()){
             throw std::runtime_error("Configuration dimension does not match the graph dimension.");
@@ -54,7 +54,7 @@ namespace CUDAMPLib{
     }
 
     // Helper: find a vertex by comparing its stored configuration.
-    Graph::BoostVertex Graph::find_vertex_by_config(const std::vector<float>& q) const {
+    TestGraph::BoostVertex TestGraph::find_vertex_by_config(const std::vector<float>& q) const {
         
         if (dim != q.size()) {
             throw std::runtime_error("Configuration dimension does not match the graph dimension.");
@@ -72,12 +72,12 @@ namespace CUDAMPLib{
         return boost::graph_traits<BoostGraph>::null_vertex();
     }
 
-    void Graph::add_state(const std::vector<float>& q) {
+    void TestGraph::add_state(const std::vector<float>& q) {
         BoostVertex v = boost::add_vertex(g);
         g[v].configuration = q;
     }
 
-    void Graph::add_states(const std::vector<std::vector<float>>& qs) {
+    void TestGraph::add_states(const std::vector<std::vector<float>>& qs) {
 
         if (qs.empty()) {
             return;
@@ -144,14 +144,14 @@ namespace CUDAMPLib{
     }
 
     // deconstructor
-    Graph::~Graph() {
+    TestGraph::~TestGraph() {
         if (has_d_graph) {
             cudaFree(d_graph);
             cudaFree(d_distance_map);
         }
     }
 
-    bool Graph::contain(const std::vector<float>& q) const{
+    bool TestGraph::contain(const std::vector<float>& q) const{
         // check the dimension of the configuration
         if (q.size() != dim) {
             throw std::runtime_error("Configuration dimension does not match the graph dimension.");
@@ -162,7 +162,7 @@ namespace CUDAMPLib{
         return std::find(distance_map.begin(), distance_map.end(), 0) != distance_map.end();
     }
 
-    void Graph::connect(const std::vector<float>& q1, const std::vector<float>& q2, float weight) {
+    void TestGraph::connect(const std::vector<float>& q1, const std::vector<float>& q2, float weight) {
         BoostVertex v1 = find_vertex_by_config(q1);
         BoostVertex v2 = find_vertex_by_config(q2);
         if (v1 == boost::graph_traits<BoostGraph>::null_vertex() ||
@@ -173,11 +173,11 @@ namespace CUDAMPLib{
         }
         // Avoid duplicate edges.
         if (!boost::edge(v1, v2, g).second) {
-            boost::add_edge(v1, v2, Graph::EdgeProperties{weight}, g);
+            boost::add_edge(v1, v2, TestGraph::EdgeProperties{weight}, g);
         }
     }
 
-    bool Graph::is_connect(const std::vector<float>& q1, const std::vector<float>& q2) const {
+    bool TestGraph::is_connect(const std::vector<float>& q1, const std::vector<float>& q2) const {
         BoostVertex v1 = find_vertex_by_config(q1);
         BoostVertex v2 = find_vertex_by_config(q2);
         if (v1 == boost::graph_traits<BoostGraph>::null_vertex() ||
@@ -188,7 +188,7 @@ namespace CUDAMPLib{
         return boost::edge(v1, v2, g).second;
     }
 
-    std::vector<std::vector<float>> Graph::find_path(const std::vector<float>& q1, const std::vector<float>& q2) const {
+    std::vector<std::vector<float>> TestGraph::find_path(const std::vector<float>& q1, const std::vector<float>& q2) const {
         std::vector<std::vector<float>> path;
         BoostVertex source = find_vertex_by_config(q1);
         BoostVertex target = find_vertex_by_config(q2);

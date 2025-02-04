@@ -1,11 +1,11 @@
-#include "Graph.h"
+#include "TestGraph.h"
 #include <iostream>
 #include <vector>
 
 using namespace std;
 
 int main() {
-    CUDAMPLib::Graph g(3);
+    CUDAMPLib::TestGraph g(3);
 
     // Define some configurations as vectors of floats.
     vector<float> q1 = {0.0f, 1.0f, 2.0f};

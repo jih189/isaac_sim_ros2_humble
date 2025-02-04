@@ -20,7 +20,7 @@
 namespace CUDAMPLib
 {
 
-    class Graph {
+    class TestGraph {
     public:
 
         // Add a set of states (configurations) to the graph.
@@ -44,10 +44,10 @@ namespace CUDAMPLib
         std::vector<float> compute_distance(const std::vector<float> &q) const;
 
         // Constructor.
-        Graph(int dim) : dim(dim), has_d_graph(false) {}
+        TestGraph(int dim) : dim(dim), has_d_graph(false) {}
 
         // Destructor.
-        ~Graph();
+        ~TestGraph();
 
     private:
         // Internal Boost Graph definitions.
