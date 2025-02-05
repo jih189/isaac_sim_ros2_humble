@@ -62,7 +62,7 @@ namespace CUDAMPLib
 
         graph->add_states(states);
 
-        auto new_states = space_->sample(2);
+        auto new_states = space_->sample(1);
 
         new_states->update();
         // evaluate the feasibility of the states
@@ -76,7 +76,23 @@ namespace CUDAMPLib
         std::vector<StateIndexPair> connect_pairs;
         auto possible_motions = graph->get_motions_to_k_nearest_neighbors(new_states, k, connect_pairs);
 
+        std::vector<bool> motion_feasibility;
+        std::vector<float> motion_costs;
+        space_->checkMotions(possible_motions, motion_feasibility, motion_costs);
 
+        // print the motion feasibility
+        for (bool feasible : motion_feasibility)
+        {
+            printf("%d ", feasible);
+        }
+        printf("\n");
+
+        // print the motion costs
+        for (float cost : motion_costs)
+        {
+            printf("%f ", cost);
+        }
+        printf("\n");
 
         // // add the states to the graph
         // graph->add_states(states);

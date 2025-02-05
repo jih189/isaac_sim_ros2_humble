@@ -171,6 +171,31 @@ namespace CUDAMPLib {
         return sampled_states;
     }
 
+    BaseStatesPtr SingleArmSpace::createStatesFromVectorFull(const std::vector<std::vector<float>>& joint_values)
+    {
+        int num_of_config = joint_values.size();
+
+        if (num_of_config == 0)
+        {
+            // throw an exception
+            throw std::runtime_error("No joint values is empty");
+        }
+
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        getSpaceInfo(space_info);
+
+        // Create a state
+        SingleArmStatesPtr generated_states = std::make_shared<SingleArmStates>(num_of_config, space_info);
+
+        // get device memory with size of num_of_config * num_of_joints * sizeof(float)
+        float * d_generated_states = generated_states->getJointStatesCuda();
+
+        // copy data to device memory
+        cudaMemcpy(d_generated_states, floatVectorFlatten(joint_values).data(), num_of_config * num_of_joints * sizeof(float), cudaMemcpyHostToDevice);
+
+        return generated_states;
+    }
+
     BaseStatesPtr SingleArmSpace::createStatesFromVector(const std::vector<std::vector<float>>& joint_values)
     {
         int num_of_config = joint_values.size();
@@ -238,12 +263,126 @@ namespace CUDAMPLib {
     }
 
     void SingleArmSpace::checkMotions(
-        const std::vector<std::vector<float>>& start, 
-        const std::vector<std::vector<float>>& end, 
-        std::vector<bool>& motion_feasibility
-    )
+        const BaseMotionsPtr & motions,
+        std::vector<bool>& motion_feasibility,
+        std::vector<float>& motion_costs
+    ) 
     {
+        if (motions->getNumOfMotions() == 0)
+        {
+            // throw an exception
+            throw std::runtime_error("No motions to check");
+        }
 
+        motion_feasibility.clear();
+        motion_costs.clear();
+
+        // get space info
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        getSpaceInfo(space_info);
+
+        SingleArmMotionsPtr single_arm_motions = std::dynamic_pointer_cast<SingleArmMotions>(motions);
+
+        std::vector<std::vector<float>> motion_end_states1 = single_arm_motions->getJointStates1Host();
+        std::vector<std::vector<float>> motion_end_states2 = single_arm_motions->getJointStates2Host();
+
+        std::vector<int> motion_start;
+        std::vector<int> motion_end;
+        std::vector<std::vector<float>> all_motions;
+
+        // print the motion end states
+        for (int i = 0; i < motions->getNumOfMotions(); i++)
+        {
+            // printf("Motion %d\n", i);
+            // printf("end state 1: ");
+            // for (int j = 0; j < motion_end_states1[i].size(); j++)
+            // {
+            //     printf("%f ", motion_end_states1[i][j]);
+            // }
+            // printf("\n");
+
+            // printf("end state 2: ");
+            // for (int j = 0; j < motion_end_states2[i].size(); j++)
+            // {
+            //     printf("%f ", motion_end_states2[i][j]);
+            // }
+            // printf("\n");
+
+            // get the interpolated states
+            std::vector<std::vector<float>> interpolated_states = interpolateVectors(motion_end_states1[i], motion_end_states2[i], 10); 
+            // TODO: the step size is too naive, need to be improved
+
+            // calculate the sqrt difference between the two states
+            float cost = 0.0f;
+            for (int j = 0; j < motion_end_states1[i].size(); j++)
+            {
+                cost += (motion_end_states1[i][j] - motion_end_states2[i][j]) * (motion_end_states1[i][j] - motion_end_states2[i][j]);
+            }
+            motion_costs.push_back(sqrt(cost));
+
+            // motion_sizes.push_back(interpolated_states.size());
+            motion_start.push_back(all_motions.size());
+            motion_end.push_back(all_motions.size() + interpolated_states.size()); // exclusive
+            all_motions.insert(all_motions.end(), interpolated_states.begin(), interpolated_states.end());
+
+            // for (int j = 0; j < interpolated_states.size(); j++)
+            // {
+            //     printf("interpolated state %d: ", j);
+            //     for (int k = 0; k < interpolated_states[j].size(); k++)
+            //     {
+            //         printf("%f ", interpolated_states[j][k]);
+            //     }
+            //     printf("\n");
+            // }
+        }
+
+        // // print all_motions
+        // for (int i = 0; i < all_motions.size(); i++)
+        // {
+        //     printf("states %d: ", i);
+        //     for (int j = 0; j < all_motions[i].size(); j++)
+        //     {
+        //         printf("%f ", all_motions[i][j]);
+        //     }
+        //     printf("\n");
+        // }
+
+        // // print motion sizes
+        // for (int i = 0; i < motion_start.size(); i++)
+        // {
+        //     printf("motion %d: start %d, end %d\n", i, motion_start[i], motion_end[i]);
+        // }
+
+        // create states from the all_motions
+        auto interpolated_states = createStatesFromVectorFull(all_motions);
+        interpolated_states->update();
+        std::vector<bool> motion_state_feasibility;
+        // check the interpolated_states
+        checkStates(interpolated_states, motion_state_feasibility);
+
+        // // print the motion state feasibility
+        // for (int i = 0; i < motion_state_feasibility.size(); i++)
+        // {
+        //     printf("motion %d: %d\n", i, motion_state_feasibility[i] ? 1 : 0);
+        // }
+
+        // deallocate interpolated_states
+        interpolated_states.reset();
+
+        // check the motion feasibility. TODO: This can be done in parallel
+        for (int i = 0; i < motions->getNumOfMotions(); i++)
+        {
+            bool feasible = true;
+            for (int j = motion_start[i]; j < motion_end[i]; j++)
+            {
+                if (!motion_state_feasibility[j])
+                {
+                    feasible = false;
+                    break;
+                }
+            }
+            motion_feasibility.push_back(feasible);
+        }
     }
 
     void SingleArmSpace::checkStates(

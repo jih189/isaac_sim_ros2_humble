@@ -19,6 +19,9 @@ namespace CUDAMPLib
                 return d_joint_states_2;
             }
 
+            std::vector<std::vector<float>> getJointStates1Host() const;
+            std::vector<std::vector<float>> getJointStates2Host() const;
+
             void print() const override;
 
         private:

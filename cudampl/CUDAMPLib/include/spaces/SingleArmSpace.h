@@ -7,6 +7,7 @@
 
 #include <base/Space.h>
 #include <states/SingleArmStates.h>
+#include <motions/SingleArmMotions.h>
 #include <graphs/SingleArmGraph.h>
 #include <vector>
 #include <util.h>
@@ -54,9 +55,9 @@ namespace CUDAMPLib
             ) override;
 
             void checkMotions(
-                const std::vector<std::vector<float>>& start, 
-                const std::vector<std::vector<float>>& end, 
-                std::vector<bool>& motion_feasibility
+                const BaseMotionsPtr & motions,
+                std::vector<bool>& motion_feasibility,
+                std::vector<float>& motion_costs
             ) override;
 
             void checkStates(
@@ -78,6 +79,15 @@ namespace CUDAMPLib
                 @return The states.
              */
             BaseStatesPtr createStatesFromVector(const std::vector<std::vector<float>>& joint_values);
+
+
+            /**
+                @brief helper function to create a set of states based on task.
+                This is used for motion checking.
+                @param joint_values The joint values of the states include non-active joints.
+                @return The states.
+             */
+            BaseStatesPtr createStatesFromVectorFull(const std::vector<std::vector<float>>& joint_values);
 
         private:
 

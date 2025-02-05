@@ -47,16 +47,13 @@ namespace CUDAMPLib
 
             /**
                 * @brief Check the feasibility of a set of motions.
-                * @param start The start configurations. A list
-                * of configurations, each represented as a list of floats.
-                * @param end The end configurations. A list
-                * of configurations, each represented as a list of floats.
+                * @param motions The motions to check.
                 * @param motion_feasibility The feasibility of the motions.
             */
             virtual void checkMotions(
-                const std::vector<std::vector<float>>& start, 
-                const std::vector<std::vector<float>>& end, 
-                std::vector<bool>& motion_feasibility
+                const BaseMotionsPtr & motions,
+                std::vector<bool>& motion_feasibility,
+                std::vector<float>& motion_costs
             ) = 0;
 
             /**

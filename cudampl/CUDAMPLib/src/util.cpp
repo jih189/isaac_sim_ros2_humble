@@ -158,3 +158,28 @@ std::vector<int> CUDAMPLib::kLeastIndices(const std::vector<float>& nums, int k)
 
     return indices;
 }
+
+std::vector<std::vector<float>> CUDAMPLib::interpolateVectors(const std::vector<float>& v1, 
+                                                   const std::vector<float>& v2, 
+                                                   int steps) {
+    // Ensure both vectors have the same size
+    if (v1.size() != v2.size() || steps <= 0) {
+        return {}; // Return empty if sizes mismatch or invalid steps
+    }
+
+    std::vector<std::vector<float>> interpolated;
+    
+    // Generate intermediate vectors
+    for (int i = 0; i <= steps; ++i) {
+        float t = static_cast<float>(i) / steps; // Interpolation factor
+        std::vector<float> stepVector(v1.size());
+        
+        for (size_t j = 0; j < v1.size(); ++j) {
+            stepVector[j] = v1[j] + t * (v2[j] - v1[j]);
+        }
+        
+        interpolated.push_back(stepVector);
+    }
+
+    return interpolated;
+}

@@ -24,6 +24,10 @@ namespace CUDAMPLib
                 return d_costs;
             }
 
+            int getNumOfMotions() const {
+                return num_of_motions;
+            }
+
             /**
                 @brief Print the motions.
              */

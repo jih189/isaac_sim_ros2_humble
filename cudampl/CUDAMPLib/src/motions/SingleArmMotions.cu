@@ -20,6 +20,38 @@ namespace CUDAMPLib
         }
     }
 
+    std::vector<std::vector<float>> SingleArmMotions::getJointStates1Host() const {
+        // Copy the joint states to the host
+        float *h_joint_states_1 = new float[num_of_motions * num_of_joints];
+        cudaMemcpy(h_joint_states_1, d_joint_states_1, num_of_motions * num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
+
+        // Convert the joint states to a vector of vectors
+        std::vector<std::vector<float>> joint_states_1(num_of_motions, std::vector<float>(num_of_joints));
+        for (int i = 0; i < num_of_motions; i++) {
+            for (int j = 0; j < num_of_joints; j++) {
+                joint_states_1[i][j] = h_joint_states_1[i * num_of_joints + j];
+            }
+        }
+
+        return joint_states_1;
+    }
+
+    std::vector<std::vector<float>> SingleArmMotions::getJointStates2Host() const {
+        // Copy the joint states to the host
+        float *h_joint_states_2 = new float[num_of_motions * num_of_joints];
+        cudaMemcpy(h_joint_states_2, d_joint_states_2, num_of_motions * num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
+
+        // Convert the joint states to a vector of vectors
+        std::vector<std::vector<float>> joint_states_2(num_of_motions, std::vector<float>(num_of_joints));
+        for (int i = 0; i < num_of_motions; i++) {
+            for (int j = 0; j < num_of_joints; j++) {
+                joint_states_2[i][j] = h_joint_states_2[i * num_of_joints + j];
+            }
+        }
+
+        return joint_states_2;
+    }
+
     void SingleArmMotions::print() const {
         // Copy the joint states to the host
         float *h_joint_states_1 = new float[num_of_motions * num_of_joints];
