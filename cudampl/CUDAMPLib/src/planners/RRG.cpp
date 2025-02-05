@@ -80,17 +80,23 @@ namespace CUDAMPLib
         std::vector<float> motion_costs;
         space_->checkMotions(possible_motions, motion_feasibility, motion_costs);
 
+        // print motion pairs
+        for (const auto &pair : connect_pairs)
+        {
+            printf("pair: %d %d\n", pair.index_in_states, pair.index_in_graph);
+        }
+
         // print the motion feasibility
         for (bool feasible : motion_feasibility)
         {
-            printf("%d ", feasible);
+            printf("feasibility %d ", feasible);
         }
         printf("\n");
 
         // print the motion costs
         for (float cost : motion_costs)
         {
-            printf("%f ", cost);
+            printf("cost %f ", cost);
         }
         printf("\n");
 

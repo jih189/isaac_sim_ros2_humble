@@ -1231,9 +1231,9 @@ int main(int argc, char** argv)
 
     // TEST_COLLISIONS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_CUDAMPLib(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_CUDAMPLib(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // list ros parameters
     // RCLCPP_INFO(cuda_test_node->get_logger(), "List all parameters");
