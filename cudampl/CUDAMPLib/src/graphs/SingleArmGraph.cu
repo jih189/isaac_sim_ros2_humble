@@ -126,6 +126,8 @@ namespace CUDAMPLib
         // clear the pairs
         pairs.clear();
 
+        // print();
+
         printf("=============debugging================\n");
         printf("Size of states: %d\n", states->getNumOfStates());
         printf("size of Graph: %d\n", get_size());

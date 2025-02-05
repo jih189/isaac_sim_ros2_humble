@@ -51,7 +51,7 @@ namespace CUDAMPLib
     void RRG::solve()
     {
         // sample k configurations
-        auto states = space_->sample(5);
+        auto states = space_->sample(7);
         states->update();
         // evaluate the feasibility of the states
         std::vector<bool> state_feasibility;
@@ -62,7 +62,8 @@ namespace CUDAMPLib
 
         graph->add_states(states);
 
-        auto new_states = space_->sample(1);
+        auto new_states = space_->sample(2);
+
         new_states->update();
         // evaluate the feasibility of the states
         state_feasibility.clear();
@@ -70,6 +71,13 @@ namespace CUDAMPLib
 
         // filter out the infeasible states
         new_states->filterStates(state_feasibility);
+
+        // print graph
+        printf("Graph======================\n");
+        graph->print();
+
+        printf("States======================\n");
+        new_states->print();
 
         // find the motions to k nearest neighbor
         std::vector<StateIndexPair> connect_pairs;

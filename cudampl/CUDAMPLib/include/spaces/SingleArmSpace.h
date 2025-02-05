@@ -13,6 +13,10 @@
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 
+#include <random>
+#include <ctime>
+#include <limits>
+
 namespace CUDAMPLib
 {
     class SingleArmSpace : public BaseSpace
@@ -97,6 +101,11 @@ namespace CUDAMPLib
             float * d_lower_bound;
             float * d_upper_bound;
             float * d_default_joint_values;
+
+            // random number generator
+            // std::random_device rd;  // Non-deterministic seed (preferred)
+            std::mt19937 gen;       // Standard mersenne_twister_engine seeded with rd()
+            std::uniform_int_distribution<unsigned long> dist;
     };
 
     typedef std::shared_ptr<SingleArmSpace> SingleArmSpacePtr;

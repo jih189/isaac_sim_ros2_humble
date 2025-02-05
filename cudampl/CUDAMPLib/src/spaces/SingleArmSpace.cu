@@ -17,7 +17,9 @@ namespace CUDAMPLib {
         const std::vector<float>& upper,
         const std::vector<float>& default_joint_values
     )
-        : BaseSpace(dim, constraints)
+        : BaseSpace(dim, constraints),
+          gen(std::random_device{}()),
+          dist(0, std::numeric_limits<unsigned long>::max())
     {
         // need to allocate device memory for joint_types, joint_poses, joint_axes, 
         // parent_link_maps, collision_spheres_to_link_map, collision_spheres_pos_in_link, 
@@ -89,9 +91,10 @@ namespace CUDAMPLib {
         cudaFree(d_default_joint_values);
     }
 
-    __global__ void initCurand(curandState * state, unsigned long seed)
+    __global__ void initCurand(curandState * state, unsigned long seed, int state_size)
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= state_size) return;
         curand_init(seed, idx, 0, &state[idx]);
     }
 
@@ -137,11 +140,15 @@ namespace CUDAMPLib {
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_config * num_of_joints + threadsPerBlock - 1) / threadsPerBlock;
 
-        // set random seed
-        unsigned long seed = time(0);
-        curandState *d_random_state;
+        // // set random seed
+        // std::random_device rd;  // Non-deterministic seed (preferred)
+        // std::mt19937_64 gen(rd()); // 64-bit Mersenne Twister PRNG
+        // std::uniform_int_distribution<unsigned long> dist(0, ULONG_MAX);
+
+        unsigned long seed = dist(gen);
+        curandState * d_random_state;
         cudaMalloc(&d_random_state, num_of_config * num_of_joints * sizeof(curandState));
-        initCurand<<<blocksPerGrid, threadsPerBlock>>>(d_random_state, seed);
+        initCurand<<<blocksPerGrid, threadsPerBlock>>>(d_random_state, seed, num_of_config * num_of_joints);
 
         // call kernel
         sample_kernel<<<blocksPerGrid, threadsPerBlock>>>(
