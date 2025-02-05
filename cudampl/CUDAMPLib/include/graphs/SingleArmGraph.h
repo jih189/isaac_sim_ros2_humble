@@ -76,6 +76,9 @@ namespace CUDAMPLib
             int get_size() const{
                 return boost::num_vertices(graph);
             }
+
+            // helper function to add states to the graph
+            void add_states_helper(const BaseStatesPtr & states, int group);
     };
 
     typedef std::shared_ptr<SingleArmGraph> SingleArmGraphPtr;

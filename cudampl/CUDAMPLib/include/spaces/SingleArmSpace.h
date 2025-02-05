@@ -60,6 +60,8 @@ namespace CUDAMPLib
                 std::vector<bool>& state_feasibility
             ) override;
 
+            void checkStates(const BaseStatesPtr & states) override;
+
             BaseGraphPtr createGraph() override;
 
             void getSpaceInfo(SingleArmSpaceInfoPtr space_info);

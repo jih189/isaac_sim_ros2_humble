@@ -265,6 +265,22 @@ namespace CUDAMPLib {
         }
     }
 
+    void SingleArmSpace::checkStates(const BaseStatesPtr & states)
+    {
+        // based on all the constraints, check if the states are feasible
+        for (size_t i = 0; i < constraints.size(); i++)
+        {
+            BaseConstraintPtr constraint = constraints[i];
+            constraint->computeCost(states);
+        }
+
+        // wait for the kernel to finish
+        cudaDeviceSynchronize();
+
+        // get the total cost
+        states->calculateTotalCosts();
+    }
+
     void SingleArmSpace::getSpaceInfo(SingleArmSpaceInfoPtr space_info)
     {
         // call the base class function

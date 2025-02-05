@@ -63,11 +63,21 @@ namespace CUDAMPLib
                 * @brief Check the feasibility of a set of states.
                 * @param states The states to check.
                 * @param state_feasibility The feasibility of the states.
+                This function will return the feasibility of the states, so it moves data from device to host and
+                slow down the process. 
             */
             virtual void checkStates(
                 const BaseStatesPtr & states,
                 std::vector<bool> & state_feasibility
             ) = 0;
+
+            /**
+                * @brief Check the feasibility of a set of states.
+                * @param states The states to check.
+                This function does not return the feasibility of the states, so it does not move data from device to host and
+                does not slow down the process.
+             */
+            virtual void checkStates(const BaseStatesPtr & states) = 0;
 
             /**
                 * @brief Create a graph for the space.

@@ -15,6 +15,10 @@ namespace CUDAMPLib
             void solve() override;
         private:
             BaseGraphPtr graph;
+
+            // parameters
+            int sample_attempts;
+            int k;
     };
 
     typedef std::shared_ptr<RRG> RRGPtr;

@@ -1156,7 +1156,10 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
 
     // set the task
-    planner->setMotionTask(task);    
+    planner->setMotionTask(task);
+
+    // solve the task
+    planner->solve();
 
     /**************************************************************************************************** */
 
