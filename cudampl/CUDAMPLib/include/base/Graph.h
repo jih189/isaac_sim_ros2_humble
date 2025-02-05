@@ -31,7 +31,7 @@ namespace CUDAMPLib
             virtual void add_goal_states(const BaseStatesPtr & states) = 0;
 
             // Get motions to k nearest neighbors.
-            virtual BaseMotionsPtr get_motions_to_k_nearest_neighbors(const BaseStatesPtr & states, int k, std::vector<StateIndexPair> pairs) = 0;
+            virtual BaseMotionsPtr get_motions_to_k_nearest_neighbors(const BaseStatesPtr & states, int k, std::vector<StateIndexPair> & pairs) = 0;
 
             // Returns true if the configuration q is in the graph.
             virtual void contain(const BaseStatesPtr & states, int * d_result) const = 0;

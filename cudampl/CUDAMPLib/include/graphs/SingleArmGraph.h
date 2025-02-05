@@ -7,6 +7,7 @@
 
 #include "base/Graph.h"
 #include "states/SingleArmStates.h"
+#include "motions/SingleArmMotions.h"
 
 namespace CUDAMPLib
 {
@@ -27,7 +28,7 @@ namespace CUDAMPLib
             void add_goal_states(const BaseStatesPtr & states) override;
 
             // Get motions to k nearest neighbors.
-            BaseMotionsPtr get_motions_to_k_nearest_neighbors(const BaseStatesPtr & states, int k, std::vector<StateIndexPair> pairs) override;
+            BaseMotionsPtr get_motions_to_k_nearest_neighbors(const BaseStatesPtr & states, int k, std::vector<StateIndexPair> & pairs) override;
 
             // Returns true if the configuration q is in the graph.
             void contain(const BaseStatesPtr & states, int * d_result) const override;

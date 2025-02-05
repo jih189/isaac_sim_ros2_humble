@@ -51,7 +51,7 @@ namespace CUDAMPLib
     void RRG::solve()
     {
         // sample k configurations
-        auto states = space_->sample(20);
+        auto states = space_->sample(5);
         states->update();
         // evaluate the feasibility of the states
         std::vector<bool> state_feasibility;
@@ -62,7 +62,7 @@ namespace CUDAMPLib
 
         graph->add_states(states);
 
-        auto new_states = space_->sample(3);
+        auto new_states = space_->sample(1);
         new_states->update();
         // evaluate the feasibility of the states
         state_feasibility.clear();
