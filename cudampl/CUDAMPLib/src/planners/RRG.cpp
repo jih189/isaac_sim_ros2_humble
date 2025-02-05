@@ -72,16 +72,11 @@ namespace CUDAMPLib
         // filter out the infeasible states
         new_states->filterStates(state_feasibility);
 
-        // print graph
-        printf("Graph======================\n");
-        graph->print();
-
-        printf("States======================\n");
-        new_states->print();
-
         // find the motions to k nearest neighbor
         std::vector<StateIndexPair> connect_pairs;
-        graph->get_motions_to_k_nearest_neighbors(new_states, k, connect_pairs);
+        auto possible_motions = graph->get_motions_to_k_nearest_neighbors(new_states, k, connect_pairs);
+
+
 
         // // add the states to the graph
         // graph->add_states(states);

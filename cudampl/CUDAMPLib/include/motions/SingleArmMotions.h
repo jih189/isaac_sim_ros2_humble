@@ -19,6 +19,8 @@ namespace CUDAMPLib
                 return d_joint_states_2;
             }
 
+            void print() const override;
+
         private:
             float * d_joint_states_1; // joint states of the first end of the motion
             float * d_joint_states_2; // joint states of the second end of the motion

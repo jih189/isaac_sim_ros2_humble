@@ -141,6 +141,7 @@ namespace CUDAMPLib
             
             // prepare the motions by numerating the states in the graph and states
             for (int i = 0; i < states->getNumOfStates(); i++){
+                // copy the states i to d_joint_states_1 repeated get_size() times
                 for (int j = 0; j < get_size(); j++){
                     cudaMemcpyAsync(
                         d_joint_states_1 + (i * get_size() + j) * num_of_joints,
@@ -148,6 +149,7 @@ namespace CUDAMPLib
                         num_of_joints * sizeof(float),
                         cudaMemcpyDeviceToDevice
                     );
+                    // create a pair of the states in the graph and states
                     StateIndexPair pair;
                     pair.index_in_states = i;
                     pair.index_in_graph = j;
@@ -199,11 +201,41 @@ namespace CUDAMPLib
         for (int i = 0; i < states->getNumOfStates(); i++) {
             for (int j = 0; j < get_size(); j++) {
                 distances_from_states_to_graph[i][j] = distances_from_states_to_graph_flattened[i * get_size() + j];
-                printf("%f ", distances_from_states_to_graph[i][j]);
             }
-            printf("\n");
         }
 
+        for (int i = 0; i < states->getNumOfStates(); i++) {
+            // find index of the k least distances of distances_from_states_to_graph[i]
+            std::vector<int> index_k_nearest_neighbors = kLeastIndices(distances_from_states_to_graph[i], k);
+            // copy the states i to d_joint_states_1 repeated k times
+            for (int j = 0; j < k; j++){
+                // copy the states i to d_joint_states_1 repeated k times
+                cudaMemcpyAsync(
+                    d_joint_states_1 + (i * k + j) * num_of_joints,
+                    d_joint_states + i * num_of_joints,
+                    num_of_joints * sizeof(float),
+                    cudaMemcpyDeviceToDevice
+                );
+
+                // based on the index of the k least distances, copy the states in the graph to d_joint_states_2
+                cudaMemcpyAsync(
+                    d_joint_states_2 + (i * k + j) * num_of_joints,
+                    d_states_in_graph + index_k_nearest_neighbors[j] * num_of_joints,
+                    num_of_joints * sizeof(float),
+                    cudaMemcpyDeviceToDevice
+                );
+
+                // create a pair of the states in the graph and states
+                StateIndexPair pair;
+                pair.index_in_states = i;
+                pair.index_in_graph = index_k_nearest_neighbors[j];
+                pairs.push_back(pair);
+            }
+        }
+
+        // wait for the copy to finish
+        cudaDeviceSynchronize();
+        
         // free the memory
         cudaFree(d_distances_from_states_to_graph);
 

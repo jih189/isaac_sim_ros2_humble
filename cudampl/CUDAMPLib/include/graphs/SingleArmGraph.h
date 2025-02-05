@@ -1,5 +1,8 @@
 #pragma once
 
+#pragma nv_diag_suppress 20012
+#pragma nv_diag_suppress 20014
+
 // Boost headers
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
@@ -8,6 +11,7 @@
 #include "base/Graph.h"
 #include "states/SingleArmStates.h"
 #include "motions/SingleArmMotions.h"
+#include "util.h"
 
 namespace CUDAMPLib
 {

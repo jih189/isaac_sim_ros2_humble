@@ -24,6 +24,11 @@ namespace CUDAMPLib
                 return d_costs;
             }
 
+            /**
+                @brief Print the motions.
+             */
+            virtual void print() const = 0;
+
         protected:
             float * d_costs; // costs of each motion
             int num_of_motions;
