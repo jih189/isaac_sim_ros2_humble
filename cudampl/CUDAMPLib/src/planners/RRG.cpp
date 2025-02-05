@@ -51,13 +51,33 @@ namespace CUDAMPLib
     void RRG::solve()
     {
         // sample k configurations
-        auto states = space_->sample(sample_attempts);
+        auto states = space_->sample(20);
         states->update();
-        space_->checkStates(states);
 
         // evaluate the feasibility of the states
-        // std::vector<bool> state_feasibility;
-        // space_->checkStates(states, state_feasibility);
+        std::vector<bool> state_feasibility;
+        space_->checkStates(states, state_feasibility);
+
+        // print the feasibility of the states
+        for (int i = 0; i < state_feasibility.size(); i++)
+        {
+            printf("state %d is %s\n", i, state_feasibility[i] ? "feasible" : "infeasible");
+        }
+
+        printf("filter out the infeasible states\n");
+
+        // filter out the infeasible states
+        states->filterStates(state_feasibility);
+        // states->update();
+        // evaluate the feasibility of the states
+        state_feasibility.clear();
+        space_->checkStates(states, state_feasibility);
+
+        // print the feasibility of the states
+        for (int i = 0; i < state_feasibility.size(); i++)
+        {
+            printf("state %d is %s\n", i, state_feasibility[i] ? "feasible" : "infeasible");
+        }
 
         // find the nearest neighbor
 

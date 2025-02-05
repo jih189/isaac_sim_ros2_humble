@@ -46,6 +46,12 @@ namespace CUDAMPLib
             ~SingleArmStates();
 
             /**
+                @brief Filter the states based on the filter_map
+                @param filter_map The filter map. If the value is true, the state is feasible. Otherwise, the state is infeasible.
+             */
+            void filterStates(const std::vector<bool> & filter_map) override;
+
+            /**
                 @brief Get the joint states in device memory.
                 @return The joint states in device memory.
              */

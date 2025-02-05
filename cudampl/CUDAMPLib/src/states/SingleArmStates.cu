@@ -227,6 +227,66 @@ namespace CUDAMPLib
         cudaFree(d_self_collision_spheres_pos_in_base_link);
     }
 
+    void SingleArmStates::filterStates(const std::vector<bool> & filter_map)
+    {
+        int initial_num_of_states = num_of_states;
+
+        // call the base class filterStates
+        BaseStates::filterStates(filter_map);
+
+        int new_num_of_states = num_of_states;
+
+        if (new_num_of_states == 0){
+            // Free the memory
+            cudaFree(d_joint_states);
+            cudaFree(d_link_poses_in_base_link);
+            cudaFree(d_self_collision_spheres_pos_in_base_link);
+        }
+        else{
+            // static_cast the space_info to SingleArmSpaceInfo
+            SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+
+            float * d_joint_states_new;
+            float * d_link_poses_in_base_link_new;
+            float * d_self_collision_spheres_pos_in_base_link_new;
+
+            // Allocate memory for the joint states
+            cudaMalloc(&d_joint_states_new, new_num_of_states * num_of_joints * sizeof(float));
+            cudaMalloc(&d_link_poses_in_base_link_new, new_num_of_states * single_arm_space_info->num_of_links * 4 * 4 * sizeof(float));
+            cudaMalloc(&d_self_collision_spheres_pos_in_base_link_new, new_num_of_states * single_arm_space_info->num_of_self_collision_spheres * 3 * sizeof(float));
+
+            // Copy the joint states from the old memory to the new memory
+            int j = 0;
+            for (int i = 0; i < initial_num_of_states; i++)
+            {
+                if (filter_map[i])
+                {
+                    // cudaMemcpy(d_joint_states_new + j * num_of_joints, d_joint_states + i * num_of_joints, num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
+                    // cudaMemcpy(d_link_poses_in_base_link_new + j * single_arm_space_info->num_of_links * 4 * 4, d_link_poses_in_base_link + i * single_arm_space_info->num_of_links * 4 * 4, single_arm_space_info->num_of_links * 4 * 4 * sizeof(float), cudaMemcpyDeviceToDevice);
+                    // cudaMemcpy(d_self_collision_spheres_pos_in_base_link_new + j * single_arm_space_info->num_of_self_collision_spheres * 3, d_self_collision_spheres_pos_in_base_link + i * single_arm_space_info->num_of_self_collision_spheres * 3, single_arm_space_info->num_of_self_collision_spheres * 3 * sizeof(float), cudaMemcpyDeviceToDevice);
+                    // copy asynchrounously
+                    cudaMemcpyAsync(d_joint_states_new + j * num_of_joints, d_joint_states + i * num_of_joints, num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
+                    cudaMemcpyAsync(d_link_poses_in_base_link_new + j * single_arm_space_info->num_of_links * 4 * 4, d_link_poses_in_base_link + i * single_arm_space_info->num_of_links * 4 * 4, single_arm_space_info->num_of_links * 4 * 4 * sizeof(float), cudaMemcpyDeviceToDevice);
+                    cudaMemcpyAsync(d_self_collision_spheres_pos_in_base_link_new + j * single_arm_space_info->num_of_self_collision_spheres * 3, d_self_collision_spheres_pos_in_base_link + i * single_arm_space_info->num_of_self_collision_spheres * 3, single_arm_space_info->num_of_self_collision_spheres * 3 * sizeof(float), cudaMemcpyDeviceToDevice);
+                    j++;
+                }
+            }
+
+            // Wait for the copy to finish
+            cudaDeviceSynchronize();
+
+            // Free the old memory
+            cudaFree(d_joint_states);
+            cudaFree(d_link_poses_in_base_link);
+            cudaFree(d_self_collision_spheres_pos_in_base_link);
+
+            // Update the pointers
+            d_joint_states = d_joint_states_new;
+            d_link_poses_in_base_link = d_link_poses_in_base_link_new;
+            d_self_collision_spheres_pos_in_base_link = d_self_collision_spheres_pos_in_base_link_new;
+        }
+    }
+
     std::vector<std::vector<float>> SingleArmStates::getJointStatesHost() const
     {
         // Allocate memory for the joint states

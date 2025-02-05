@@ -43,6 +43,66 @@ namespace CUDAMPLib
                 cudaFree(d_total_costs);
             }
 
+            virtual void filterStates(const std::vector<bool> & filter_map){
+
+                // calculate the number of feasible states
+                int num_left_states = 0;
+                for (int i = 0; i < num_of_states; i++) {
+                    if (filter_map[i]) {
+                        num_left_states++;
+                    }
+                }
+                
+                if (num_left_states == 0) {
+                    // if there is no feasible states, clear the memory
+                    cudaFree(d_costs);
+                    cudaFree(d_total_costs);
+                }
+                else{
+                    // allocate memory for the feasible states
+                    float * d_costs_new;
+                    float * d_total_costs_new;
+
+                    cudaMalloc(&d_costs_new, num_left_states * space_info->num_of_constraints * sizeof(float));
+                    cudaMalloc(&d_total_costs_new, num_left_states * sizeof(float));
+
+                    // copy the feasible states to the new memory
+                    int j = 0;
+                    for (int i = 0; i < num_of_states; i++) {
+                        if (filter_map[i]) {
+                            for (int k = 0; k < space_info->num_of_constraints; k++) {
+                                // cudaMemcpy(d_costs_new + j + k * num_left_states,
+                                // d_costs + i + k * num_of_states,
+                                // sizeof(float), 
+                                // cudaMemcpyDeviceToDevice);
+                                // copy asynchonously
+                                cudaMemcpyAsync(d_costs_new + j + k * num_left_states,
+                                d_costs + i + k * num_of_states,
+                                sizeof(float),
+                                cudaMemcpyDeviceToDevice);
+                            }
+                            // cudaMemcpy(d_total_costs_new + j, d_total_costs + i, sizeof(float), cudaMemcpyDeviceToDevice);
+                            // copy asynchonously
+                            cudaMemcpyAsync(d_total_costs_new + j, d_total_costs + i, sizeof(float), cudaMemcpyDeviceToDevice);
+                            j++;
+                        }
+                    }
+
+                    // wait for the copy to finish
+                    cudaDeviceSynchronize();
+
+                    // free the old memory
+                    cudaFree(d_costs);
+                    cudaFree(d_total_costs);
+
+                    // update the memory
+                    d_costs = d_costs_new;
+                    d_total_costs = d_total_costs_new;
+                }
+
+                this->num_of_states = num_left_states;
+            }
+
             int getNumOfStates() const { return num_of_states; }
 
             float * getCostsCuda() {
@@ -89,7 +149,7 @@ namespace CUDAMPLib
 
         protected:
             int num_of_states;
-            float * d_costs; // cost of each state and different constraints
+            float * d_costs; // cost of each state and different constraints. The format should be [state1_constraint1, state2_constraint1, ..., state1_constraint2, state2_constraint2, ...]
             float * d_total_costs; // total cost of each state
             SpaceInfoPtr space_info;
     };
