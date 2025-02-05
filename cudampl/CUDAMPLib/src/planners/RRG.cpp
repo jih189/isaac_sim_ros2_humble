@@ -53,33 +53,27 @@ namespace CUDAMPLib
         // sample k configurations
         auto states = space_->sample(20);
         states->update();
-
         // evaluate the feasibility of the states
         std::vector<bool> state_feasibility;
         space_->checkStates(states, state_feasibility);
 
-        // print the feasibility of the states
-        for (int i = 0; i < state_feasibility.size(); i++)
-        {
-            printf("state %d is %s\n", i, state_feasibility[i] ? "feasible" : "infeasible");
-        }
-
-        printf("filter out the infeasible states\n");
-
         // filter out the infeasible states
         states->filterStates(state_feasibility);
-        // states->update();
+
+        graph->add_states(states);
+
+        auto new_states = space_->sample(3);
+        new_states->update();
         // evaluate the feasibility of the states
         state_feasibility.clear();
-        space_->checkStates(states, state_feasibility);
+        space_->checkStates(new_states, state_feasibility);
 
-        // print the feasibility of the states
-        for (int i = 0; i < state_feasibility.size(); i++)
-        {
-            printf("state %d is %s\n", i, state_feasibility[i] ? "feasible" : "infeasible");
-        }
+        // filter out the infeasible states
+        new_states->filterStates(state_feasibility);
 
-        // find the nearest neighbor
+        // find the motions to k nearest neighbor
+        std::vector<StateIndexPair> connect_pairs;
+        graph->get_motions_to_k_nearest_neighbors(new_states, k, connect_pairs);
 
         // // add the states to the graph
         // graph->add_states(states);

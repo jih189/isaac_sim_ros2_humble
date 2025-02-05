@@ -222,9 +222,12 @@ namespace CUDAMPLib
     SingleArmStates::~SingleArmStates()
     {
         // Free the memory
-        cudaFree(d_joint_states);
-        cudaFree(d_link_poses_in_base_link);
-        cudaFree(d_self_collision_spheres_pos_in_base_link);
+        if (num_of_states > 0)
+        {
+            cudaFree(d_joint_states);
+            cudaFree(d_link_poses_in_base_link);
+            cudaFree(d_self_collision_spheres_pos_in_base_link);
+        }
     }
 
     void SingleArmStates::filterStates(const std::vector<bool> & filter_map)

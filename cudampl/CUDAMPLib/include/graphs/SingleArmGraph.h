@@ -26,6 +26,9 @@ namespace CUDAMPLib
             // Add goal states to the graph.
             void add_goal_states(const BaseStatesPtr & states) override;
 
+            // Get motions to k nearest neighbors.
+            BaseMotionsPtr get_motions_to_k_nearest_neighbors(const BaseStatesPtr & states, int k, std::vector<StateIndexPair> pairs) override;
+
             // Returns true if the configuration q is in the graph.
             void contain(const BaseStatesPtr & states, int * d_result) const override;
 

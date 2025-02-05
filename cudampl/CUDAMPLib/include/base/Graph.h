@@ -1,9 +1,20 @@
 #pragma once
 
 #include <base/States.h>
+#include <base/Motions.h>
 
 namespace CUDAMPLib
 {
+    /**
+        This is used for get motion to k nearest neighbors.
+        index_in_states: the index of the state in the states.
+        index_in_graph: the index of the state in the graph.
+     */
+    struct StateIndexPair{
+        size_t index_in_states;
+        size_t index_in_graph;
+    };
+
     class BaseGraph {
         public:
             BaseGraph() {}
@@ -18,6 +29,9 @@ namespace CUDAMPLib
 
             // Add goal states to the graph.
             virtual void add_goal_states(const BaseStatesPtr & states) = 0;
+
+            // Get motions to k nearest neighbors.
+            virtual BaseMotionsPtr get_motions_to_k_nearest_neighbors(const BaseStatesPtr & states, int k, std::vector<StateIndexPair> pairs) = 0;
 
             // Returns true if the configuration q is in the graph.
             virtual void contain(const BaseStatesPtr & states, int * d_result) const = 0;

@@ -86,6 +86,14 @@ namespace CUDAMPLib
         add_states_helper(states, 2);
     }
 
+    BaseMotionsPtr SingleArmGraph::get_motions_to_k_nearest_neighbors(const BaseStatesPtr & states, int k, std::vector<StateIndexPair> pairs){
+
+        printf("=============debugging================\n");
+        printf("Size of states: %d\n", states->getNumOfStates());
+        printf("size of Graph: %d\n", get_size());
+        return nullptr;
+    }
+
     void SingleArmGraph::contain(const BaseStatesPtr & states, int * d_result) const {
         // Check if the states are in the graph
     }

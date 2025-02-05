@@ -7,18 +7,27 @@ namespace CUDAMPLib
     class BaseMotions
     {
         public:
-            virtual ~BaseMotions() {}
+            BaseMotions(int num_of_motions, SpaceInfoPtr space_info) {
+                this->num_of_motions = num_of_motions;
+                this->space_info = space_info;
 
-            float * getCosts() {
+                // Allocate memory for the costs
+                cudaMalloc(&d_costs, num_of_motions * sizeof(float));
+            }
+
+            virtual ~BaseMotions() {
+                // Free the memory
+                cudaFree(d_costs);
+            }
+
+            float * getCostsCuda() {
                 return d_costs;
             }
 
-            void setCosts(float * d_costs) {
-                this->d_costs = d_costs;
-            }
-
-        private:
+        protected:
             float * d_costs; // costs of each motion
+            int num_of_motions;
+            SpaceInfoPtr space_info;
     };
 
     typedef std::shared_ptr<BaseMotions> BaseMotionsPtr;

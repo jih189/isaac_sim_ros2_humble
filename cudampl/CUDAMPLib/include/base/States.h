@@ -37,7 +37,7 @@ namespace CUDAMPLib
                 cudaMalloc(&d_total_costs, num_of_states * sizeof(float));
             }
 
-            ~BaseStates() {
+            virtual ~BaseStates() {
                 // Free the memory
                 cudaFree(d_costs);
                 cudaFree(d_total_costs);
