@@ -2,16 +2,139 @@
 
 namespace CUDAMPLib
 {
-    SingleArmGraph::SingleArmGraph(int dim) : BaseGraph(dim) {
+    SingleArmGraph::SingleArmGraph(int num_of_joints) : BaseGraph(), num_of_joints(num_of_joints)
+    {
         // Initialize the graph
     }
 
     SingleArmGraph::~SingleArmGraph() {
         // Destroy the graph
+        if (get_size() > 0) {
+            // Free the memory
+            cudaFree(d_states_in_graph);
+        }
     }
 
     void SingleArmGraph::add_states(const BaseStatesPtr & states) {
         // Add the states to the graph
+    }
+
+    void SingleArmGraph::add_start_states(const BaseStatesPtr & states){
+        // Add the start states to the graph
+
+        // static cast the states to SingleArmStates
+        SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
+        
+        // // print the start states
+        // single_arm_states->print();
+        // printf("number of states: %d\n", single_arm_states->getNumOfStates());
+        // printf("number of joints: %d\n", single_arm_states->getNumOfJoints());
+        // printf("size of graph: %d\n", get_size());
+
+        int data_size = single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float);
+
+        int current_graph_size = get_size();
+
+        if (current_graph_size == 0) {
+            // current graph is empty, create a new graph.
+
+            // allocate memory for the states
+            cudaMalloc(&d_states_in_graph, data_size);
+
+            // copy the states to the graph
+            cudaMemcpy(d_states_in_graph, single_arm_states->getJointStatesCuda(), data_size, cudaMemcpyDeviceToDevice);
+
+            // create graph by adding the states
+            for (int i = 0; i < single_arm_states->getNumOfStates(); i++) {
+                BoostVertex v = add_vertex(graph);
+                graph[v].location = i;
+                graph[v].group = 1;
+            }
+        }
+        else{
+            // current graph is not empty, we need to extend the d_states_in_graph.
+            int d_new_states_in_graph_bytes = (current_graph_size + single_arm_states->getNumOfStates()) * single_arm_states->getNumOfJoints() * sizeof(float);
+
+            float * d_new_states_in_graph;
+
+            // allocate memory for the new states
+            cudaMalloc(&d_new_states_in_graph, d_new_states_in_graph_bytes);
+
+            // copy the old states to the new states
+            cudaMemcpy(d_new_states_in_graph, d_states_in_graph, current_graph_size * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToDevice);
+
+            // copy the new states to the new states
+            cudaMemcpy(d_new_states_in_graph + current_graph_size * single_arm_states->getNumOfJoints(), single_arm_states->getJointStatesCuda(), single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToDevice);
+
+            // free the old states
+            cudaFree(d_states_in_graph);
+
+            // update the d_states_in_graph
+            d_states_in_graph = d_new_states_in_graph;
+
+            // create graph by adding the states
+            for (int i = 0; i < single_arm_states->getNumOfStates(); i++) {
+                BoostVertex v = add_vertex(graph);
+                graph[v].location = i + current_graph_size;
+                graph[v].group = 1;
+            }
+        }
+    }
+
+    void SingleArmGraph::add_goal_states(const BaseStatesPtr & states){
+        // Add the goal states to the graph
+
+        // static cast the states to SingleArmStates
+        SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
+
+        int data_size = single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float);
+
+        int current_graph_size = get_size();
+
+        if (current_graph_size == 0) {
+            // current graph is empty, create a new graph.
+
+            // allocate memory for the states
+            cudaMalloc(&d_states_in_graph, data_size);
+
+            // copy the states to the graph
+            cudaMemcpy(d_states_in_graph, single_arm_states->getJointStatesCuda(), data_size, cudaMemcpyDeviceToDevice);
+
+            // create graph by adding the states
+            for (int i = 0; i < single_arm_states->getNumOfStates(); i++) {
+                BoostVertex v = add_vertex(graph);
+                graph[v].location = i;
+                graph[v].group = 2;
+            }
+        }
+        else{
+            // current graph is not empty, we need to extend the d_states_in_graph.
+            int d_new_states_in_graph_bytes = (current_graph_size + single_arm_states->getNumOfStates()) * single_arm_states->getNumOfJoints() * sizeof(float);
+
+            float * d_new_states_in_graph;
+
+            // allocate memory for the new states
+            cudaMalloc(&d_new_states_in_graph, d_new_states_in_graph_bytes);
+
+            // copy the old states to the new states
+            cudaMemcpy(d_new_states_in_graph, d_states_in_graph, current_graph_size * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToDevice);
+
+            // copy the new states to the new states
+            cudaMemcpy(d_new_states_in_graph + current_graph_size * single_arm_states->getNumOfJoints(), single_arm_states->getJointStatesCuda(), single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToDevice);
+
+            // free the old states
+            cudaFree(d_states_in_graph);
+
+            // update the d_states_in_graph
+            d_states_in_graph = d_new_states_in_graph;
+
+            // create graph by adding the states
+            for (int i = 0; i < single_arm_states->getNumOfStates(); i++) {
+                BoostVertex v = add_vertex(graph);
+                graph[v].location = i + current_graph_size;
+                graph[v].group = 2;
+            }
+        }
     }
 
     void SingleArmGraph::contain(const BaseStatesPtr & states, int * d_result) const {
@@ -24,6 +147,21 @@ namespace CUDAMPLib
 
     void SingleArmGraph::is_connect(const BaseStatesPtr & states1, const BaseStatesPtr & states2, int * d_result) const {
         // Check if the states are connected
+    }
+
+    void SingleArmGraph::print() const {
+        // Print the graph
+        for (auto v : boost::make_iterator_range(vertices(graph))) {
+            printf("Location: %d, Group: %d ", graph[v].location, graph[v].group);
+
+            std::vector<float> joint_states(num_of_joints);
+            cudaMemcpy(joint_states.data(), d_states_in_graph + graph[v].location * num_of_joints, num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
+
+            for (int i = 0; i < num_of_joints; i++) {
+                printf("%f ", joint_states[i]);
+            }
+            printf("\n");
+        }
     }
 
 } // namespace CUDAMPLib

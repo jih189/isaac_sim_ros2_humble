@@ -76,9 +76,14 @@ namespace CUDAMPLib
             }
 
             /**
-                Based on the current states, update robot information and states.
+                @brief Based on the current states, update robot information and states.
              */
             virtual void update() = 0;
+
+            /**
+                @brief Print the states.
+             */
+            virtual void print() const = 0;
 
             SpaceInfoPtr getSpaceInfo() const { return space_info; }
 

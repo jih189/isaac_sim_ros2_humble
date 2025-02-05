@@ -6,7 +6,8 @@ namespace CUDAMPLib
     RRG::RRG(BaseSpacePtr space)
         : BasePlanner(space)
     {
-        // Initialization code here, if needed
+        // generate the graph based on the space
+        graph = space->createGraph();
     }
 
     // Destructor
@@ -18,8 +19,13 @@ namespace CUDAMPLib
     // Set the motion task
     void RRG::setMotionTask(BaseTaskPtr task)
     {
-        // Implement the logic to set the motion task
-        // Example: store the task in a member variable or process it
+        // get start states
+        auto start_states = task->getStartStates(space_);
+        graph->add_start_states(start_states);
+
+        // get goal states
+        auto goal_states = task->getGoalStates(space_);
+        graph->add_goal_states(goal_states);
     }
 
     // Solve method

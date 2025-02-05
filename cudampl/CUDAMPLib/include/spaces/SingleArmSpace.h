@@ -3,8 +3,11 @@
 #pragma nv_diag_suppress 20012
 #pragma nv_diag_suppress 20014
 
+#include <stdexcept>
+
 #include <base/Space.h>
 #include <states/SingleArmStates.h>
+#include <graphs/SingleArmGraph.h>
 #include <vector>
 #include <util.h>
 #include <cuda_runtime.h>
@@ -57,21 +60,28 @@ namespace CUDAMPLib
                 std::vector<bool>& state_feasibility
             ) override;
 
+            BaseGraphPtr createGraph() override;
+
             void getSpaceInfo(SingleArmSpaceInfoPtr space_info);
 
-        private:
-
             /**
-                * @brief Create a set of states from a vector of joint values.
-                This is used later to create start states and goal states. Try not to make this function public.
+                @brief helper function to create a set of states based on task.
+                This is used later to create start states and goal states.
+                @param joint_values The joint values of the states. Be careful with the size of the joint values.
+                                    The size of the joint values should be equal to the number of active joints not the number of joints.
+                @return The states.
              */
             BaseStatesPtr createStatesFromVector(const std::vector<std::vector<float>>& joint_values);
+
+        private:
 
             int num_of_joints; // number of joints where joints include fixed joints.
             int num_of_links;
             int num_of_self_collision_spheres;
             std::vector<float> lower_bound;
             std::vector<float> upper_bound;
+            std::vector<bool> active_joint_map_;
+            std::vector<float> default_joint_values_;
 
             // variables for gpu memory
             int * d_joint_types;

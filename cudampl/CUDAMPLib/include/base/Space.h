@@ -2,6 +2,7 @@
 
 #include <base/Constraint.h>
 #include <base/States.h>
+#include <base/Graph.h>
 
 namespace CUDAMPLib
 {
@@ -67,6 +68,12 @@ namespace CUDAMPLib
                 const BaseStatesPtr & states,
                 std::vector<bool> & state_feasibility
             ) = 0;
+
+            /**
+                * @brief Create a graph for the space.
+                * @return The graph.
+             */
+            virtual BaseGraphPtr createGraph() = 0;
 
             /** 
                 @brief Get space information.

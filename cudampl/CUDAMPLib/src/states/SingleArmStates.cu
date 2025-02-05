@@ -227,7 +227,7 @@ namespace CUDAMPLib
         cudaFree(d_self_collision_spheres_pos_in_base_link);
     }
 
-    std::vector<std::vector<float>> SingleArmStates::getJointStatesHost()
+    std::vector<std::vector<float>> SingleArmStates::getJointStatesHost() const
     {
         // Allocate memory for the joint states
         std::vector<float> joint_states_flatten(num_of_states * num_of_joints, 0.0);
@@ -300,5 +300,25 @@ namespace CUDAMPLib
 
         // Wait for the kernel to finish
         cudaDeviceSynchronize();
+    }
+
+    void SingleArmStates::print() const
+    {
+        // Get the joint states
+        std::vector<std::vector<float>> joint_states = getJointStatesHost();
+
+        // print states name
+        printf("SingleArmStates: \n");
+
+        // Print the joint states
+        for (int i = 0; i < num_of_states; i++)
+        {
+            printf("State %d: ", i);
+            for (int j = 0; j < num_of_joints; j++)
+            {
+                printf("%f ", joint_states[i][j]);
+            }
+            printf("\n");
+        }
     }
 } // namespace CUDAMPLib

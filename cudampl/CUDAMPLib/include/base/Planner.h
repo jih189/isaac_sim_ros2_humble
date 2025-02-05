@@ -19,7 +19,7 @@ namespace CUDAMPLib
             BaseSpacePtr getSpace() {
                 return space_;
             }
-        private:
+        protected:
             BaseSpacePtr space_;
     };
 

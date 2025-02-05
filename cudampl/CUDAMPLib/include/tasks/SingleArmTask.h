@@ -11,6 +11,8 @@ namespace CUDAMPLib
             ~SingleArmTask();
             std::vector<std::vector<float>> getStartStatesVector();
             std::vector<std::vector<float>> getGoalStatesVector();
+            BaseStatesPtr getStartStates(BaseSpacePtr space) override;
+            BaseStatesPtr getGoalStates(BaseSpacePtr space) override;
         private:
             std::vector<std::vector<float>> start_states_vector;
             std::vector<std::vector<float>> goal_states_vector;

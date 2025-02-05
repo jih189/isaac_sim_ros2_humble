@@ -77,13 +77,21 @@ namespace CUDAMPLib
                 * @return The joint states in host memory. The joint states are represented as a 
                           list of configurations, each represented as a list of floats.
              */
-            std::vector<std::vector<float>> getJointStatesHost();
-            
+            std::vector<std::vector<float>> getJointStatesHost() const;
 
             /**
                 * Based on the current states, update link poses, joint poses, and joint axes, collision spheres in base link, etc.
              */
             void update() override;
+
+            /**
+                @brief Print the joint states. For debugging purposes.
+             */
+            void print() const override;
+
+            int getNumOfJoints() const {
+                return num_of_joints;
+            }
 
         private:
             int num_of_joints; // number of joints. This includes fixed joints.

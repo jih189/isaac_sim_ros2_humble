@@ -25,6 +25,9 @@ namespace CUDAMPLib {
         num_of_joints = joint_types.size();
         num_of_links = link_parent_link_maps.size();
         num_of_self_collision_spheres = collision_spheres_to_link_map.size();
+        // copy data to member variables
+        active_joint_map_ = active_joint_map;
+        default_joint_values_ = default_joint_values;
 
         // set bounds
         lower_bound = lower;
@@ -165,19 +168,56 @@ namespace CUDAMPLib {
     {
         int num_of_config = joint_values.size();
 
+        if (num_of_config == 0)
+        {
+            // throw an exception
+            throw std::runtime_error("No joint values is empty");
+        }
+
+        // check the size of the joint values is correct
+        for (size_t i = 0; i < joint_values.size(); i++)
+        {
+            if (joint_values[i].size() != dim)
+            {
+                // throw an exception
+                throw std::runtime_error("Joint values size is not correct");
+            }
+        }
+
+        // initialize the joint value with num_of_config * num_of_joints
+        std::vector<std::vector<float>> joint_value_w_correct_size(num_of_config, std::vector<float>(num_of_joints, 0.0f));
+
+        // copy the joint values to the correct size and set the default values for the inactive joints.
+        for (size_t i = 0; i < joint_value_w_correct_size.size(); i++)
+        {
+            size_t k = 0;
+            for (size_t j = 0; j < joint_value_w_correct_size[i].size(); j++)
+            {
+                if(active_joint_map_[j])
+                {
+                    joint_value_w_correct_size[i][j] = joint_values[i][k];
+                    k++;
+                }
+                else
+                {
+                    joint_value_w_correct_size[i][j] = default_joint_values_[j];
+                }
+            }
+        }
+
         SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
         getSpaceInfo(space_info);
 
         // Create a state
-        SingleArmStatesPtr sampled_states = std::make_shared<SingleArmStates>(num_of_config, space_info);
+        SingleArmStatesPtr generated_states = std::make_shared<SingleArmStates>(num_of_config, space_info);
 
         // get device memory with size of num_of_config * num_of_joints * sizeof(float)
-        float * d_sampled_states = sampled_states->getJointStatesCuda();
+        float * d_generated_states = generated_states->getJointStatesCuda();
 
         // copy data to device memory
-        cudaMemcpy(d_sampled_states, floatVectorFlatten(joint_values).data(), num_of_config * num_of_joints * sizeof(float), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_generated_states, floatVectorFlatten(joint_value_w_correct_size).data(), num_of_config * num_of_joints * sizeof(float), cudaMemcpyHostToDevice);
 
-        return sampled_states;
+        return generated_states;
     }
 
     void SingleArmSpace::getMotions(
@@ -250,5 +290,10 @@ namespace CUDAMPLib {
         // set the bounds
         space_info->lower_bound = lower_bound;
         space_info->upper_bound = upper_bound;
+    }
+
+    BaseGraphPtr SingleArmSpace::createGraph()
+    {
+        return std::make_shared<SingleArmGraph>(num_of_joints);
     }
 } // namespace cudampl

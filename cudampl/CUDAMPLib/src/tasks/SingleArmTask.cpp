@@ -14,6 +14,22 @@ namespace CUDAMPLib
         // Do something
     }
 
+    BaseStatesPtr SingleArmTask::getStartStates(BaseSpacePtr space)
+    {
+        // statics cast the space to SingleArmSpace
+        auto single_arm_space = std::static_pointer_cast<SingleArmSpace>(space);
+        // Create the start states from the start states vector
+        return single_arm_space->createStatesFromVector(start_states_vector);
+    }
+
+    BaseStatesPtr SingleArmTask::getGoalStates(BaseSpacePtr space)
+    {
+        // statics cast the space to SingleArmSpace
+        auto single_arm_space = std::static_pointer_cast<SingleArmSpace>(space);
+        // Create the goal states from the goal states vector
+        return single_arm_space->createStatesFromVector(goal_states_vector);
+    }
+
     std::vector<std::vector<float>> SingleArmTask::getStartStatesVector()
     {
         return start_states_vector;
