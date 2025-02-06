@@ -154,4 +154,25 @@ namespace CUDAMPLib
             SpaceInfoPtr space_info;
     };
     typedef std::shared_ptr<BaseStates> BaseStatesPtr;
+
+    /**
+        @brief A base K Nearest Neighbors class for states.
+     */
+    template <typename T>
+    class BaseKNearestNeighbors {
+        public:
+            // Default constructor.
+            BaseKNearestNeighbors(SpaceInfoPtr space_info) : space_info(space_info) {}
+            virtual ~BaseKNearestNeighbors() {}
+
+            // Adds states and their corresponding elements.
+            virtual void add_states(const BaseStatesPtr & states, const std::vector<T>& elems) = 0;
+
+            // Given a query states, finds and returns the k nearest neighbor elements in T type for each state.
+            virtual std::vector<std::vector<T>> find_k_nearest_neighbors(int k, const BaseStatesPtr & query_states) = 0;
+        
+        protected:
+            SpaceInfoPtr space_info;
+    };
+
 } // namespace CUDAMPLibs

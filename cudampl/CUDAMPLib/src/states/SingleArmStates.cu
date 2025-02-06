@@ -384,4 +384,16 @@ namespace CUDAMPLib
             printf("\n");
         }
     }
+
+    template <typename T>
+    void SingleArmKnn<T>::add_states(const BaseStatesPtr & states, const std::vector<T>& elems)
+    {
+
+    }
+
+    template <typename T>
+    std::vector<std::vector<T>> SingleArmKnn<T>::find_k_nearest_neighbors(int k, const BaseStatesPtr & query_states)
+    {
+        return std::vector<std::vector<T>>();
+    }
 } // namespace CUDAMPLib

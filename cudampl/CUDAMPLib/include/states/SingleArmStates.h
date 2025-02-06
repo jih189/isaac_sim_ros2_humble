@@ -105,6 +105,24 @@ namespace CUDAMPLib
             float * d_link_poses_in_base_link; // link poses in base link
             float * d_self_collision_spheres_pos_in_base_link; // collision spheres in base link
     };
-
     typedef std::shared_ptr<SingleArmStates> SingleArmStatesPtr;
+
+    template <typename T>
+    class SingleArmKnn : public BaseKNearestNeighbors<T>{
+        public:
+            SingleArmKnn(SpaceInfoPtr space_info) : BaseKNearestNeighbors<T>(space_info) {
+                // static cast the space_info to SingleArmSpaceInfoPtr
+                SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(space_info);
+                num_of_joints = single_arm_space_info->num_of_joints;
+            }
+            ~SingleArmKnn() {}
+
+            void add_states(const BaseStatesPtr & states, const std::vector<T>& elems) override;
+
+            std::vector<std::vector<T>> find_k_nearest_neighbors(int k, const BaseStatesPtr & query_states) override;
+
+        private:
+            int num_of_joints;
+            float * d_joint_states;
+    };
 } // namespace CUDAMPLibs
