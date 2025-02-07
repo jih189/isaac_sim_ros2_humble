@@ -207,6 +207,32 @@ namespace CUDAMPLib
             }
         }
     }
+
+    // kernel to calculate the distance between two states
+    __global__ void calculate_joint_state_distance(
+        float * d_states_1, int num_of_states_1,
+        float * d_states_2, int num_of_states_2, 
+        int num_of_joints, int * d_active_joint_map, float * d_distances) {
+
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (idx >= num_of_states_1 * num_of_states_2)
+            return;
+
+        int state_1_idx = idx / num_of_states_2;
+        int state_2_idx = idx % num_of_states_2;
+
+        float sum = 0.0f;
+
+        for (int i = 0; i < num_of_joints; i++) {
+            if (d_active_joint_map[i] == 1) {
+                float diff = d_states_1[state_1_idx * num_of_joints + i] - d_states_2[state_2_idx * num_of_joints + i];
+                sum += diff * diff;
+            }
+        }
+
+        d_distances[idx] = sqrtf(sum);
+    }
     
     SingleArmStates::SingleArmStates(int num_of_states, SingleArmSpaceInfoPtr space_info)
     : BaseStates(num_of_states, space_info)
@@ -385,15 +411,156 @@ namespace CUDAMPLib
         }
     }
 
-    template <typename T>
-    void SingleArmKnn<T>::add_states(const BaseStatesPtr & states, const std::vector<T>& elems)
+    std::vector<int> SingleArmStateManager::add_states(const BaseStatesPtr & states)
     {
+        // static cast the states to SingleArmStates
+        SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
 
+        if (single_arm_states->getNumOfStates() == 0)
+        {
+            // return empty vector
+            return std::vector<int>();
+        }
+
+        // get the data size of those new states
+        int data_size = single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float);
+
+        if (num_of_states == 0) {
+            // allocate memory for the states
+            cudaMalloc(&d_joint_states, data_size);
+
+            // copy the data to the device
+            cudaMemcpy(d_joint_states, single_arm_states->getJointStatesCuda(), data_size, cudaMemcpyDeviceToDevice);
+
+            // update the number of states
+            num_of_states = single_arm_states->getNumOfStates();
+            
+            // return vector of 0 to num_of_states - 1
+            return std::vector<int>(num_of_states);
+        }
+        else {
+
+            int old_num_of_states = num_of_states;
+
+            // manager's states is not empty, we need to extend the d_joint_states.
+            int d_new_joint_states_bytes = (num_of_states + single_arm_states->getNumOfStates()) * num_of_joints * sizeof(float);
+
+            float * d_new_joint_states;
+
+            // allocate memory for the new states
+            cudaMalloc(&d_new_joint_states, d_new_joint_states_bytes);
+
+            // copy the old states to the new states
+            cudaMemcpy(d_new_joint_states, d_joint_states, num_of_states * num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
+        
+            // copy the new states to the new states
+            cudaMemcpy(d_new_joint_states + num_of_states * num_of_joints, 
+                single_arm_states->getJointStatesCuda(), 
+                single_arm_states->getNumOfStates() * num_of_joints * sizeof(float), 
+                cudaMemcpyDeviceToDevice);
+
+            // free the old states
+            cudaFree(d_joint_states);
+
+            // update the states pointer
+            d_joint_states = d_new_joint_states;
+
+            // update the number of states
+            num_of_states += single_arm_states->getNumOfStates();
+
+            // return vector of num_of_states - single_arm_states->getNumOfStates() to num_of_states - 1
+            std::vector<int> result(single_arm_states->getNumOfStates());
+            for (int i = 0; i < single_arm_states->getNumOfStates(); i++)
+            {
+                result[i] = old_num_of_states + i;
+            }
+            return result;
+        }
+
+        // raise error if get here
+        throw std::runtime_error("Error in SingleArmStateManager::add_states");
     }
 
-    template <typename T>
-    std::vector<std::vector<T>> SingleArmKnn<T>::find_k_nearest_neighbors(int k, const BaseStatesPtr & query_states)
+    void SingleArmStateManager::find_k_nearest_neighbors(
+        int k, const BaseStatesPtr & query_states, 
+        std::vector<std::vector<int>> & neighbors_index, 
+        std::vector<std::vector<float>> & distance_to_neighbors
+    )
     {
-        return std::vector<std::vector<T>>();
+
+        if (num_of_states == 0)
+        {
+            // raise error
+            throw std::runtime_error("Error in SingleArmStateManager::find_k_nearest_neighbors: manager is empty");
+        }
+        if (query_states->getNumOfStates() == 0)
+        {
+            // raise error
+            throw std::runtime_error("Error in SingleArmStateManager::find_k_nearest_neighbors: query states is empty");
+        }
+
+        // static cast the query states to SingleArmStates
+        SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info_);
+
+        // static cast the states to SingleArmStates
+        SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(query_states);
+        float * d_query_joint_states = single_arm_states->getJointStatesCuda();
+
+        neighbors_index.clear();
+        distance_to_neighbors.clear();
+
+        if (k > num_of_states){
+            // set k to num_of_states
+            k = num_of_states;
+        }
+
+        float * d_distances_from_query_to_states;
+        cudaMalloc(&d_distances_from_query_to_states, query_states->getNumOfStates() * num_of_states * sizeof(float));
+
+        // calculate the distance between the query states and the states in the manager
+        int block_size = 256;
+        int grid_size = (query_states->getNumOfStates() * num_of_states + block_size - 1) / block_size;
+
+        calculate_joint_state_distance<<<grid_size, block_size>>>(
+            d_query_joint_states, query_states->getNumOfStates(),
+            d_joint_states, num_of_states,
+            num_of_joints, single_arm_space_info->d_active_joint_map, d_distances_from_query_to_states
+        );
+
+        // wait for the kernel to finish
+        cudaDeviceSynchronize();
+
+        std::vector<std::vector<float>> distances_from_query_to_states(query_states->getNumOfStates(), std::vector<float>(num_of_states));
+        std::vector<float> distances_from_query_to_states_flatten(query_states->getNumOfStates() * num_of_states);
+
+        // copy the distances from device to host
+        cudaMemcpy(distances_from_query_to_states_flatten.data(), d_distances_from_query_to_states, query_states->getNumOfStates() * num_of_states * sizeof(float), cudaMemcpyDeviceToHost);
+
+        printf("distances_from_query_to_states: \n");
+        // reshape the distances
+        for (int i = 0; i < query_states->getNumOfStates(); i++) {
+            for (int j = 0; j < num_of_states; j++) {
+                distances_from_query_to_states[i][j] = distances_from_query_to_states_flatten[i * num_of_states + j];
+                printf("%f ", distances_from_query_to_states[i][j]);
+            }
+            printf("\n");
+        }
+
+
+        for (int i = 0; i < query_states->getNumOfStates(); i++) {
+            // find index of the k least distances of distances_from_query_to_states[i]
+            std::vector<int> index_k_nearest_neighbors = kLeastIndices(distances_from_query_to_states[i], k);
+            neighbors_index.push_back(index_k_nearest_neighbors);
+
+            // find the k least distances of distances_from_query_to_states[i]
+            std::vector<float> k_nearest_neighbors_distances(k);
+            for (int j = 0; j < k; j++) {
+                k_nearest_neighbors_distances[j] = distances_from_query_to_states[i][index_k_nearest_neighbors[j]];
+            }
+            distance_to_neighbors.push_back(k_nearest_neighbors_distances);
+        }
+
+        // free the memory
+        cudaFree(d_distances_from_query_to_states);
     }
 } // namespace CUDAMPLib

@@ -69,6 +69,8 @@ namespace CUDAMPLib
 
             BaseGraphPtr createGraph() override;
 
+            BaseStateManagerPtr createStateManager() override; 
+
             void getSpaceInfo(SingleArmSpaceInfoPtr space_info);
 
             /**

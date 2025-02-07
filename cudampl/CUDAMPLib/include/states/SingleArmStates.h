@@ -1,9 +1,12 @@
 #pragma once
 
+#pragma nv_diag_suppress 20012
+#pragma nv_diag_suppress 20014
+
 #include <base/States.h>
 #include <vector>
 #include <stdexcept>
-
+#include <util.h>
 
 namespace CUDAMPLib
 {
@@ -107,22 +110,29 @@ namespace CUDAMPLib
     };
     typedef std::shared_ptr<SingleArmStates> SingleArmStatesPtr;
 
-    template <typename T>
-    class SingleArmKnn : public BaseKNearestNeighbors<T>{
+    class SingleArmStateManager : public BaseStateManager{
         public:
-            SingleArmKnn(SpaceInfoPtr space_info) : BaseKNearestNeighbors<T>(space_info) {
+            SingleArmStateManager(SpaceInfoPtr space_info) : BaseStateManager(space_info) {
                 // static cast the space_info to SingleArmSpaceInfoPtr
                 SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(space_info);
                 num_of_joints = single_arm_space_info->num_of_joints;
+                num_of_states = 0; // number of states in the knn
             }
-            ~SingleArmKnn() {}
 
-            void add_states(const BaseStatesPtr & states, const std::vector<T>& elems) override;
+            ~SingleArmStateManager() {}
 
-            std::vector<std::vector<T>> find_k_nearest_neighbors(int k, const BaseStatesPtr & query_states) override;
+            std::vector<int> add_states(const BaseStatesPtr & states) override;
+
+            void find_k_nearest_neighbors(
+                int k, const BaseStatesPtr & query_states, 
+                std::vector<std::vector<int>> & neighbors_index, 
+                std::vector<std::vector<float>> & distance_to_neighbors
+            ) override;
 
         private:
             int num_of_joints;
-            float * d_joint_states;
+            int num_of_states; // number of states
+            float * d_joint_states; // size is num_of_states * num_of_joints
     };
+    typedef std::shared_ptr<SingleArmStateManager> SingleArmStateManagerPtr;
 } // namespace CUDAMPLibs

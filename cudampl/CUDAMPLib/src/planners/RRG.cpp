@@ -9,6 +9,8 @@ namespace CUDAMPLib
         // generate the graph based on the space
         graph = space->createGraph();
 
+        state_manager = space->createStateManager();
+
         // set the parameters
         sample_attempts = 3;
         k = 3;
@@ -29,11 +31,15 @@ namespace CUDAMPLib
         space_->checkStates(start_states);
         graph->add_start_states(start_states);
 
+        state_manager->add_states(start_states);
+
         // get goal states
         auto goal_states = task->getGoalStates(space_);
         goal_states->update();
         space_->checkStates(goal_states);
         graph->add_goal_states(goal_states);
+
+        state_manager->add_states(goal_states);
     }
 
     /**
@@ -61,6 +67,8 @@ namespace CUDAMPLib
         states->filterStates(state_feasibility);
 
         graph->add_states(states);
+
+        state_manager->add_states(states);
 
         auto new_states = space_->sample(1);
 
@@ -99,6 +107,33 @@ namespace CUDAMPLib
             printf("cost %f ", cost);
         }
         printf("\n");
+
+        std::vector<std::vector<int>> neighbors_index;
+        std::vector<std::vector<float>> distance_to_neighbors;
+
+        state_manager->find_k_nearest_neighbors(k, new_states, neighbors_index, distance_to_neighbors);
+
+        printf("print result from state manager\n");
+
+        // print the neighbors index
+        for (const auto &index : neighbors_index)
+        {
+            for (int i : index)
+            {
+                printf("%d ", i);
+            }
+            printf("\n");
+        }
+
+        // print the distance to neighbors
+        for (const auto &distance : distance_to_neighbors)
+        {
+            for (float d : distance)
+            {
+                printf("%f ", d);
+            }
+            printf("\n");
+        }
 
         // // add the states to the graph
         // graph->add_states(states);

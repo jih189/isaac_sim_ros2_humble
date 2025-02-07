@@ -82,6 +82,11 @@ namespace CUDAMPLib
              */
             virtual BaseGraphPtr createGraph() = 0;
 
+            /**
+                @brief Create a state manager.
+             */
+            virtual BaseStateManagerPtr createStateManager() = 0;
+
             /** 
                 @brief Get space information.
                 @return The space information.

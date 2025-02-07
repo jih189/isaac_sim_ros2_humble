@@ -458,4 +458,12 @@ namespace CUDAMPLib {
     {
         return std::make_shared<SingleArmGraph>(num_of_joints);
     }
+
+    BaseStateManagerPtr SingleArmSpace::createStateManager()
+    {
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        getSpaceInfo(space_info);
+
+        return std::make_shared<SingleArmStateManager>(space_info);
+    }
 } // namespace cudampl

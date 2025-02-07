@@ -15,6 +15,7 @@ namespace CUDAMPLib
             void solve() override;
         private:
             BaseGraphPtr graph;
+            BaseStateManagerPtr state_manager;
 
             // parameters
             int sample_attempts;

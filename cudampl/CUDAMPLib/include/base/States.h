@@ -156,23 +156,30 @@ namespace CUDAMPLib
     typedef std::shared_ptr<BaseStates> BaseStatesPtr;
 
     /**
-        @brief A base K Nearest Neighbors class for states.
+        @brief A base manager class to keep track of states in gpu memory.
+        User can use integer as index to locate the states.
+        This manager should only keep track of data to identify the states such as joint values.
+        We do not want to keep track of other information such as link poses, joint poses, joint axes, etc.
      */
-    template <typename T>
-    class BaseKNearestNeighbors {
+    class BaseStateManager {
         public:
             // Default constructor.
-            BaseKNearestNeighbors(SpaceInfoPtr space_info) : space_info(space_info) {}
-            virtual ~BaseKNearestNeighbors() {}
+            BaseStateManager(SpaceInfoPtr space_info) : space_info_(space_info) {}
+            virtual ~BaseStateManager() {}
 
-            // Adds states and their corresponding elements.
-            virtual void add_states(const BaseStatesPtr & states, const std::vector<T>& elems) = 0;
+            // Adds states and returns the index of the states in the manager.
+            virtual std::vector<int> add_states(const BaseStatesPtr & states) = 0;
 
-            // Given a query states, finds and returns the k nearest neighbor elements in T type for each state.
-            virtual std::vector<std::vector<T>> find_k_nearest_neighbors(int k, const BaseStatesPtr & query_states) = 0;
-        
+            // Given a query states, finds and returns the index of k nearest neighbors for each state with distances.
+            virtual void find_k_nearest_neighbors(
+                int k, const BaseStatesPtr & query_states, 
+                std::vector<std::vector<int>> & neighbors_index, 
+                std::vector<std::vector<float>> & distance_to_neighbors
+            ) = 0;
+
         protected:
-            SpaceInfoPtr space_info;
+            SpaceInfoPtr space_info_;
     };
+    typedef std::shared_ptr<BaseStateManager> BaseStateManagerPtr;
 
 } // namespace CUDAMPLibs
