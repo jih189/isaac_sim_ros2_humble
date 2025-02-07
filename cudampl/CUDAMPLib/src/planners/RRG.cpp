@@ -70,7 +70,7 @@ namespace CUDAMPLib
 
         state_manager->add_states(states);
 
-        auto new_states = space_->sample(1);
+        auto new_states = space_->sample(2);
 
         new_states->update();
         // evaluate the feasibility of the states
@@ -109,31 +109,32 @@ namespace CUDAMPLib
         printf("\n");
 
         std::vector<std::vector<int>> neighbors_index;
-        std::vector<std::vector<float>> distance_to_neighbors;
 
-        state_manager->find_k_nearest_neighbors(k, new_states, neighbors_index, distance_to_neighbors);
+        state_manager->find_k_nearest_neighbors(k, new_states, neighbors_index);
 
         printf("print result from state manager\n");
+
+        std::vector<BaseStatesPtr> all_neighbor_states;
 
         // print the neighbors index
         for (const auto &index : neighbors_index)
         {
             for (int i : index)
             {
-                printf("%d ", i);
+                printf("index of neighbor state %d \n", i);
             }
+
+            auto neighbor_states = state_manager->get_states(index);
+            neighbor_states->print();
             printf("\n");
+
+            all_neighbor_states.push_back(neighbor_states);
         }
 
-        // print the distance to neighbors
-        for (const auto &distance : distance_to_neighbors)
-        {
-            for (float d : distance)
-            {
-                printf("%f ", d);
-            }
-            printf("\n");
-        }
+        
+        auto sum_states = state_manager->concatinate_states(all_neighbor_states);
+        printf("sum states\n");
+        sum_states->print();
 
         // // add the states to the graph
         // graph->add_states(states);

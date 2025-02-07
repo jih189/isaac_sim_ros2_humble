@@ -209,12 +209,21 @@ namespace CUDAMPLib
             // Adds states and returns the index of the states in the manager.
             virtual std::vector<int> add_states(const BaseStatesPtr & states) = 0;
 
-            // Given a query states, finds and returns the index of k nearest neighbors for each state with distances.
+            // Given a query states, finds and returns the index of k nearest neighbors.
             virtual void find_k_nearest_neighbors(
                 int k, const BaseStatesPtr & query_states, 
-                std::vector<std::vector<int>> & neighbors_index, 
-                std::vector<std::vector<float>> & distance_to_neighbors
+                std::vector<std::vector<int>> & neighbors_index
             ) = 0;
+
+            /**
+                @brief Given indexs of states, find the states in the manager.
+             */
+            virtual BaseStatesPtr get_states(const std::vector<int> & states_index) = 0;
+
+            /**
+                @brief Concatinate the multiple states into one states.
+             */
+            virtual BaseStatesPtr concatinate_states(const std::vector<BaseStatesPtr> & states) = 0;
 
         protected:
             SpaceInfoPtr space_info_;

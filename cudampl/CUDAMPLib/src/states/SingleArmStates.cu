@@ -556,8 +556,7 @@ namespace CUDAMPLib
 
     void SingleArmStateManager::find_k_nearest_neighbors(
         int k, const BaseStatesPtr & query_states, 
-        std::vector<std::vector<int>> & neighbors_index, 
-        std::vector<std::vector<float>> & distance_to_neighbors
+        std::vector<std::vector<int>> & neighbors_index
     )
     {
 
@@ -580,7 +579,6 @@ namespace CUDAMPLib
         float * d_query_joint_states = single_arm_states->getJointStatesCuda();
 
         neighbors_index.clear();
-        distance_to_neighbors.clear();
 
         if (k > num_of_states){
             // set k to num_of_states
@@ -620,16 +618,64 @@ namespace CUDAMPLib
             // find index of the k least distances of distances_from_query_to_states[i]
             std::vector<int> index_k_nearest_neighbors = kLeastIndices(distances_from_query_to_states[i], k);
             neighbors_index.push_back(index_k_nearest_neighbors);
-
-            // find the k least distances of distances_from_query_to_states[i]
-            std::vector<float> k_nearest_neighbors_distances(k);
-            for (int j = 0; j < k; j++) {
-                k_nearest_neighbors_distances[j] = distances_from_query_to_states[i][index_k_nearest_neighbors[j]];
-            }
-            distance_to_neighbors.push_back(k_nearest_neighbors_distances);
         }
 
         // free the memory
         cudaFree(d_distances_from_query_to_states);
+    }
+
+    BaseStatesPtr SingleArmStateManager::get_states(const std::vector<int> & states_index)
+    {
+        // static cast the space_info to SingleArmSpaceInfo
+        SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info_);
+
+        // create a new SingleArmStates
+        SingleArmStatesPtr extracted_states = std::make_shared<SingleArmStates>(states_index.size(), single_arm_space_info);
+
+        float * d_extracted_joint_states = extracted_states->getJointStatesCuda();
+
+        // copy the states from the manager to the extracted_states
+        for (int i = 0; i < states_index.size(); i++)
+        {
+            // copy them asynchronously
+            cudaMemcpyAsync(d_extracted_joint_states + i * num_of_joints, d_joint_states + states_index[i] * num_of_joints, num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
+        }
+        // wait for the copy to finish
+        cudaDeviceSynchronize();
+
+        return extracted_states;
+    }
+
+    BaseStatesPtr SingleArmStateManager::concatinate_states(const std::vector<BaseStatesPtr> & states)
+    {
+        // static cast the space_info to SingleArmSpaceInfo
+        SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info_);
+
+        int total_num_of_states = 0;
+        for (int i = 0; i < states.size(); i++)
+        {
+            total_num_of_states += states[i]->getNumOfStates();
+        }
+
+        // create a new SingleArmStates
+        SingleArmStatesPtr concatinated_states = std::make_shared<SingleArmStates>(total_num_of_states, single_arm_space_info);
+
+        float * d_concatinated_joint_states = concatinated_states->getJointStatesCuda();
+
+        // copy the states from the manager to the extracted_states
+        int offset = 0;
+        for (int i = 0; i < states.size(); i++)
+        {
+            SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states[i]);
+            int num_of_states = states[i]->getNumOfStates();
+            // copy them asynchronously
+            cudaMemcpyAsync(d_concatinated_joint_states + offset * num_of_joints, single_arm_states->getJointStatesCuda(), num_of_states * num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
+            offset += num_of_states;
+        }
+
+        // wait for the copy to finish
+        cudaDeviceSynchronize();
+
+        return concatinated_states;
     }
 } // namespace CUDAMPLib

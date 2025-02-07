@@ -151,9 +151,12 @@ namespace CUDAMPLib
 
             void find_k_nearest_neighbors(
                 int k, const BaseStatesPtr & query_states, 
-                std::vector<std::vector<int>> & neighbors_index, 
-                std::vector<std::vector<float>> & distance_to_neighbors
+                std::vector<std::vector<int>> & neighbors_index
             ) override;
+
+            BaseStatesPtr get_states(const std::vector<int> & states_index) override;
+
+            BaseStatesPtr concatinate_states(const std::vector<BaseStatesPtr> & states) override;
 
         private:
             int num_of_joints;
