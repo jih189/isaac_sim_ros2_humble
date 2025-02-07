@@ -7,7 +7,6 @@
 
 #include <base/Space.h>
 #include <states/SingleArmStates.h>
-#include <motions/SingleArmMotions.h>
 #include <graphs/SingleArmGraph.h>
 #include <vector>
 #include <util.h>

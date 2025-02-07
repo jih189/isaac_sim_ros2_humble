@@ -10,7 +10,6 @@
 
 #include "base/Graph.h"
 #include "states/SingleArmStates.h"
-#include "motions/SingleArmMotions.h"
 #include "util.h"
 
 namespace CUDAMPLib
