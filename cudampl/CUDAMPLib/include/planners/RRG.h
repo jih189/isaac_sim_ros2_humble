@@ -14,7 +14,6 @@ namespace CUDAMPLib
             void setMotionTask(BaseTaskPtr task) override;
             void solve() override;
         private:
-            BaseGraphPtr graph;
             BaseStateManagerPtr state_manager;
 
             // parameters

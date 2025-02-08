@@ -30,28 +30,22 @@ namespace CUDAMPLib
             virtual BaseStatesPtr sample(int num_of_config) = 0;
 
             /**
-                * @brief Get the waypoints between a set of configuration pairs.
-                * @param start The start configurations. A list
-                * of configurations, each represented as a list of floats.
-                * @param end The end configurations. A list
-                * of configurations, each represented as a list of floats.
-                * @param waypoints The waypoints between the start and end configurations.
-                * @param motion_feasibility The feasibility of the waypoints.
-            */
-            virtual void getMotions(
-                const std::vector<std::vector<float>>& start, 
-                const std::vector<std::vector<float>>& end, 
-                std::vector<std::vector<std::vector<float>>>& motions,
-                std::vector<bool> motion_feasibility
-            ) = 0;
-
-            /**
                 * @brief Check the feasibility of a set of motions.
                 * @param motions The motions to check.
                 * @param motion_feasibility The feasibility of the motions.
             */
             virtual void checkMotions(
                 const BaseMotionsPtr & motions,
+                std::vector<bool>& motion_feasibility,
+                std::vector<float>& motion_costs
+            ) = 0;
+
+            /**
+            
+             */
+            virtual void checkMotions(
+                const BaseStatesPtr & states1, 
+                const BaseStatesPtr & states2, 
                 std::vector<bool>& motion_feasibility,
                 std::vector<float>& motion_costs
             ) = 0;

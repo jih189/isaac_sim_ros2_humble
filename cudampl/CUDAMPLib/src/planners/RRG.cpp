@@ -6,9 +6,6 @@ namespace CUDAMPLib
     RRG::RRG(BaseSpacePtr space)
         : BasePlanner(space)
     {
-        // generate the graph based on the space
-        graph = space->createGraph();
-
         state_manager = space->createStateManager();
 
         // set the parameters
@@ -29,16 +26,14 @@ namespace CUDAMPLib
         auto start_states = task->getStartStates(space_);
         start_states->update();
         space_->checkStates(start_states);
-        graph->add_start_states(start_states);
-
+        // add start states to the state manager
         state_manager->add_states(start_states);
 
         // get goal states
         auto goal_states = task->getGoalStates(space_);
         goal_states->update();
         space_->checkStates(goal_states);
-        graph->add_goal_states(goal_states);
-
+        // add goal states to the state manager
         state_manager->add_states(goal_states);
     }
 
@@ -57,7 +52,7 @@ namespace CUDAMPLib
     void RRG::solve()
     {
         // sample k configurations
-        auto states = space_->sample(7);
+        auto states = space_->sample(9);
         states->update();
         // evaluate the feasibility of the states
         std::vector<bool> state_feasibility;
@@ -66,80 +61,50 @@ namespace CUDAMPLib
         // filter out the infeasible states
         states->filterStates(state_feasibility);
 
-        graph->add_states(states);
-
         state_manager->add_states(states);
 
         auto new_states = space_->sample(2);
 
-        new_states->update();
-        // evaluate the feasibility of the states
-        state_feasibility.clear();
-        space_->checkStates(new_states, state_feasibility);
-
-        // filter out the infeasible states
-        new_states->filterStates(state_feasibility);
-
-        // find the motions to k nearest neighbor
-        std::vector<StateIndexPair> connect_pairs;
-        auto possible_motions = graph->get_motions_to_k_nearest_neighbors(new_states, k, connect_pairs);
-
-        std::vector<bool> motion_feasibility;
-        std::vector<float> motion_costs;
-        space_->checkMotions(possible_motions, motion_feasibility, motion_costs);
-
-        // print motion pairs
-        for (const auto &pair : connect_pairs)
-        {
-            printf("pair: %d %d\n", pair.index_in_states, pair.index_in_graph);
-        }
-
-        // print the motion feasibility
-        for (bool feasible : motion_feasibility)
-        {
-            printf("feasibility %d ", feasible);
-        }
-        printf("\n");
-
-        // print the motion costs
-        for (float cost : motion_costs)
-        {
-            printf("cost %f ", cost);
-        }
-        printf("\n");
-
         std::vector<std::vector<int>> neighbors_index;
-
         state_manager->find_k_nearest_neighbors(k, new_states, neighbors_index);
 
-        printf("print result from state manager\n");
-
-        std::vector<BaseStatesPtr> all_neighbor_states;
-
-        // print the neighbors index
-        for (const auto &index : neighbors_index)
+        // prepare the motion states 1
+        std::vector<BaseStatesPtr> states_list;
+        for (int i = 0; i < k; i++)
         {
-            for (int i : index)
-            {
-                printf("index of neighbor state %d \n", i);
-            }
-
-            auto neighbor_states = state_manager->get_states(index);
-            neighbor_states->print();
-            printf("\n");
-
-            all_neighbor_states.push_back(neighbor_states);
+            states_list.push_back(new_states);
         }
+        auto motion_states_1 = state_manager->concatinate_states(states_list);
 
-        
-        auto sum_states = state_manager->concatinate_states(all_neighbor_states);
-        printf("sum states\n");
-        sum_states->print();
+        // prepare the motion states 2
+        std::vector<int> states_2_index;
+        for (int i = 0; i < k; i++)
+        {
+            for (int j = 0; j < neighbors_index.size(); j++)
+            {
+                states_2_index.push_back(neighbors_index[j][i]);
+            }
+        }
+        auto motion_states_2 = state_manager->get_states(states_2_index);
 
-        // // add the states to the graph
-        // graph->add_states(states);
+        // printf("motion_states_1:\n");
+        // motion_states_1->print();
 
-        // print the graph
-        // graph->print();
+        // printf("motion_states_2:\n");
+        // motion_states_2->print();
+
+        // check the feasibility of motion between the states pairs.
+        std::vector<bool> motion_feasibility;
+        std::vector<float> motion_costs;
+        space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
+
+        // print the motion feasibility and costs
+        for (int i = 0; i < motion_feasibility.size(); i++)
+        {
+            printf("motion %d: feasibility = %s, cost = %f\n", 
+            i, 
+            motion_feasibility[i] ? "True" : "False", 
+            motion_costs[i]);
+        }
     }
 } // namespace CUDAMPLib

@@ -252,14 +252,89 @@ namespace CUDAMPLib {
         return generated_states;
     }
 
-    void SingleArmSpace::getMotions(
-        const std::vector<std::vector<float>>& start, 
-        const std::vector<std::vector<float>>& end, 
-        std::vector<std::vector<std::vector<float>>>& motions,
-        std::vector<bool> motion_feasibility
+    void SingleArmSpace::checkMotions(
+        const BaseStatesPtr & states1, 
+        const BaseStatesPtr & states2, 
+        std::vector<bool> & motion_feasibility,
+        std::vector<float> & motion_costs
     )
     {
+        int num_of_states1 = states1->getNumOfStates();
+        int num_of_states2 = states2->getNumOfStates();
+        if (num_of_states1 != num_of_states2)
+        {
+            // throw an exception
+            throw std::runtime_error("Number of states in states1 and states2 are not equal");
+        }
+        if (num_of_states1 == 0)
+        {
+            // throw an exception
+            throw std::runtime_error("No states to check");
+        }
 
+        // static cast to SingleArmStatesPtr
+        SingleArmStatesPtr single_arm_states1 = std::dynamic_pointer_cast<SingleArmStates>(states1);
+        SingleArmStatesPtr single_arm_states2 = std::dynamic_pointer_cast<SingleArmStates>(states2);
+
+        motion_feasibility.resize(num_of_states1);
+        motion_costs.resize(num_of_states1);
+
+        // get space info
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        getSpaceInfo(space_info);
+
+        // get the joint states from the states
+        std::vector<std::vector<float>> joint_states1 = single_arm_states1->getJointStatesHost();
+        std::vector<std::vector<float>> joint_states2 = single_arm_states2->getJointStatesHost();
+
+        std::vector<int> motion_start;
+        std::vector<int> motion_end;
+        std::vector<std::vector<float>> all_motions;
+
+        for (int i = 0; i < num_of_states1; i++)
+        {
+            // get the interpolated states
+            std::vector<std::vector<float>> interpolated_states = interpolateVectors(joint_states1[i], joint_states2[i], 10); 
+            // TODO: the step size is too naive, need to be improved
+
+            // calculate the sqrt difference between the two states
+            float cost = 0.0f;
+            for (int j = 0; j < joint_states1[i].size(); j++)
+            {
+                cost += (joint_states1[i][j] - joint_states2[i][j]) * (joint_states1[i][j] - joint_states2[i][j]);
+            }
+            motion_costs[i] = sqrt(cost);
+
+            // motion_sizes.push_back(interpolated_states.size());
+            motion_start.push_back(all_motions.size());
+            motion_end.push_back(all_motions.size() + interpolated_states.size()); // exclusive
+            all_motions.insert(all_motions.end(), interpolated_states.begin(), interpolated_states.end());
+        }
+
+        // create states from the all_motions
+        auto interpolated_states = createStatesFromVectorFull(all_motions);
+        interpolated_states->update();
+        std::vector<bool> motion_state_feasibility;
+        // check the interpolated_states
+        checkStates(interpolated_states, motion_state_feasibility);
+
+        // check the motion feasibility. TODO: This can be done in parallel
+        for (int i = 0; i < num_of_states1; i++)
+        {
+            bool feasible = true;
+            for (int j = motion_start[i]; j < motion_end[i]; j++)
+            {
+                if (!motion_state_feasibility[j])
+                {
+                    feasible = false;
+                    break;
+                }
+            }
+            motion_feasibility[i] = feasible;
+        }
+
+        // deallocate interpolated_states
+        interpolated_states.reset();
     }
 
     void SingleArmSpace::checkMotions(
@@ -293,21 +368,6 @@ namespace CUDAMPLib {
         // print the motion end states
         for (int i = 0; i < motions->getNumOfMotions(); i++)
         {
-            // printf("Motion %d\n", i);
-            // printf("end state 1: ");
-            // for (int j = 0; j < motion_end_states1[i].size(); j++)
-            // {
-            //     printf("%f ", motion_end_states1[i][j]);
-            // }
-            // printf("\n");
-
-            // printf("end state 2: ");
-            // for (int j = 0; j < motion_end_states2[i].size(); j++)
-            // {
-            //     printf("%f ", motion_end_states2[i][j]);
-            // }
-            // printf("\n");
-
             // get the interpolated states
             std::vector<std::vector<float>> interpolated_states = interpolateVectors(motion_end_states1[i], motion_end_states2[i], 10); 
             // TODO: the step size is too naive, need to be improved
@@ -324,34 +384,7 @@ namespace CUDAMPLib {
             motion_start.push_back(all_motions.size());
             motion_end.push_back(all_motions.size() + interpolated_states.size()); // exclusive
             all_motions.insert(all_motions.end(), interpolated_states.begin(), interpolated_states.end());
-
-            // for (int j = 0; j < interpolated_states.size(); j++)
-            // {
-            //     printf("interpolated state %d: ", j);
-            //     for (int k = 0; k < interpolated_states[j].size(); k++)
-            //     {
-            //         printf("%f ", interpolated_states[j][k]);
-            //     }
-            //     printf("\n");
-            // }
         }
-
-        // // print all_motions
-        // for (int i = 0; i < all_motions.size(); i++)
-        // {
-        //     printf("states %d: ", i);
-        //     for (int j = 0; j < all_motions[i].size(); j++)
-        //     {
-        //         printf("%f ", all_motions[i][j]);
-        //     }
-        //     printf("\n");
-        // }
-
-        // // print motion sizes
-        // for (int i = 0; i < motion_start.size(); i++)
-        // {
-        //     printf("motion %d: start %d, end %d\n", i, motion_start[i], motion_end[i]);
-        // }
 
         // create states from the all_motions
         auto interpolated_states = createStatesFromVectorFull(all_motions);
@@ -359,12 +392,6 @@ namespace CUDAMPLib {
         std::vector<bool> motion_state_feasibility;
         // check the interpolated_states
         checkStates(interpolated_states, motion_state_feasibility);
-
-        // // print the motion state feasibility
-        // for (int i = 0; i < motion_state_feasibility.size(); i++)
-        // {
-        //     printf("motion %d: %d\n", i, motion_state_feasibility[i] ? 1 : 0);
-        // }
 
         // deallocate interpolated_states
         interpolated_states.reset();
