@@ -138,14 +138,14 @@ std::vector<int> CUDAMPLib::boolVectorFlatten(const std::vector<bool>& input)
 }
 
 std::vector<int> CUDAMPLib::kLeastIndices(const std::vector<float>& nums, int k) {
-    if (k <= 0 || k > nums.size()) return {}; // Handle invalid input
+    if (k <= 0 || (size_t)k > nums.size()) return {}; // Handle invalid input
 
     // Min-heap to store {value, index} pairs
     using Pair = std::pair<float, int>;
     std::priority_queue<Pair, std::vector<Pair>, std::greater<Pair>> minHeap;
 
     // Insert all elements into the heap
-    for (int i = 0; i < nums.size(); ++i) {
+    for (size_t i = 0; i < nums.size(); ++i) {
         minHeap.emplace(nums[i], i);
     }
 

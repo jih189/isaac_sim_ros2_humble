@@ -635,7 +635,7 @@ namespace CUDAMPLib
         float * d_extracted_joint_states = extracted_states->getJointStatesCuda();
 
         // copy the states from the manager to the extracted_states
-        for (int i = 0; i < states_index.size(); i++)
+        for (size_t i = 0; i < states_index.size(); i++)
         {
             // copy them asynchronously
             cudaMemcpyAsync(d_extracted_joint_states + i * num_of_joints, d_joint_states + states_index[i] * num_of_joints, num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
@@ -652,7 +652,7 @@ namespace CUDAMPLib
         SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info_);
 
         int total_num_of_states = 0;
-        for (int i = 0; i < states.size(); i++)
+        for (size_t i = 0; i < states.size(); i++)
         {
             total_num_of_states += states[i]->getNumOfStates();
         }
@@ -664,7 +664,7 @@ namespace CUDAMPLib
 
         // copy the states from the manager to the extracted_states
         int offset = 0;
-        for (int i = 0; i < states.size(); i++)
+        for (size_t i = 0; i < states.size(); i++)
         {
             SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states[i]);
             int num_of_states = states[i]->getNumOfStates();

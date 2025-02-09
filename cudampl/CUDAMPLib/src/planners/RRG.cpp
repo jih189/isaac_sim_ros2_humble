@@ -101,7 +101,7 @@ namespace CUDAMPLib
         for(int t = 0 ; t < 1; t++)
         {
             // sample states
-            auto states = space_->sample(3);
+            auto states = space_->sample(6);
             states->update();
 
             // evaluate the feasibility of the states
@@ -127,16 +127,8 @@ namespace CUDAMPLib
             // validate the motion from the sampled states to their neighbors.
             // prepare the motion states 1
             std::vector<BaseStatesPtr> states_list;
-            std::vector<int> indexs_in_states;
             for (int i = 0; i < actual_k; i++)
-            {
                 states_list.push_back(states);
-                // each state may have multiple neighbors, so we need to duplicate the states
-                for(int j = 0; j < states->getNumOfStates(); j++)
-                {
-                    indexs_in_states.push_back(j);
-                }
-            }
 
             auto motion_states_1 = state_manager->concatinate_states(states_list);
 
@@ -157,6 +149,14 @@ namespace CUDAMPLib
             std::vector<float> motion_costs;
             space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
 
+            /*
+                Assume we have three sampled states and k = 2, and S is the sampled state, N is the neighbor of S.
+                motion state 1:
+                    S 1, S 2, S 3, S 1, S 2, S 3
+                motion state 2:
+                    N 1 of S 1, N 1 of S 2, N 1 of S 3, N 2 of S 1, N 2 of S 2, N 2 of S 3
+            */
+
             // determine which sampled states can be added to the graph.
             std::vector<bool> can_connect(states->getNumOfStates(), false);
             std::vector<std::vector<int>> feasible_neighbors_indexs_of_added_states;
@@ -168,11 +168,11 @@ namespace CUDAMPLib
                 // check if this state is connected to any of its neighbors
                 for(int j = 0; j < actual_k; j++)
                 {
-                    if(motion_feasibility[i * actual_k + j])
+                    if(motion_feasibility[j * states->getNumOfStates() + i])
                     {
                         can_connect[i] = true;
-                        feasible_neighbors_indexs_of_added_states_i.push_back(neighbors_index[i][j]);
-                        feasible_neighbors_costs_of_added_states_i.push_back(motion_costs[i * actual_k + j]);
+                        feasible_neighbors_indexs_of_added_states_i.push_back(indexs_in_manager[j * states->getNumOfStates() + i]);
+                        feasible_neighbors_costs_of_added_states_i.push_back(motion_costs[j * states->getNumOfStates() + i]);
                     }
                 }
 
@@ -188,21 +188,21 @@ namespace CUDAMPLib
             // remove the states can not connect to any neighbors
             states->filterStates(can_connect);
 
-            // add the states to the manager
-            std::vector<int> indexs_in_manager_new = state_manager->add_states(states);
+            // add the states to the manager and get their indexs in the manager
+            std::vector<int> indexs_of_new_state_in_manager = state_manager->add_states(states);
 
-            if(indexs_in_manager_new.size() != feasible_neighbors_indexs_of_added_states.size())
+            if(indexs_of_new_state_in_manager.size() != feasible_neighbors_indexs_of_added_states.size())
             {
-                throw std::runtime_error("indexs_in_manager_new.size() != neighbors_index_actual.size()");
+                throw std::runtime_error("indexs_of_new_state_in_manager.size() != neighbors_index_actual.size()");
             }
 
             // add the states to the graph
-            for(size_t i = 0; i < indexs_in_manager_new.size(); i++)
+            for(size_t i = 0; i < indexs_of_new_state_in_manager.size(); i++)
             {
-                // printf("Create node %d\n", indexs_in_manager_new[i]);
+                // printf("Create node %d\n", indexs_of_new_state_in_manager[i]);
                 // Add a vertex to the graph
                 BoostVertex v = boost::add_vertex(graph);
-                graph[v].index_in_manager = indexs_in_manager_new[i];
+                graph[v].index_in_manager = indexs_of_new_state_in_manager[i];
                 graph[v].group = 0; // Normal group
 
                 bool has_connect_to_start = false;
@@ -210,7 +210,7 @@ namespace CUDAMPLib
                 // add edges between the new state and its neighbors
                 for(size_t j = 0; j < feasible_neighbors_indexs_of_added_states[i].size(); j++)
                 {
-                    // printf("connect node %d and node %d\n", indexs_in_manager_new[i], feasible_neighbors_indexs_of_added_states[i][j]);
+                    // printf("connect node %d and node %d\n", indexs_of_new_state_in_manager[i], feasible_neighbors_indexs_of_added_states[i][j]);
                     // find the vertex in the graph where its index in the state manager is feasible_neighbors_indexs_of_added_states[i][j]
                     for(auto v2 : boost::make_iterator_range(boost::vertices(graph)))
                     {
@@ -296,45 +296,36 @@ namespace CUDAMPLib
             }
             printf("\n");
 
-            // print all weights of edges in the graph for debugging
-            for (auto e : boost::make_iterator_range(boost::edges(graph)))
-            {
-                printf("Edge (%d, %d) has weight: %f\n", graph[boost::source(e, graph)].index_in_manager, graph[boost::target(e, graph)].index_in_manager, graph[e].weight);
-                if(graph[e].weight > 0.0)
-                {
-                    // print the joint values of both states
-                    auto debug_states = state_manager->get_states(
-                        {graph[boost::source(e, graph)].index_in_manager, graph[boost::target(e, graph)].index_in_manager});
+            // // print all weights of edges in the graph for debugging
+            // for (auto e : boost::make_iterator_range(boost::edges(graph)))
+            // {
+            //     printf("Edge (%d, %d) has weight: %f\n", graph[boost::source(e, graph)].index_in_manager, graph[boost::target(e, graph)].index_in_manager, graph[e].weight);
+            //     if(graph[e].weight > 0.0)
+            //     {
+            //         // print the joint values of both states
+            //         auto debug_states = state_manager->get_states(
+            //             {graph[boost::source(e, graph)].index_in_manager, graph[boost::target(e, graph)].index_in_manager});
                     
-                    // static cast the states to SingleArmStatesPtr
-                    SingleArmStatesPtr debug_states_single_arm = std::static_pointer_cast<SingleArmStates>(debug_states);
-                    std::vector<std::vector<float>> debug_states_joint_values = debug_states_single_arm->getJointStatesHost();
+            //         // static cast the states to SingleArmStatesPtr
+            //         SingleArmStatesPtr debug_states_single_arm = std::static_pointer_cast<SingleArmStates>(debug_states);
+            //         std::vector<std::vector<float>> debug_states_joint_values = debug_states_single_arm->getJointStatesHost();
 
-                    // printf("Joint values of state 1: ");
-                    // for (const auto& joint_value : debug_states_joint_values[0])
-                    // {
-                    //     printf("%f ", joint_value);
-                    // }
-                    // printf("\n");
+            //         // calculate the distance between the two states
+            //         float distance = 0.0;
+            //         for (size_t i = 0; i < debug_states_joint_values[0].size(); i++)
+            //         {
+            //             distance += std::pow(debug_states_joint_values[0][i] - debug_states_joint_values[1][i], 2);
+            //         }
+            //         distance = std::sqrt(distance);
+            //         printf("Distance between the two states: %f\n", distance);
 
-                    // printf("Joint values of state 2: ");
-                    // for (const auto& joint_value : debug_states_joint_values[1])
-                    // {
-                    //     printf("%f ", joint_value);
-                    // }
-                    // printf("\n");
-
-                    // calculate the distance between the two states
-                    float distance = 0.0;
-                    for (size_t i = 0; i < debug_states_joint_values[0].size(); i++)
-                    {
-                        distance += std::pow(debug_states_joint_values[0][i] - debug_states_joint_values[1][i], 2);
-                    }
-                    distance = std::sqrt(distance);
-                    printf("Distance between the two states: %f\n", distance);
-
-                }
-            }
+            //         if (distance != graph[e].weight)
+            //         {
+            //             // print in red color
+            //             printf("\033[1;31m Error: distance != graph[e].weight \033[0m \n");
+            //         }
+            //     }
+            // }
 
         }
         else

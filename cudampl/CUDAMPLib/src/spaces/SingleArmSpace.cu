@@ -299,7 +299,7 @@ namespace CUDAMPLib {
 
             // calculate the sqrt difference between the two states
             float cost = 0.0f;
-            for (int j = 0; j < joint_states1[i].size(); j++)
+            for (size_t j = 0; j < joint_states1[i].size(); j++)
             {
                 cost += (joint_states1[i][j] - joint_states2[i][j]) * (joint_states1[i][j] - joint_states2[i][j]);
             }
@@ -374,7 +374,7 @@ namespace CUDAMPLib {
 
             // calculate the sqrt difference between the two states
             float cost = 0.0f;
-            for (int j = 0; j < motion_end_states1[i].size(); j++)
+            for (size_t j = 0; j < motion_end_states1[i].size(); j++)
             {
                 cost += (motion_end_states1[i][j] - motion_end_states2[i][j]) * (motion_end_states1[i][j] - motion_end_states2[i][j]);
             }
