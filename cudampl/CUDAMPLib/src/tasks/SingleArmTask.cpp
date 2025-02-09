@@ -44,21 +44,15 @@ namespace CUDAMPLib
     {
         has_solution = true;
 
+        // statics cast the space to SingleArmSpace
         auto single_arm_space = std::static_pointer_cast<SingleArmSpace>(space);
 
-        // statics cast the solution to SingleArmStates
+        // get the joint vector in active joints from the solution
         solution_vector = single_arm_space->getJointVectorInActiveJointsFromStates(solution);
+    }
 
-        // print the solution
-        printf("Solution:\n");
-        for (const auto& joint_values : solution_vector)
-        {
-            for (const auto& joint_value : joint_values)
-            {
-                printf("%f ", joint_value);
-            }
-            printf("\n");
-        }
-
+    std::vector<std::vector<float>> SingleArmTask::getSolution()
+    {
+        return solution_vector;
     }
 } // namespace CUDAMPLib

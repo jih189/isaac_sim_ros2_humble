@@ -8,6 +8,7 @@
 #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit_msgs/msg/display_robot_state.hpp>
+#include <moveit/robot_trajectory/robot_trajectory.h>
 
 // cudampl include
 #include <CUDAMPLib/multiply.h>
@@ -1161,6 +1162,43 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // solve the task
     planner->solve();
 
+    moveit_msgs::msg::DisplayTrajectory display_trajectory;
+    moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
+    auto solution_robot_trajectory = robot_trajectory::RobotTrajectory(robot_model, joint_model_group);
+
+    if (task->hasSolution())
+    {
+        std::cout << "Task solved" << std::endl;
+
+        std::vector<std::vector<float>> solution_path = task->getSolution();
+
+        moveit_msgs::msg::RobotState start_state_msg;
+
+        // generate robot trajectory msg
+        for (size_t i = 0; i < solution_path.size(); i++)
+        {
+            // convert solution_path[i] to double vector
+            std::vector<double> solution_path_i_double = std::vector<double>(solution_path[i].begin(), solution_path[i].end());
+            robot_state->setJointGroupPositions(joint_model_group, solution_path_i_double);
+            solution_robot_trajectory.addSuffixWayPoint(*robot_state, 10.0);
+
+            if (i == 0)
+            {
+                // set start state
+                moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
+            }
+        }
+        // Create a DisplayTrajectory message
+        solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
+
+        display_trajectory.trajectory_start = start_state_msg;
+        display_trajectory.trajectory.push_back(robot_trajectory_msg);
+    }
+    else
+    {
+        std::cout << "Task not solved" << std::endl;
+    }
+
     /**************************************************************************************************** */
 
     // Create a start robot state publisher
@@ -1168,6 +1206,9 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // Create a goal robot state publisher
     auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+
+    std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>> display_publisher =
+        node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
 
     // Create a DisplayRobotState message
     moveit_msgs::msg::DisplayRobotState start_display_robot_state;
@@ -1185,6 +1226,11 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         // Publish the message
         start_robot_state_publisher->publish(start_display_robot_state);
         goal_robot_state_publisher->publish(goal_display_robot_state);
+
+        if (task->hasSolution())
+        {
+            display_publisher->publish(display_trajectory);
+        }
         
         rclcpp::spin_some(node);
 
