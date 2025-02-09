@@ -39,4 +39,9 @@ namespace CUDAMPLib
     {
         return goal_states_vector;
     }
+
+    void SingleArmTask::setSolution(const BaseStatesPtr& solution)
+    {
+        has_solution = true;
+    }
 } // namespace CUDAMPLib

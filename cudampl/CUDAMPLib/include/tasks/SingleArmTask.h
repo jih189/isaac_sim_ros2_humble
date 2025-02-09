@@ -13,6 +13,7 @@ namespace CUDAMPLib
             std::vector<std::vector<float>> getGoalStatesVector();
             BaseStatesPtr getStartStates(BaseSpacePtr space) override;
             BaseStatesPtr getGoalStates(BaseSpacePtr space) override;
+            void setSolution(const BaseStatesPtr& solution) override;
         private:
             std::vector<std::vector<float>> start_states_vector;
             std::vector<std::vector<float>> goal_states_vector;

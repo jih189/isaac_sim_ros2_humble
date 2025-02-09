@@ -65,6 +65,10 @@ namespace CUDAMPLib
 
             void checkStates(const BaseStatesPtr & states) override;
 
+            BaseStatesPtr getPathFromWaypoints(
+                const BaseStatesPtr & waypoints
+            ) override;
+
             BaseStateManagerPtr createStateManager() override; 
 
             void getSpaceInfo(SingleArmSpaceInfoPtr space_info);

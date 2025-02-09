@@ -337,6 +337,36 @@ namespace CUDAMPLib {
         interpolated_states.reset();
     }
 
+    BaseStatesPtr SingleArmSpace::getPathFromWaypoints(
+        const BaseStatesPtr & waypoints
+    )
+    {
+        int num_of_waypoints = waypoints->getNumOfStates();
+
+        // static cast to SingleArmStatesPtr
+        SingleArmStatesPtr single_arm_waypoints = std::dynamic_pointer_cast<SingleArmStates>(waypoints);
+
+        // get space info
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        getSpaceInfo(space_info);
+
+        // get the joint states from the states
+        std::vector<std::vector<float>> waypoints_joint_values = single_arm_waypoints->getJointStatesHost();
+
+        std::vector<std::vector<float>> path_in_host;
+        for (int i = 0; i < num_of_waypoints - 1; i++)
+        {
+            // get the interpolated states
+            std::vector<std::vector<float>> interpolated_states = interpolateVectors(waypoints_joint_values[i], waypoints_joint_values[i+1], 10); 
+            path_in_host.insert(path_in_host.end(), interpolated_states.begin(), interpolated_states.end());
+        }
+
+        // create states from the all_motions
+        auto path_in_cuda = createStatesFromVectorFull(path_in_host);
+        
+        return path_in_cuda;
+    }
+
     void SingleArmSpace::checkMotions(
         const BaseMotionsPtr & motions,
         std::vector<bool>& motion_feasibility,

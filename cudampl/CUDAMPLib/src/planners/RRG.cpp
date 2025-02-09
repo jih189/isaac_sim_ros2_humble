@@ -1,5 +1,4 @@
 #include <planners/RRG.h>
-#include <states/SingleArmStates.h>
 
 namespace CUDAMPLib
 {
@@ -288,44 +287,19 @@ namespace CUDAMPLib
 
             path.push_back(start_node);
 
-            // Print the shortest path.
+            // Print the shortest path. 
+            std::vector<int> path_indexs_in_manager;
             printf("Shortest path from start to goal:\n");
             for (auto it = path.rbegin(); it != path.rend(); ++it)
             {
-                printf("%d ", graph[*it].index_in_manager);
+                if (graph[*it].index_in_manager != -1)
+                {
+                    path_indexs_in_manager.push_back(graph[*it].index_in_manager);
+                    printf("Node %d\n", graph[*it].index_in_manager);
+                }
             }
-            printf("\n");
 
-            // // print all weights of edges in the graph for debugging
-            // for (auto e : boost::make_iterator_range(boost::edges(graph)))
-            // {
-            //     printf("Edge (%d, %d) has weight: %f\n", graph[boost::source(e, graph)].index_in_manager, graph[boost::target(e, graph)].index_in_manager, graph[e].weight);
-            //     if(graph[e].weight > 0.0)
-            //     {
-            //         // print the joint values of both states
-            //         auto debug_states = state_manager->get_states(
-            //             {graph[boost::source(e, graph)].index_in_manager, graph[boost::target(e, graph)].index_in_manager});
-                    
-            //         // static cast the states to SingleArmStatesPtr
-            //         SingleArmStatesPtr debug_states_single_arm = std::static_pointer_cast<SingleArmStates>(debug_states);
-            //         std::vector<std::vector<float>> debug_states_joint_values = debug_states_single_arm->getJointStatesHost();
-
-            //         // calculate the distance between the two states
-            //         float distance = 0.0;
-            //         for (size_t i = 0; i < debug_states_joint_values[0].size(); i++)
-            //         {
-            //             distance += std::pow(debug_states_joint_values[0][i] - debug_states_joint_values[1][i], 2);
-            //         }
-            //         distance = std::sqrt(distance);
-            //         printf("Distance between the two states: %f\n", distance);
-
-            //         if (distance != graph[e].weight)
-            //         {
-            //             // print in red color
-            //             printf("\033[1;31m Error: distance != graph[e].weight \033[0m \n");
-            //         }
-            //     }
-            // }
+            auto solution = space_->getPathFromWaypoints(state_manager->get_states(path_indexs_in_manager));
 
         }
         else

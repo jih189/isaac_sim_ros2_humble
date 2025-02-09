@@ -40,13 +40,26 @@ namespace CUDAMPLib
             ) = 0;
 
             /**
-            
+                * @brief Given two sets of states, check the feasibility of motions between them.
+                * @param states1 The first set of states.
+                * @param states2 The second set of states.
+                * @param motion_feasibility The feasibility of the motions.
+                * @param motion_costs The costs of the motions.
              */
             virtual void checkMotions(
                 const BaseStatesPtr & states1, 
                 const BaseStatesPtr & states2, 
                 std::vector<bool>& motion_feasibility,
                 std::vector<float>& motion_costs
+            ) = 0;
+
+            /**
+                * @brief Get path from waypoints.
+                * @param waypoints The waypoints.
+                * @return The path.
+             */
+            virtual BaseStatesPtr getPathFromWaypoints(
+                const BaseStatesPtr & waypoints
             ) = 0;
 
             /**
