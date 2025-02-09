@@ -2,7 +2,6 @@
 
 #include <base/Constraint.h>
 #include <base/States.h>
-#include <base/Graph.h>
 
 namespace CUDAMPLib
 {
@@ -69,12 +68,6 @@ namespace CUDAMPLib
                 does not slow down the process.
              */
             virtual void checkStates(const BaseStatesPtr & states) = 0;
-
-            /**
-                * @brief Create a graph for the space.
-                * @return The graph.
-             */
-            virtual BaseGraphPtr createGraph() = 0;
 
             /**
                 @brief Create a state manager.

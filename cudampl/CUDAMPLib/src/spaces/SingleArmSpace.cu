@@ -481,11 +481,6 @@ namespace CUDAMPLib {
         space_info->upper_bound = upper_bound;
     }
 
-    BaseGraphPtr SingleArmSpace::createGraph()
-    {
-        return std::make_shared<SingleArmGraph>(num_of_joints);
-    }
-
     BaseStateManagerPtr SingleArmSpace::createStateManager()
     {
         SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();

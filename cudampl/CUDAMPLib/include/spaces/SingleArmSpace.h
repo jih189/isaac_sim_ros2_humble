@@ -7,7 +7,6 @@
 
 #include <base/Space.h>
 #include <states/SingleArmStates.h>
-#include <graphs/SingleArmGraph.h>
 #include <vector>
 #include <util.h>
 #include <cuda_runtime.h>
@@ -65,8 +64,6 @@ namespace CUDAMPLib
             ) override;
 
             void checkStates(const BaseStatesPtr & states) override;
-
-            BaseGraphPtr createGraph() override;
 
             BaseStateManagerPtr createStateManager() override; 
 
