@@ -56,6 +56,8 @@ namespace CUDAMPLib
             BoostVertex start_node;
             std::vector<BoostVertex> goal_nodes;
             BoostVertex goal_node;
+
+            BaseTaskPtr task_;
     };
 
     typedef std::shared_ptr<RRG> RRGPtr;

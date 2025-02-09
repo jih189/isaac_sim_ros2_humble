@@ -82,6 +82,7 @@ namespace CUDAMPLib
              */
             BaseStatesPtr createStatesFromVector(const std::vector<std::vector<float>>& joint_values);
 
+            std::vector<std::vector<float>> getJointVectorInActiveJointsFromStates(const BaseStatesPtr & states);
 
             /**
                 @brief helper function to create a set of states based on task.

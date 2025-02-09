@@ -252,6 +252,32 @@ namespace CUDAMPLib {
         return generated_states;
     }
 
+    std::vector<std::vector<float>> SingleArmSpace::getJointVectorInActiveJointsFromStates(const BaseStatesPtr & states)
+    {
+        // static cast to SingleArmStatesPtr
+        SingleArmStatesPtr single_arm_states = std::dynamic_pointer_cast<SingleArmStates>(states);
+
+        // get the joint states from the states
+        std::vector<std::vector<float>> joint_states = single_arm_states->getJointStatesHost();
+
+        // filer the joint states with active_joint_map_
+        std::vector<std::vector<float>> joint_states_filtered;
+        for (size_t i = 0; i < joint_states.size(); i++)
+        {
+            std::vector<float> joint_state_filtered;
+            for (size_t j = 0; j < joint_states[i].size(); j++)
+            {
+                if (active_joint_map_[j])
+                {
+                    joint_state_filtered.push_back(joint_states[i][j]);
+                }
+            }
+            joint_states_filtered.push_back(joint_state_filtered);
+        }
+
+        return joint_states_filtered;
+    }
+
     void SingleArmSpace::checkMotions(
         const BaseStatesPtr & states1, 
         const BaseStatesPtr & states2, 
@@ -363,7 +389,7 @@ namespace CUDAMPLib {
 
         // create states from the all_motions
         auto path_in_cuda = createStatesFromVectorFull(path_in_host);
-        
+
         return path_in_cuda;
     }
 

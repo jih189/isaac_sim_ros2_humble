@@ -12,7 +12,7 @@ namespace CUDAMPLib
             virtual ~BaseTask() {}
             virtual BaseStatesPtr getStartStates(BaseSpacePtr space) = 0;
             virtual BaseStatesPtr getGoalStates(BaseSpacePtr space) = 0;
-            virtual void setSolution(const BaseStatesPtr& solution) = 0;
+            virtual void setSolution(const BaseStatesPtr& solution, const BaseSpacePtr space) = 0;
             bool hasSolution() const { return has_solution; }
 
         protected:

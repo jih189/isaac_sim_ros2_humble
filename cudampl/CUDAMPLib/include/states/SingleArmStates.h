@@ -88,6 +88,8 @@ namespace CUDAMPLib
              */
             std::vector<std::vector<float>> getJointStatesHost() const;
 
+            std::vector<std::vector<float>> getJointStatesInActiveJointHost() const;
+
             /**
                 * Based on the current states, update link poses, joint poses, and joint axes, collision spheres in base link, etc.
              */

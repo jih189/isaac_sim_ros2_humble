@@ -76,6 +76,8 @@ namespace CUDAMPLib
             // add an edge between the goal node and the goal state with zero weight
             boost::add_edge(v, goal_node, EdgeProperties{0.0f}, graph);
         }
+
+        task_ = task;
     }
 
     /**
@@ -261,8 +263,6 @@ namespace CUDAMPLib
 
         if(has_solution)
         {
-            printf("Find a solution\n");
-
             const auto num_vertices = boost::num_vertices(graph);
             std::vector<float> distances(num_vertices, std::numeric_limits<float>::max());
             std::vector<BoostVertex> predecessors(num_vertices, boost::graph_traits<BoostGraph>::null_vertex());
@@ -289,22 +289,16 @@ namespace CUDAMPLib
 
             // Print the shortest path. 
             std::vector<int> path_indexs_in_manager;
-            printf("Shortest path from start to goal:\n");
             for (auto it = path.rbegin(); it != path.rend(); ++it)
             {
                 if (graph[*it].index_in_manager != -1)
                 {
                     path_indexs_in_manager.push_back(graph[*it].index_in_manager);
-                    printf("Node %d\n", graph[*it].index_in_manager);
                 }
             }
 
             auto solution = space_->getPathFromWaypoints(state_manager->get_states(path_indexs_in_manager));
-
-        }
-        else
-        {
-            printf("No solution\n");
+            task_->setSolution(solution, space_);
         }
     }
 } // namespace CUDAMPLib

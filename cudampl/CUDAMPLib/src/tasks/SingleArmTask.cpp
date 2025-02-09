@@ -40,8 +40,25 @@ namespace CUDAMPLib
         return goal_states_vector;
     }
 
-    void SingleArmTask::setSolution(const BaseStatesPtr& solution)
+    void SingleArmTask::setSolution(const BaseStatesPtr& solution, const BaseSpacePtr space)
     {
         has_solution = true;
+
+        auto single_arm_space = std::static_pointer_cast<SingleArmSpace>(space);
+
+        // statics cast the solution to SingleArmStates
+        solution_vector = single_arm_space->getJointVectorInActiveJointsFromStates(solution);
+
+        // print the solution
+        printf("Solution:\n");
+        for (const auto& joint_values : solution_vector)
+        {
+            for (const auto& joint_value : joint_values)
+            {
+                printf("%f ", joint_value);
+            }
+            printf("\n");
+        }
+
     }
 } // namespace CUDAMPLib
