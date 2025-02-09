@@ -100,6 +100,67 @@ namespace CUDAMPLib
 
         termination_condition->reset();
 
+        // need to check if start and goal states are feasible
+        std::vector<int> start_state_indexs_in_manager;
+        for (auto start_node : start_nodes)
+        {
+            start_state_indexs_in_manager.push_back(graph[start_node].index_in_manager);
+        }
+        std::vector<int> goal_state_indexs_in_manager;
+        for (auto goal_node : goal_nodes)
+        {
+            goal_state_indexs_in_manager.push_back(graph[goal_node].index_in_manager);
+        }
+
+        auto start_states_in_cuda = state_manager->get_states(start_state_indexs_in_manager);
+        auto goal_states_in_cuda = state_manager->get_states(goal_state_indexs_in_manager);
+
+        start_states_in_cuda->update();
+        goal_states_in_cuda->update();
+
+        std::vector<bool> start_state_feasibility;
+        space_->checkStates(start_states_in_cuda, start_state_feasibility);
+        std::vector<bool> goal_state_feasibility;
+        space_->checkStates(goal_states_in_cuda, goal_state_feasibility);
+
+        // check if any start state is feasible
+        bool has_feasible_start_state = false;
+        for (size_t i = 0; i < start_state_feasibility.size(); i++)
+        {
+            if (start_state_feasibility[i])
+            {
+                has_feasible_start_state = true;
+                break;
+            }
+        }
+
+        // check if any goal state is feasible
+        bool has_feasible_goal_state = false;
+        for (size_t i = 0; i < goal_state_feasibility.size(); i++)
+        {
+            if (goal_state_feasibility[i])
+            {
+                has_feasible_goal_state = true;
+                break;
+            }
+        }
+
+        // deallocate the start and goal states in cuda
+        start_states_in_cuda.reset();
+        goal_states_in_cuda.reset();
+
+        if (! has_feasible_start_state ){
+            // print in red color
+            printf("\033[1;31m No feasible start state \033[0m \n");
+            return;
+        }
+
+        if (! has_feasible_goal_state ){
+            // print in red color
+            printf("\033[1;31m No feasible goal state \033[0m \n");
+            return;
+        }
+        
         // main loop
         for(int t = 0 ; t < 1000000; t++)
         {
