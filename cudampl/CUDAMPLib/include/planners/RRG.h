@@ -16,7 +16,7 @@ namespace CUDAMPLib
             ~RRG() override;
 
             void setMotionTask(BaseTaskPtr task) override;
-            void solve() override;
+            void solve(BaseTerminationPtr termination_condition) override;
         private:
             BaseStateManagerPtr state_manager;
 

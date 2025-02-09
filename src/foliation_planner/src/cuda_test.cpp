@@ -19,6 +19,7 @@
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
 #include <CUDAMPLib/tasks/SingleArmTask.h>
 #include <CUDAMPLib/planners/RRG.h>
+#include <CUDAMPLib/termination/StepTermination.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -1097,7 +1098,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     float obstacle_spheres_radius = 0.06;
     // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
     // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
-    int num_of_obstacle_spheres = 20;
+    int num_of_obstacle_spheres = 8;
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
     for (int i = 0; i < num_of_obstacle_spheres; i++)
@@ -1117,7 +1118,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         ball_radius
     );
     // skip it for now.
-    // constraints.push_back(env_constraint);
+    constraints.push_back(env_constraint);
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
@@ -1159,8 +1160,11 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // set the task
     planner->setMotionTask(task);
 
+    // create termination condition
+    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(1000);
+
     // solve the task
-    planner->solve();
+    planner->solve(termination_condition);
 
     moveit_msgs::msg::DisplayTrajectory display_trajectory;
     moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
@@ -1168,7 +1172,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     if (task->hasSolution())
     {
-        std::cout << "Task solved" << std::endl;
+        // print "Task solved" in green color
+        std::cout << "\033[1;32m" << "Task solved" << "\033[0m" << std::endl;
 
         std::vector<std::vector<float>> solution_path = task->getSolution();
 
@@ -1196,7 +1201,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     }
     else
     {
-        std::cout << "Task not solved" << std::endl;
+        // print "Task not solved" in red color
+        std::cout << "\033[1;31m" << "Task not solved" << "\033[0m" << std::endl;
     }
 
     /**************************************************************************************************** */
@@ -1206,6 +1212,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // Create a goal robot state publisher
     auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+
+    auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
 
     std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>> display_publisher =
         node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
@@ -1218,6 +1226,34 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
     goal_display_robot_state.state = goal_state_msg;
 
+    // Create a obstacle MarkerArray message
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
+    for (size_t i = 0; i < balls_pos.size(); i++)
+    {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = node->now();
+        marker.ns = "obstacle_collision_spheres";
+        marker.id = i;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = balls_pos[i][0];
+        marker.pose.position.y = balls_pos[i][1];
+        marker.pose.position.z = balls_pos[i][2];
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 2 * ball_radius[i];
+        marker.scale.y = 2 * ball_radius[i];
+        marker.scale.z = 2 * ball_radius[i];
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.5;
+        marker.color.g = 0.5;
+        marker.color.b = 0.0;
+        obstacle_collision_spheres_marker_array.markers.push_back(marker);
+    }
+
     std::cout << "publishing start and goal robot state" << std::endl;
 
     // Publish the message in a loop
@@ -1226,6 +1262,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         // Publish the message
         start_robot_state_publisher->publish(start_display_robot_state);
         goal_robot_state_publisher->publish(goal_display_robot_state);
+        obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
 
         if (task->hasSolution())
         {

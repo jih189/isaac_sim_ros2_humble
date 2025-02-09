@@ -92,15 +92,23 @@ namespace CUDAMPLib
         6. Check the feasibility of motion between the states pairs.
         7. Add the states to the graph.
      */
-    void RRG::solve()
+    void RRG::solve(BaseTerminationPtr termination_condition)
     {
         bool has_solution = false;
 
         //TODO: We should check if direct motion between start and goal states is feasible.
 
+        termination_condition->reset();
+
         // main loop
-        for(int t = 0 ; t < 1; t++)
+        for(int t = 0 ; t < 1000000; t++)
         {
+            if(termination_condition->checkTerminationCondition())
+            {
+                termination_condition->printTerminationReason();
+                break;
+            }
+
             // sample states
             auto states = space_->sample(6);
             states->update();
@@ -278,7 +286,6 @@ namespace CUDAMPLib
                 .predecessor_map(boost::make_iterator_property_map(predecessors.begin(), indexMap))
             );
 
-            // Extract the shortest path to the goal node.
             std::vector<BoostVertex> path;
             for (BoostVertex v = goal_node; v != start_node; v = predecessors[v])
             {
@@ -288,14 +295,17 @@ namespace CUDAMPLib
             path.push_back(start_node);
 
             // Print the shortest path. 
+            printf("Shortest path from start to goal:\n");
             std::vector<int> path_indexs_in_manager;
             for (auto it = path.rbegin(); it != path.rend(); ++it)
             {
                 if (graph[*it].index_in_manager != -1)
                 {
                     path_indexs_in_manager.push_back(graph[*it].index_in_manager);
+                    printf("%d ", graph[*it].index_in_manager);
                 }
             }
+            printf("\n");
 
             auto solution = space_->getPathFromWaypoints(state_manager->get_states(path_indexs_in_manager));
             task_->setSolution(solution, space_);
