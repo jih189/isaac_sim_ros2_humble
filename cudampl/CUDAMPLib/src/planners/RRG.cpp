@@ -189,11 +189,8 @@ namespace CUDAMPLib
 
             // find k nearest neighbors for each state
             std::vector<std::vector<int>> neighbors_index;
-            state_manager->find_k_nearest_neighbors(k, states, neighbors_index);
-
-            // if k is larger than the number of states, we need to adjust k
-            int actual_k = neighbors_index[0].size();
-
+            int actual_k = state_manager->find_k_nearest_neighbors(k, states, neighbors_index);
+            
             // validate the motion from the sampled states to their neighbors.
             // prepare the motion states 1
             std::vector<BaseStatesPtr> states_list;

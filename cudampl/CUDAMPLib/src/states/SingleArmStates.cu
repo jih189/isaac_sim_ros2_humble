@@ -481,7 +481,7 @@ namespace CUDAMPLib
         throw std::runtime_error("Error in SingleArmStateManager::add_states");
     }
 
-    void SingleArmStateManager::find_k_nearest_neighbors(
+    int SingleArmStateManager::find_k_nearest_neighbors(
         int k, const BaseStatesPtr & query_states, 
         std::vector<std::vector<int>> & neighbors_index
     )
@@ -549,6 +549,8 @@ namespace CUDAMPLib
 
         // free the memory
         cudaFree(d_distances_from_query_to_states);
+
+        return k;
     }
 
     BaseStatesPtr SingleArmStateManager::get_states(const std::vector<int> & states_index)

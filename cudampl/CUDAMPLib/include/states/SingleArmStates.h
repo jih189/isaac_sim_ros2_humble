@@ -130,7 +130,7 @@ namespace CUDAMPLib
 
             std::vector<int> add_states(const BaseStatesPtr & states) override;
 
-            void find_k_nearest_neighbors(
+            int find_k_nearest_neighbors(
                 int k, const BaseStatesPtr & query_states, 
                 std::vector<std::vector<int>> & neighbors_index
             ) override;
