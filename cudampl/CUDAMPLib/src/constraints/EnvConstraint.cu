@@ -93,11 +93,4 @@ namespace CUDAMPLib{
             d_cost_of_current_constraint 
         );
     }
-
-    void EnvConstraint::computeCost(BaseMotionsPtr motions)
-    {
-
-    }
-        
-
 } // namespace CUDAMPLib

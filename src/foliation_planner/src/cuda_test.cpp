@@ -1054,7 +1054,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     float obstacle_spheres_radius = 0.06;
     // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
     // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
-    int num_of_obstacle_spheres = 12;
+    int num_of_obstacle_spheres = 20;
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
     for (int i = 0; i < num_of_obstacle_spheres; i++)

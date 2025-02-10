@@ -28,16 +28,7 @@ namespace CUDAMPLib
             */
             virtual BaseStatesPtr sample(int num_of_config) = 0;
 
-            /**
-                * @brief Check the feasibility of a set of motions.
-                * @param motions The motions to check.
-                * @param motion_feasibility The feasibility of the motions.
-            */
-            virtual void checkMotions(
-                const BaseMotionsPtr & motions,
-                std::vector<bool>& motion_feasibility,
-                std::vector<float>& motion_costs
-            ) = 0;
+
 
             /**
                 * @brief Given two sets of states, check the feasibility of motions between them.

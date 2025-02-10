@@ -95,9 +95,4 @@ namespace CUDAMPLib{
             d_cost_of_current_constraint
         );
     }
-
-    void SelfCollisionConstraint::computeCost(BaseMotionsPtr motions)
-    {
-
-    }
 } // namespace CUDAMPLib

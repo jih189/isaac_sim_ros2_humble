@@ -24,7 +24,6 @@ namespace CUDAMPLib
             ~SelfCollisionConstraint() override;
 
             void computeCost(BaseStatesPtr states) override;
-            void computeCost(BaseMotionsPtr motions) override;
         
         private:
             int *d_self_collision_enables_map;

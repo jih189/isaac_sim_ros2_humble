@@ -11,7 +11,6 @@ namespace CUDAMPLib
             virtual ~BaseConstraint() {}
             
             virtual void computeCost(BaseStatesPtr states) = 0;
-            virtual void computeCost(BaseMotionsPtr motions) = 0;
 
             std::string getName() const { return constraint_name; }
 
