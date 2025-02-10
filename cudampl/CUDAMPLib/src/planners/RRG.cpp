@@ -10,7 +10,7 @@ namespace CUDAMPLib
 
         // set the parameters
         sample_attempts = 3;
-        k = 3;
+        k = 10;
     }
 
     // Destructor
@@ -171,7 +171,7 @@ namespace CUDAMPLib
             }
 
             // sample states
-            auto states = space_->sample(6);
+            auto states = space_->sample(100);
             states->update();
 
             // evaluate the feasibility of the states

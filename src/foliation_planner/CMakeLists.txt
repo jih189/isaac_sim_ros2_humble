@@ -27,6 +27,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   tf2_ros
   moveit_visual_tools
   CUDA
+  ompl
 )
 
 foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -37,7 +38,10 @@ find_package(CUDAMPLib REQUIRED)
 
 moveit_package()
 
-include_directories(include)
+include_directories(
+  include
+  /usr/include/ompl-1.6
+)
 
 set(MOVEIT_LIB_NAME moveit_foliation_planner_plugin)
 
@@ -53,7 +57,7 @@ add_executable(foliation_example src/foliation_example.cpp)
 ament_target_dependencies(foliation_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 add_executable(cuda_test src/cuda_test.cpp)
-target_link_libraries(cuda_test CUDAMPLib)
+target_link_libraries(cuda_test CUDAMPLib ompl)
 ament_target_dependencies(cuda_test ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")

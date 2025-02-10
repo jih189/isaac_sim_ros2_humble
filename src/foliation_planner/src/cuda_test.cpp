@@ -21,6 +21,15 @@
 #include <CUDAMPLib/planners/RRG.h>
 #include <CUDAMPLib/termination/StepTermination.h>
 
+// ompl include
+#include <ompl/base/SpaceInformation.h>
+#include <ompl/base/spaces/RealVectorStateSpace.h>
+#include <ompl/geometric/planners/rrt/RRTConnect.h>
+#include <ompl/geometric/SimpleSetup.h>
+
+namespace ob = ompl::base;
+namespace og = ompl::geometric;
+
 #include <yaml-cpp/yaml.h>
 
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("CUDAMPLib");
@@ -1041,9 +1050,33 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
+    // Prepare obstacle constraint
+    float obstacle_spheres_radius = 0.06;
+    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
+    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
+    int num_of_obstacle_spheres = 12;
+    std::vector<std::vector<float>> balls_pos;
+    std::vector<float> ball_radius;
+    for (int i = 0; i < num_of_obstacle_spheres; i++)
+    {
+        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
+        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
+        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
+        balls_pos.push_back({x, y, z});
+        ball_radius.push_back(obstacle_spheres_radius);
+    }
+
     // create planning scene
     auto world = std::make_shared<collision_detection::World>();
     auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
+
+    // add those balls to the planning scene
+    for (int i = 0; i < num_of_obstacle_spheres; i++)
+    {
+        Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
+        sphere_pose.translation() = Eigen::Vector3d(balls_pos[i][0], balls_pos[i][1], balls_pos[i][2]);
+        planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(ball_radius[i])), sphere_pose);
+    }
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
@@ -1093,22 +1126,6 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     moveit::core::robotStateToRobotStateMsg(*robot_state, goal_state_msg);
 
     /**************************************************************************************************** */
-
-    // Prepare obstacle constraint
-    float obstacle_spheres_radius = 0.06;
-    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
-    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
-    int num_of_obstacle_spheres = 8;
-    std::vector<std::vector<float>> balls_pos;
-    std::vector<float> ball_radius;
-    for (int i = 0; i < num_of_obstacle_spheres; i++)
-    {
-        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
-        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
-        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
-        balls_pos.push_back({x, y, z});
-        ball_radius.push_back(obstacle_spheres_radius);
-    }
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -1161,7 +1178,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     planner->setMotionTask(task);
 
     // create termination condition
-    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(1000);
+    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(10);
 
     // solve the task
     planner->solve(termination_condition);
@@ -1279,6 +1296,305 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     robot_state.reset();
 }
 
+std::vector<std::vector<double>> interpolate(const std::vector<double> & start, const std::vector<double> & goal, int num_points)
+{
+    std::vector<std::vector<double>> trajectory;
+    for (int i = 0; i < num_points; ++i)
+    {
+        std::vector<double> point;
+        for (size_t j = 0; j < start.size(); ++j)
+        {
+            double value = start[j] + (goal[j] - start[j]) * static_cast<double>(i) / static_cast<double>(num_points - 1);
+            point.push_back(value);
+        }
+        trajectory.push_back(point);
+    }
+    return trajectory;
+}
+
+void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    // Prepare obstacle constraint
+    float obstacle_spheres_radius = 0.06;
+    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
+    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
+    int num_of_obstacle_spheres = 12;
+    std::vector<std::vector<float>> balls_pos;
+    std::vector<float> ball_radius;
+    for (int i = 0; i < num_of_obstacle_spheres; i++)
+    {
+        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
+        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
+        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
+        balls_pos.push_back({x, y, z});
+        ball_radius.push_back(obstacle_spheres_radius);
+    }
+
+    // create planning scene
+    auto world = std::make_shared<collision_detection::World>();
+    auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
+
+    // add those balls to the planning scene
+    for (int i = 0; i < num_of_obstacle_spheres; i++)
+    {
+        Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
+        sphere_pose.translation() = Eigen::Vector3d(balls_pos[i][0], balls_pos[i][1], balls_pos[i][2]);
+        planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(ball_radius[i])), sphere_pose);
+    }
+
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
+    // generate random state on the joint model group
+    robot_state->setToRandomPositions(joint_model_group);
+    robot_state->update();
+
+    while(not planning_scene->isStateValid(*robot_state, group_name))
+    {
+        robot_state->setToRandomPositions(joint_model_group);
+        robot_state->update();
+    }
+
+    std::vector<double> start_joint_values_double;
+    std::vector<float> start_joint_values;
+    robot_state->copyJointGroupPositions(joint_model_group, start_joint_values_double);
+    for (size_t i = 0; i < start_joint_values_double.size(); i++)
+    {
+        start_joint_values.push_back((float)start_joint_values_double[i]);
+    }
+
+    // set start state
+    moveit_msgs::msg::RobotState start_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
+    
+    // generate random state on the joint model group
+    robot_state->setToRandomPositions(joint_model_group);
+    robot_state->update();
+
+    while(not planning_scene->isStateValid(*robot_state, group_name))
+    {
+        robot_state->setToRandomPositions(joint_model_group);
+        robot_state->update();
+    }
+
+    std::vector<double> goal_joint_values_double;
+    std::vector<float> goal_joint_values;
+    robot_state->copyJointGroupPositions(joint_model_group, goal_joint_values_double);
+    for (size_t i = 0; i < goal_joint_values_double.size(); i++)
+    {
+        goal_joint_values.push_back((float)goal_joint_values_double[i]);
+    }
+
+    // set goal state
+    moveit_msgs::msg::RobotState goal_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, goal_state_msg);
+
+    // print "start and goal state"
+    std::cout << "start state: ";
+    for (size_t i = 0; i < start_joint_values.size(); i++)
+    {
+        std::cout << start_joint_values[i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "goal state: ";
+    for (size_t i = 0; i < goal_joint_values.size(); i++)
+    {
+        std::cout << goal_joint_values[i] << " ";
+    }
+    std::cout << std::endl;
+
+    // set group dimension
+    int dim = robot_model->getJointModelGroup(group_name)->getActiveJointModels().size();
+    std::cout << "dim: " << dim << std::endl;
+
+    // create ompl states for start and goal
+    ompl::base::ScopedState<> start_state(ompl::base::StateSpacePtr(new ompl::base::RealVectorStateSpace(dim)));
+    ompl::base::ScopedState<> goal_state(ompl::base::StateSpacePtr(new ompl::base::RealVectorStateSpace(dim)));
+
+    for (int i = 0; i < dim; i++)
+    {
+        start_state[i] = start_joint_values[i];
+        goal_state[i] = goal_joint_values[i];
+    }
+
+    // create ompl space
+    ompl::base::StateSpacePtr space(new ompl::base::RealVectorStateSpace(dim));
+
+    std::vector<float> upper_bounds_of_active_joints;
+    std::vector<float> lower_bounds_of_active_joints;
+
+    // based on active joint map, set the bounds
+    for (size_t i = 0; i < robot_info.getActiveJointMap().size(); i++)
+    {
+        if (robot_info.getActiveJointMap()[i])
+        {
+            upper_bounds_of_active_joints.push_back(robot_info.getUpperBounds()[i]);
+            lower_bounds_of_active_joints.push_back(robot_info.getLowerBounds()[i]);
+        }
+    }
+
+    // set bounds
+    ompl::base::RealVectorBounds bounds(dim);
+    for (int i = 0; i < dim; i++)
+    {
+        bounds.setLow(i, lower_bounds_of_active_joints[i]);
+        bounds.setHigh(i, upper_bounds_of_active_joints[i]);
+    }
+    space->as<ompl::base::RealVectorStateSpace>()->setBounds(bounds);
+
+    // create space information
+    ompl::base::SpaceInformationPtr si(new ompl::base::SpaceInformation(space));
+
+    // set state validity checker
+    si->setStateValidityChecker([&](const ompl::base::State * state) {
+        // convert ompl state to robot state
+        std::vector<double> joint_values_double;
+        for (int i = 0; i < dim; i++)
+        {
+            joint_values_double.push_back(state->as<ompl::base::RealVectorStateSpace::StateType>()->values[i]);
+        }
+        robot_state->setJointGroupPositions(joint_model_group, joint_values_double);
+        robot_state->update();
+        return planning_scene->isStateValid(*robot_state, group_name);
+    });
+
+    // set problem definition
+    ompl::base::ProblemDefinitionPtr pdef(new ompl::base::ProblemDefinition(si));
+    pdef->setStartAndGoalStates(start_state, goal_state);
+
+    // create planner
+    auto planner(std::make_shared<og::RRTConnect>(si));
+    planner->setProblemDefinition(pdef);
+    planner->setup();
+
+    // solve the problem
+    ompl::base::PlannerStatus solved = planner->ob::Planner::solve(1.0);
+
+    // generate robot trajectory msg
+    moveit_msgs::msg::DisplayTrajectory display_trajectory;
+    moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
+    auto solution_robot_trajectory = robot_trajectory::RobotTrajectory(robot_model, joint_model_group);
+
+    if (solved)
+    {
+        // print "Task solved" in green color
+        std::cout << "\033[1;32m" << "Task solved" << "\033[0m" << std::endl;
+
+        // get the path from the planner
+        ob::PathPtr path = pdef->getSolutionPath();
+        const auto *path_ = path.get()->as<og::PathGeometric>();
+        // convert the path to robot trajectory, and do interpolation between states
+        const ob::State * state = path_->getState(0);
+        std::vector<double> previous_joint_values_double;
+        for (int j = 0; j < dim; j++)
+        {
+            previous_joint_values_double.push_back(state->as<ompl::base::RealVectorStateSpace::StateType>()->values[j]);
+        }
+
+        for (size_t i = 1; i < path_->getStateCount(); i++)
+        {
+            const ob::State * state = path_->getState(i);
+            std::vector<double> joint_values_double;
+            for (int j = 0; j < dim; j++)
+            {
+                joint_values_double.push_back(state->as<ompl::base::RealVectorStateSpace::StateType>()->values[j]);
+            }
+            // interpolate between previous_joint_values_double and joint_values_double
+            std::vector<std::vector<double>> interpolated_joint_values_double = interpolate(previous_joint_values_double, joint_values_double, 10);
+
+            // print the interpolated joint values only
+            for (size_t k = 0; k < interpolated_joint_values_double.size(); k++)
+            {
+                robot_state->setJointGroupPositions(joint_model_group, interpolated_joint_values_double[k]);
+                solution_robot_trajectory.addSuffixWayPoint(*robot_state, 10.0);
+            }
+
+            previous_joint_values_double = joint_values_double;
+        }
+
+        // set start state
+        moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
+        // Create a DisplayTrajectory message
+        solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
+        display_trajectory.trajectory_start = start_state_msg;
+        display_trajectory.trajectory.push_back(robot_trajectory_msg);
+    }
+    else
+    {
+        // print "Task not solved" in red color
+        std::cout << "\033[1;31m" << "Task not solved" << "\033[0m" << std::endl;
+    }
+
+    // Create a start robot state publisher
+    auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
+    // Create a goal robot state publisher
+    auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+    auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
+    std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>> display_publisher =
+        node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
+    // Create a DisplayRobotState message
+    moveit_msgs::msg::DisplayRobotState start_display_robot_state;
+    start_display_robot_state.state = start_state_msg;
+    // Create a DisplayRobotState message
+    moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
+    goal_display_robot_state.state = goal_state_msg;
+    // Create a obstacle MarkerArray message
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
+    for (size_t i = 0; i < balls_pos.size(); i++)
+    {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = node->now();
+        marker.ns = "obstacle_collision_spheres";
+        marker.id = i;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = balls_pos[i][0];
+        marker.pose.position.y = balls_pos[i][1];
+        marker.pose.position.z = balls_pos[i][2];
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 2 * ball_radius[i];
+        marker.scale.y = 2 * ball_radius[i];
+        marker.scale.z = 2 * ball_radius[i];
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.5;
+        marker.color.g = 0.5;
+        marker.color.b = 0.0;
+        obstacle_collision_spheres_marker_array.markers.push_back(marker);
+    }
+
+    std::cout << "publishing start and goal robot state" << std::endl;
+    // Publish the message in a loop
+    while (rclcpp::ok())
+    {
+        // Publish the message
+        start_robot_state_publisher->publish(start_display_robot_state);
+        goal_robot_state_publisher->publish(goal_display_robot_state);
+        obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
+
+        if (solved)
+        {
+            display_publisher->publish(display_trajectory);
+        }
+        
+        rclcpp::spin_some(node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    
+    robot_state.reset();
+}
+
 int main(int argc, char** argv)
 {
     const std::string GROUP_NAME = "arm";
@@ -1316,7 +1632,9 @@ int main(int argc, char** argv)
 
     // TEST_CUDAMPLib(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // list ros parameters
     // RCLCPP_INFO(cuda_test_node->get_logger(), "List all parameters");
