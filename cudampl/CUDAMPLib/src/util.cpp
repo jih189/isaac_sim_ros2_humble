@@ -138,7 +138,11 @@ std::vector<int> CUDAMPLib::boolVectorFlatten(const std::vector<bool>& input)
 }
 
 std::vector<int> CUDAMPLib::kLeastIndices(const std::vector<float>& nums, int k) {
-    if (k <= 0 || (size_t)k > nums.size()) return {}; // Handle invalid input
+    if (k <= 0 || (size_t)k > nums.size() || nums.size() == 0)
+    {
+        // throw error
+        throw std::runtime_error("Invalid input for kLeastIndices");
+    }
 
     // Min-heap to store {value, index} pairs
     using Pair = std::pair<float, int>;
@@ -146,6 +150,45 @@ std::vector<int> CUDAMPLib::kLeastIndices(const std::vector<float>& nums, int k)
 
     // Insert all elements into the heap
     for (size_t i = 0; i < nums.size(); ++i) {
+        minHeap.emplace(nums[i], i);
+    }
+
+    // Extract the k smallest elements
+    std::vector<int> indices;
+    for (int i = 0; i < k; ++i) {
+        indices.push_back(minHeap.top().second);
+        minHeap.pop();
+    }
+
+    return indices;
+}
+
+std::vector<int> CUDAMPLib::kLeastIndices(const std::vector<float>& nums, int k, const std::vector<int>& group_indices)
+{
+    if (k <= 0 || (size_t)k > nums.size() || nums.size() == 0 || group_indices.size() == 0 || group_indices.size() > nums.size())
+    {
+        // throw error
+        throw std::runtime_error("Invalid input for kLeastIndices");
+    }
+
+    // get the maximum index in group_indices
+    int max_index = *std::max_element(group_indices.begin(), group_indices.end());
+
+    // get the minimum index in group_indices
+    int min_index = *std::min_element(group_indices.begin(), group_indices.end());
+
+    if (max_index >= (int)nums.size() || min_index < 0)
+    {
+        // throw error
+        throw std::runtime_error("Invalid input for kLeastIndices");
+    }
+
+    // Min-heap to store {value, index} pairs
+    using Pair = std::pair<float, int>;
+    std::priority_queue<Pair, std::vector<Pair>, std::greater<Pair>> minHeap;
+
+    // Insert all elements into the heap
+    for(int i : group_indices){
         minHeap.emplace(nums[i], i);
     }
 

@@ -1178,7 +1178,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     planner->setMotionTask(task);
 
     // create termination condition
-    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(10);
+    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(1);
 
     // solve the task
     planner->solve(termination_condition);

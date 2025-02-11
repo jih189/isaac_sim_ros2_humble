@@ -9,8 +9,8 @@ namespace CUDAMPLib
         state_manager = space->createStateManager();
 
         // set the parameters
-        sample_attempts = 3;
-        k = 10;
+        sample_attempts = 200;
+        k = 5;
     }
 
     // Destructor
@@ -171,7 +171,7 @@ namespace CUDAMPLib
             }
 
             // sample states
-            auto states = space_->sample(100);
+            auto states = space_->sample(sample_attempts);
             states->update();
 
             // evaluate the feasibility of the states
@@ -187,10 +187,43 @@ namespace CUDAMPLib
                 continue;
             }
 
+            std::vector<int> start_group_indexs;
+            std::vector<int> goal_group_indexs;
+            // go through the graph and add nodes with group 1 to start_group_indexs
+            for(auto v : boost::make_iterator_range(boost::vertices(graph)))
+            {
+                if(graph[v].group == 1 && graph[v].index_in_manager != -1)
+                {
+                    start_group_indexs.push_back(graph[v].index_in_manager);
+                }
+                else if(graph[v].group == 2 && graph[v].index_in_manager != -1)
+                {
+                    goal_group_indexs.push_back(graph[v].index_in_manager);
+                }
+            }
+
+            printf("iteration %d ============== \n", t);
+
+            // print start group indexs
+            printf("start_group_indexs: ");
+            for(auto i : start_group_indexs)
+            {
+                printf("%d ", i);
+            }
+            printf("\n");
+
+            // print goal group indexs
+            printf("goal_group_indexs: ");
+            for(auto i : goal_group_indexs)
+            {
+                printf("%d ", i);
+            }
+            printf("\n");
+
             // find k nearest neighbors for each state
             std::vector<std::vector<int>> neighbors_index;
-            int actual_k = state_manager->find_k_nearest_neighbors(k, states, neighbors_index);
-            
+            int actual_k = state_manager->find_k_nearest_neighbors(k, states, neighbors_index, {start_group_indexs, goal_group_indexs});
+
             // validate the motion from the sampled states to their neighbors.
             // prepare the motion states 1
             std::vector<BaseStatesPtr> states_list;
@@ -209,12 +242,31 @@ namespace CUDAMPLib
                 }
             }
 
+            printf("number of valid sampled states: %d\n", states->getNumOfStates());
+
+            // print indexs_in_manager
+            printf("indexs_in_manager : ");
+            for(auto i : indexs_in_manager)
+            {
+                printf("%d ", i);
+            }
+            printf("\n");
+
             auto motion_states_2 = state_manager->get_states(indexs_in_manager);
 
             // calculate costs and check the feasibility of motion between the states pairs.
             std::vector<bool> motion_feasibility;
             std::vector<float> motion_costs;
             space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
+
+            // print motion_feasibility
+            printf("motion_feasibility: ");
+            for(bool i : motion_feasibility)
+            {
+                // print true as T and false as F
+                printf("%c ", i ? 'T' : 'F');
+            }
+            printf("\n");
 
             /*
                 Assume we have three sampled states and k = 2, and S is the sampled state, N is the neighbor of S.
@@ -322,6 +374,22 @@ namespace CUDAMPLib
                     throw std::runtime_error("Error: has_connect_to_start && has_connect_to_goal are both false");
                 }
             }
+
+            start_group_indexs.clear();
+            goal_group_indexs.clear();
+            // go through the graph and add nodes with group 1 to start_group_indexs
+            for(auto v : boost::make_iterator_range(boost::vertices(graph)))
+            {
+                if(graph[v].group == 1 && graph[v].index_in_manager != -1)
+                {
+                    start_group_indexs.push_back(graph[v].index_in_manager);
+                }
+                else if(graph[v].group == 2 && graph[v].index_in_manager != -1)
+                {
+                    goal_group_indexs.push_back(graph[v].index_in_manager);
+                }
+            }
+            printf("start group size: %d, goal group size: %d\n", start_group_indexs.size(), goal_group_indexs.size());
 
             if(has_solution)
                 break;

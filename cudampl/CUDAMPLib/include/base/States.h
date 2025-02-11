@@ -179,6 +179,16 @@ namespace CUDAMPLib
             ) = 0;
 
             /**
+                @brief Similar to the above function, but this function allows users to specify the group indexs.
+                That is, this function will return the k nearest neighbors of the query states in each group.
+             */
+            virtual int find_k_nearest_neighbors(
+                int k, const BaseStatesPtr & query_states, 
+                std::vector<std::vector<int>> & neighbors_index,
+                const std::vector<std::vector<int>> & group_indexs
+            ) = 0;
+
+            /**
                 @brief Given indexs of states, find the states in the manager.
              */
             virtual BaseStatesPtr get_states(const std::vector<int> & states_index) = 0;
