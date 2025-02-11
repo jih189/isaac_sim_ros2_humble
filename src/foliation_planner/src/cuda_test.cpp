@@ -1202,8 +1202,6 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
         std::vector<std::vector<float>> solution_path = task->getSolution();
 
-        moveit_msgs::msg::RobotState start_state_msg;
-
         // generate robot trajectory msg
         for (size_t i = 0; i < solution_path.size(); i++)
         {
@@ -1211,12 +1209,6 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
             std::vector<double> solution_path_i_double = std::vector<double>(solution_path[i].begin(), solution_path[i].end());
             robot_state->setJointGroupPositions(joint_model_group, solution_path_i_double);
             solution_robot_trajectory.addSuffixWayPoint(*robot_state, 10.0);
-
-            if (i == 0)
-            {
-                // set start state
-                moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
-            }
         }
         // Create a DisplayTrajectory message
         solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
@@ -1355,6 +1347,8 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
     }
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
 
     // generate random state on the joint model group
@@ -1465,6 +1459,11 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
         for (int i = 0; i < dim; i++)
         {
             joint_values_double.push_back(state->as<ompl::base::RealVectorStateSpace::StateType>()->values[i]);
+            // check if joint value is in the joint limits
+            if (joint_values_double[i] < lower_bounds_of_active_joints[i] || joint_values_double[i] > upper_bounds_of_active_joints[i])
+            {
+                return false;
+            }
         }
         robot_state->setJointGroupPositions(joint_model_group, joint_values_double);
         robot_state->update();
@@ -1525,8 +1524,6 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
             previous_joint_values_double = joint_values_double;
         }
 
-        // set start state
-        moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
         // Create a DisplayTrajectory message
         solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
         display_trajectory.trajectory_start = start_state_msg;
