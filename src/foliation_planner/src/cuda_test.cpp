@@ -425,6 +425,8 @@ void TEST_KINE_FORWARD(const moveit::core::RobotModelPtr & robot_model, const st
     RCLCPP_INFO(LOGGER, "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
     const std::vector<std::string>& joint_names = robot_model->getActiveJointModelNames();
 
     // Generate test set
@@ -556,6 +558,8 @@ void DISPLAY_ROBOT_STATE_IN_RVIZ(const moveit::core::RobotModelPtr & robot_model
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
     const std::vector<std::string>& joint_names = robot_model->getActiveJointModelNames();
 
     // print robot model name
@@ -673,6 +677,8 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, const std:
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
     const std::vector<std::string>& joint_names = robot_model->getActiveJointModelNames();
 
     // print robot model name
@@ -1079,6 +1085,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     }
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
     
     // generate random state on the joint model group
