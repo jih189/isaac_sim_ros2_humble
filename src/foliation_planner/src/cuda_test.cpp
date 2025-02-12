@@ -28,390 +28,112 @@
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/geometric/SimpleSetup.h>
 
+#include "foliation_planner/robot_info.hpp"
+
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
 
-#include <yaml-cpp/yaml.h>
-
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("CUDAMPLib");
 
-/**
-A class which take robot model and generate robot information for cudampl.
- */
-class RobotInfo
+visualization_msgs::msg::MarkerArray generate_obstacles_markers(
+    const std::vector<std::vector<float>> & balls_pos,
+    const std::vector<float> & ball_radius,
+    rclcpp::Node::SharedPtr node)
 {
-    public:
-    RobotInfo(const moveit::core::RobotModelPtr& robot_model, const std::string & group_name, const std::string & collision_spheres_file_path, bool debug = false)
+     // Create a obstacle MarkerArray message
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
+    for (size_t i = 0; i < balls_pos.size(); i++)
     {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = node->now();
+        marker.ns = "obstacle_collision_spheres";
+        marker.id = i;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = balls_pos[i][0];
+        marker.pose.position.y = balls_pos[i][1];
+        marker.pose.position.z = balls_pos[i][2];
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 2 * ball_radius[i];
+        marker.scale.y = 2 * ball_radius[i];
+        marker.scale.z = 2 * ball_radius[i];
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.5;
+        marker.color.g = 0.5;
+        marker.color.b = 0.0;
+        obstacle_collision_spheres_marker_array.markers.push_back(marker);
+    }
+    return obstacle_collision_spheres_marker_array;
+}
 
-        // Initialize all variables
-        joint_types.clear();
-        joint_poses.clear();
-        joint_axes.clear();
-        link_maps.clear();
-        link_names.clear();
-        joint_name_to_parent_link.clear();
-        collision_spheres_map.clear();
-        collision_spheres_pos.clear();
-        collision_spheres_radius.clear();
-        self_collision_enabled_map.clear();
-        active_joint_map.clear();
-        upper_bounds.clear();
-        lower_bounds.clear();
-        default_joint_values.clear();
-        dimension = 0;
-
-        // Get all link names
-        link_names = robot_model->getLinkModelNames();
-
-        if (! loadCollisionSpheres(collision_spheres_file_path)) // this requires the link_names is generated.
+std::vector<std::vector<double>> interpolate(const std::vector<double> & start, const std::vector<double> & goal, int num_points)
+{
+    std::vector<std::vector<double>> trajectory;
+    for (int i = 0; i < num_points; ++i)
+    {
+        std::vector<double> point;
+        for (size_t j = 0; j < start.size(); ++j)
         {
-            RCLCPP_ERROR(LOGGER, "Failed to load collision spheres from file");
+            double value = start[j] + (goal[j] - start[j]) * static_cast<double>(i) / static_cast<double>(num_points - 1);
+            point.push_back(value);
         }
-
-        // initialize self_collision_enabled_map with true with size of link_names
-        self_collision_enabled_map.resize(link_names.size(), std::vector<bool>(link_names.size(), true));
-        auto srdf_model_ptr = robot_model->getSRDF();
-        // print distabled collision pair
-        for (const auto& disabled_collision_pair : srdf_model_ptr->getDisabledCollisionPairs())
-        {
-            // get index of link1_ and link2_
-            int link1_index = -1;
-            for (size_t i = 0; i < link_names.size(); i++)
-            {
-                if (link_names[i] == disabled_collision_pair.link1_)
-                {
-                    link1_index = i;
-                    break;
-                }
-            }
-            int link2_index = -1;
-            for (size_t i = 0; i < link_names.size(); i++)
-            {
-                if (link_names[i] == disabled_collision_pair.link2_)
-                {
-                    link2_index = i;
-                    break;
-                }
-            }
-            if (link1_index == -1 || link2_index == -1)
-            {
-                // print error message in red
-                std::cout << "\033[1;31mDisabled collision pair link name is not in the link names\033[0m" << std::endl;
-                continue;
-            }
-
-            self_collision_enabled_map[link1_index][link2_index] = false;
-            self_collision_enabled_map[link2_index][link1_index] = false;
-        }
-
-        std::vector<double> default_joint_values_double;
-        // get default joint values
-        robot_model->getVariableDefaultPositions(default_joint_values_double);
-
-        size_t non_fixed_joint_index = 0;
-
-        // Ready the input to kin_forward
-        for (const auto& link_name : link_names)
-        {
-            if (debug)
-            {
-                std::cout << "link name: " << link_name << std::endl;
-            }
-            
-            // print its parent link name
-            const moveit::core::LinkModel* link_model = robot_model->getLinkModel(link_name);
-            if (link_model->getParentLinkModel() != nullptr) // if it is not the root link
-            {
-                std::string parent_link_name = link_model->getParentLinkModel()->getName();
-                if (debug)
-                    std::cout << "Parent Link name: " << parent_link_name << std::endl;
-
-                // find the index of parent_link_name in the link_names
-                int parent_link_index = -1;
-                for (size_t i = 0; i < link_names.size(); i++)
-                {
-                    if (link_names[i] == parent_link_name)
-                    {
-                        parent_link_index = i;
-                        break;
-                    }
-                }
-                link_maps.push_back(parent_link_index);
-                
-                // find joint name to its parent link
-                const moveit::core::JointModel* joint_model = link_model->getParentJointModel();
-                if (debug)
-                {
-                    std::cout << "Joint name: " << joint_model->getName() << std::endl;
-                    std::cout << "Joint type: " << joint_model->getType() << std::endl;
-                }
-                joint_name_to_parent_link.push_back(joint_model->getName());
-                joint_types.push_back(joint_model->getType());
-
-                if (joint_model->getType() == moveit::core::JointModel::REVOLUTE)
-                {
-                    const moveit::core::RevoluteJointModel* revolute_joint_model = dynamic_cast<const moveit::core::RevoluteJointModel*>(joint_model);
-                    joint_axes.push_back(revolute_joint_model->getAxis());
-                    default_joint_values.push_back((float)default_joint_values_double[non_fixed_joint_index]);
-                    non_fixed_joint_index++;
-                    if (debug)
-                        std::cout << "Joint axis: " << revolute_joint_model->getAxis().transpose() << std::endl;
-                }
-                else if (joint_model->getType() == moveit::core::JointModel::PRISMATIC)
-                {
-                    const moveit::core::PrismaticJointModel* prismatic_joint_model = dynamic_cast<const moveit::core::PrismaticJointModel*>(joint_model);
-                    joint_axes.push_back(prismatic_joint_model->getAxis());
-                    default_joint_values.push_back((float)default_joint_values_double[non_fixed_joint_index]);
-                    non_fixed_joint_index++;
-                    if (debug)
-                        std::cout << "Joint axis: " << prismatic_joint_model->getAxis().transpose() << std::endl;
-                }
-                else
-                {
-                    joint_axes.push_back(Eigen::Vector3d::Zero());
-                    default_joint_values.push_back(0.0);
-                    if (debug)
-                        std::cout << "Joint axis: " << Eigen::Vector3d::Zero().transpose() << std::endl;
-                }
-
-                // get joint origin transform
-                joint_poses.push_back(link_model->getJointOriginTransform());
-            }
-            else
-            {
-                joint_name_to_parent_link.push_back("");
-                joint_types.push_back(0); // 0 means unknown joint type
-                joint_poses.push_back(Eigen::Isometry3d::Identity());
-                joint_axes.push_back(Eigen::Vector3d::Zero());
-                default_joint_values.push_back(0.0);
-                link_maps.push_back(-1);
-            }
-            if (debug)
-                std::cout << " ===================================== " << std::endl;
-        }
-    
-        const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
-        const std::vector<std::string>& active_joint_model_names = joint_model_group->getActiveJointModelNames();
-        
-        // get the active joint map
-        for (const auto& joint_name : joint_name_to_parent_link)
-        {
-            bool active = false;
-            for (const auto& active_joint_name : active_joint_model_names)
-            {
-                if (joint_name == active_joint_name)
-                {
-                    dimension++;
-                    active = true;
-                    break;
-                }
-            }
-            active_joint_map.push_back(active);
-        }
-
-        std::vector<float> lower_bounds_temp;
-        std::vector<float> upper_bounds_temp;
-
-        // get joint bounds
-        const moveit::core::JointBoundsVector& joint_bounds_vector = joint_model_group->getActiveJointModelsBounds();
-        for (const std::vector<moveit::core::VariableBounds>* joint_bounds : joint_bounds_vector)
-        {
-            for (const moveit::core::VariableBounds & joint_bound : *joint_bounds)
-            {
-                lower_bounds_temp.push_back((float)(joint_bound.min_position_));
-                upper_bounds_temp.push_back((float)(joint_bound.max_position_));
-            }
-        }
-
-        int active_joint_index = 0;
-        for (size_t i = 0; i < active_joint_map.size(); i++)
-        {
-            if (active_joint_map[i])
-            {
-                lower_bounds.push_back(lower_bounds_temp[active_joint_index]);
-                upper_bounds.push_back(upper_bounds_temp[active_joint_index]);
-                active_joint_index++;
-            }
-            else
-            {
-                lower_bounds.push_back(0.0);
-                upper_bounds.push_back(0.0);
-            }
-        }
-
-        // std::vector<double> default_joint_values_double;
-        // // get default joint values
-        // robot_model->getVariableDefaultPositions(default_joint_values_double);
-
-        // // for (size_t i = 0; i < default_joint_values_double.size(); i++)
-        // // {
-        // //     // default_joint_values.push_back((float)default_joint_values_double[i]);
-        // //     default_joint_values.push_back((float)i);
-        // // }
+        trajectory.push_back(point);
     }
+    return trajectory;
+}
 
-    bool loadCollisionSpheres(const std::string & collision_spheres_file_path)
+visualization_msgs::msg::MarkerArray generate_self_collision_markers(
+    const std::vector<std::vector<float>> & collision_spheres_pos_of_selected_config,
+    const std::vector<float> & collision_spheres_radius,
+    rclcpp::Node::SharedPtr node)
+{
+    // Create a MarkerArray message
+    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array;
+    for (size_t i = 0; i < collision_spheres_pos_of_selected_config.size(); i++)
     {
-        // load collision spheres from file
-
-        if (collision_spheres_file_path.empty()){
-            // print error message in red
-            std::cout << "\033[1;31mCollision spheres file path is empty\033[0m" << std::endl;
-            return false;
-        }
-
-        // load a yaml file
-        YAML::Node collision_spheres_yaml = YAML::LoadFile(collision_spheres_file_path);
-
-        // check if the yaml file contains collision_spheres
-        if (!collision_spheres_yaml["collision_spheres"]){
-            // print error message in red
-            std::cout << "\033[1;31mNo collision_spheres in the yaml file\033[0m" << std::endl;
-            return false;
-        }
-        else{
-            // std::cout << collision_spheres_yaml["collision_spheres"] << std::endl;
-
-            // print each collision sphere
-            for (const auto& collision_sphere : collision_spheres_yaml["collision_spheres"]){
-                // std::cout << collision_sphere << std::endl;
-                // print each key of the collision sphere
-                for (const auto& key : collision_sphere){
-                    // std::cout << key.first.as<std::string>() << std::endl;
-
-                    std::string collision_sphere_link_name = key.first.as<std::string>();
-
-                    // get collision_sphere_link_name index in link_names
-                    int collision_sphere_link_index = -1;
-                    for (size_t i = 0; i < link_names.size(); i++)
-                    {
-                        if (link_names[i] == collision_sphere_link_name)
-                        {
-                            collision_sphere_link_index = i;
-                            break;
-                        }
-                    }
-
-                    if (collision_sphere_link_index == -1){
-                        // print error message in red
-                        std::cout << "\033[1;31mCollision sphere link name is not in the link names\033[0m" << std::endl;
-                        return false;
-                    }
-
-                    // print each value of the key
-                    for (const auto& value : key.second){
-                        // std::cout << "center " << value["center"][0] << " " << value["center"][1] << " " << value["center"][2] << " " << value["center"][3] << " radius " << value["radius"] << std::endl;
-                        collision_spheres_map.push_back(collision_sphere_link_index);
-                        collision_spheres_pos.push_back({value["center"][0].as<float>(), value["center"][1].as<float>(), value["center"][2].as<float>()});
-                        collision_spheres_radius.push_back(value["radius"].as<float>());
-                    }
-                }
-                // std::cout << collision_sphere[0].first << std::endl;
-            }
-
-            // list all keys of collision_spheres_yaml["collision_spheres"]
-            // for (const auto& key : collision_spheres_yaml["collision_spheres"]){
-            //     std::cout << key.first.as<std::string>() << std::endl;
-            // }
-            // std::cout << "type: " << collision_spheres_yaml["collision_spheres"].Type() << std::endl;
-            // for (const auto& collision_sphere : collision_spheres_yaml["collision_spheres"]){
-            //     // each collision sphere is a map
-            //     // print map key of the collision sphere
-            //     std::cout << "key: " << collision_sphere.first.as<std::string>() << std::endl;
-            // }
-        }
-
-        return true;
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = node->now();
+        marker.ns = "self_collision_spheres";
+        marker.id = i;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = collision_spheres_pos_of_selected_config[i][0];
+        marker.pose.position.y = collision_spheres_pos_of_selected_config[i][1];
+        marker.pose.position.z = collision_spheres_pos_of_selected_config[i][2];
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 2 * collision_spheres_radius[i];
+        marker.scale.y = 2 * collision_spheres_radius[i];
+        marker.scale.z = 2 * collision_spheres_radius[i];
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+        robot_collision_spheres_marker_array.markers.push_back(marker);
     }
+    return robot_collision_spheres_marker_array;
+}
 
-    std::vector<int> getJointTypes() const
+void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<float> & ball_radius)
+{
+    float obstacle_spheres_radius = 0.06;
+    int num_of_obstacle_spheres = 20;
+    for (int i = 0; i < num_of_obstacle_spheres; i++)
     {
-        return joint_types;
+        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
+        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
+        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
+        balls_pos.push_back({x, y, z});
+        ball_radius.push_back(obstacle_spheres_radius);
     }
-
-    std::vector<Eigen::Isometry3d> getJointPoses() const
-    {
-        return joint_poses;
-    }
-
-    std::vector<Eigen::Vector3d> getJointAxes() const
-    {
-        return joint_axes;
-    }
-
-    std::vector<int> getLinkMaps() const
-    {
-        return link_maps;
-    }
-
-    std::vector<std::string> getLinkNames() const
-    {
-        return link_names;
-    }
-
-    std::vector<int> getCollisionSpheresMap() const
-    {
-        return collision_spheres_map;
-    }
-
-    std::vector<std::vector<float>> getCollisionSpheresPos() const
-    {
-        return collision_spheres_pos;
-    }
-
-    std::vector<float> getCollisionSpheresRadius() const
-    {
-        return collision_spheres_radius;
-    }
-
-    std::vector<std::vector<bool>> getSelfCollisionEnabledMap() const
-    {
-        return self_collision_enabled_map;
-    }
-
-    std::vector<bool> getActiveJointMap() const
-    {
-        return active_joint_map;
-    }
-
-    int getDimension() const
-    {
-        return dimension;
-    }
-
-    std::vector<float> getUpperBounds() const
-    {
-        return upper_bounds;
-    }
-
-    std::vector<float> getLowerBounds() const
-    {
-        return lower_bounds;
-    }
-
-    std::vector<float> getDefaultJointValues() const
-    {
-        return default_joint_values;
-    }
-
-    private:
-    std::vector<int> joint_types;
-    std::vector<Eigen::Isometry3d> joint_poses;
-    std::vector<Eigen::Vector3d> joint_axes;
-    std::vector<int> link_maps; // the index of parent link in link_names
-    std::vector<std::vector<bool>> self_collision_enabled_map;
-    std::vector<std::string> link_names;
-    std::vector<std::string> joint_name_to_parent_link;
-    std::vector<int> collision_spheres_map; // define which link the collision sphere belongs to
-    std::vector<std::vector<float>> collision_spheres_pos; // (x, y, z)
-    std::vector<float> collision_spheres_radius; // radius
-    std::vector<bool> active_joint_map;
-    int dimension;
-    std::vector<float> upper_bounds;
-    std::vector<float> lower_bounds;
-    std::vector<float> default_joint_values;
-};
+}
 
 /***
     Randomly generate a set of joint values and pass them to the kin_forward function.
@@ -609,33 +331,7 @@ void DISPLAY_ROBOT_STATE_IN_RVIZ(const moveit::core::RobotModelPtr & robot_model
     auto marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("collision_spheres", 1);
 
     // Create a MarkerArray message
-    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array;
-    for (size_t i = 0; i < collision_spheres_pos_of_first_config.size(); i++)
-    {
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "base_link";
-        marker.header.stamp = node->now();
-        marker.ns = "collision_spheres";
-        marker.id = i;
-        marker.type = visualization_msgs::msg::Marker::SPHERE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.pose.position.x = collision_spheres_pos_of_first_config[i][0];
-        marker.pose.position.y = collision_spheres_pos_of_first_config[i][1];
-        marker.pose.position.z = collision_spheres_pos_of_first_config[i][2];
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.scale.y = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.scale.z = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
-        robot_collision_spheres_marker_array.markers.push_back(marker);
-    }
-
+    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array = generate_self_collision_markers(collision_spheres_pos_of_first_config, robot_info.getCollisionSpheresRadius(), node);
     // Create a robot state publisher
     auto robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("display_robot_state", 1);
 
@@ -689,22 +385,9 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, const std:
     // robot_state->setToRandomPositions();
     // robot_state->update();
 
-    float obstacle_spheres_radius = 0.06;
-    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
-    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
-    int num_of_obstacle_spheres = 20;
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    for (int i = 0; i < num_of_obstacle_spheres; i++)
-    {
-        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
-        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
-        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
-        balls_pos.push_back({x, y, z});
-        ball_radius.push_back(obstacle_spheres_radius);
-    }
-
-    /***************************************** test */
+    prepare_obstacles(balls_pos, ball_radius);
 
     // Generate test set with one configuration.
     std::vector<std::vector<float>> joint_values_test_set;
@@ -808,60 +491,14 @@ void TEST_COLLISIONS(const moveit::core::RobotModelPtr & robot_model, const std:
     moveit::core::robotStateToRobotStateMsg(*robot_state, display_robot_state.state);
 
     // Create a self MarkerArray message
-    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array;
-    for (size_t i = 0; i < collision_spheres_pos_of_selected_config.size(); i++)
-    {
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "base_link";
-        marker.header.stamp = node->now();
-        marker.ns = "self_collision_spheres";
-        marker.id = i;
-        marker.type = visualization_msgs::msg::Marker::SPHERE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.pose.position.x = collision_spheres_pos_of_selected_config[i][0];
-        marker.pose.position.y = collision_spheres_pos_of_selected_config[i][1];
-        marker.pose.position.z = collision_spheres_pos_of_selected_config[i][2];
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.scale.y = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.scale.z = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
-        robot_collision_spheres_marker_array.markers.push_back(marker);
-    }
+    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array = generate_self_collision_markers(
+        collision_spheres_pos_of_selected_config,
+        robot_info.getCollisionSpheresRadius(),
+        node
+    );
 
     // Create a obstacle MarkerArray message
-    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
-    for (size_t i = 0; i < balls_pos.size(); i++)
-    {
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "base_link";
-        marker.header.stamp = node->now();
-        marker.ns = "obstacle_collision_spheres";
-        marker.id = i;
-        marker.type = visualization_msgs::msg::Marker::SPHERE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.pose.position.x = balls_pos[i][0];
-        marker.pose.position.y = balls_pos[i][1];
-        marker.pose.position.z = balls_pos[i][2];
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = 2 * obstacle_spheres_radius;
-        marker.scale.y = 2 * obstacle_spheres_radius;
-        marker.scale.z = 2 * obstacle_spheres_radius;
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 1.0;
-        marker.color.g = 0.0;
-        marker.color.b = 0.0;
-        obstacle_collision_spheres_marker_array.markers.push_back(marker);
-    }
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generate_obstacles_markers(balls_pos, ball_radius, node);
 
     // use loop to publish the trajectory
     while (rclcpp::ok())
@@ -886,21 +523,9 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
-    // Prepare obstacle constraint
-    float obstacle_spheres_radius = 0.06;
-    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
-    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
-    int num_of_obstacle_spheres = 20;
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    for (int i = 0; i < num_of_obstacle_spheres; i++)
-    {
-        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
-        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
-        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
-        balls_pos.push_back({x, y, z});
-        ball_radius.push_back(obstacle_spheres_radius);
-    }
+    prepare_obstacles(balls_pos, ball_radius);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -964,84 +589,26 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
     std::vector<std::vector<std::vector<float>>> self_collision_spheres_pos =  sampled_states->getSelfCollisionSpheresPosInBaseLinkHost();
 
     std::vector<std::vector<float>> collision_spheres_pos_of_selected_config = self_collision_spheres_pos[0];
-    bool is_selected_config_feasible = state_feasibility[0];
+
+    /*======================================= prepare publishers ==================================================================== */
 
     // Create marker publisher
     auto self_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("self_collision_spheres", 1);
-    
     auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
-
     // Create a self MarkerArray message
-    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array;
-    for( size_t i = 0 ; i < collision_spheres_pos_of_selected_config.size(); i++)
-    {
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "base_link";
-        marker.header.stamp = node->now();
-        marker.ns = "self_collision_spheres";
-        marker.id = i;
-        marker.type = visualization_msgs::msg::Marker::SPHERE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.pose.position.x = collision_spheres_pos_of_selected_config[i][0];
-        marker.pose.position.y = collision_spheres_pos_of_selected_config[i][1];
-        marker.pose.position.z = collision_spheres_pos_of_selected_config[i][2];
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.scale.y = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.scale.z = 2 * robot_info.getCollisionSpheresRadius()[i];
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        if (is_selected_config_feasible)
-        {
-            marker.color.r = 0.0;
-            marker.color.g = 1.0;
-            marker.color.b = 0.0;
-        }
-        else
-        {
-            marker.color.r = 1.0;
-            marker.color.g = 0.0;
-            marker.color.b = 0.0;
-        }
-        robot_collision_spheres_marker_array.markers.push_back(marker);
-    }
-
+    visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array = generate_self_collision_markers(
+        collision_spheres_pos_of_selected_config,
+        robot_info.getCollisionSpheresRadius(),
+        node
+    );
     // Create a obstacle MarkerArray message
-    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
-    for (size_t i = 0; i < balls_pos.size(); i++)
-    {
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "base_link";
-        marker.header.stamp = node->now();
-        marker.ns = "obstacle_collision_spheres";
-        marker.id = i;
-        marker.type = visualization_msgs::msg::Marker::SPHERE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.pose.position.x = balls_pos[i][0];
-        marker.pose.position.y = balls_pos[i][1];
-        marker.pose.position.z = balls_pos[i][2];
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = 2 * ball_radius[i];
-        marker.scale.y = 2 * ball_radius[i];
-        marker.scale.z = 2 * ball_radius[i];
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.5;
-        marker.color.g = 0.5;
-        marker.color.b = 0.0;
-        obstacle_collision_spheres_marker_array.markers.push_back(marker);
-    }
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generate_obstacles_markers(balls_pos, ball_radius, node);
 
     // use loop to publish the trajectory
     while (rclcpp::ok())
     {
         // Publish the message
         self_marker_publisher->publish(robot_collision_spheres_marker_array);
-
         obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
         
         rclcpp::spin_some(node);
@@ -1058,27 +625,16 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
     // Prepare obstacle constraint
-    float obstacle_spheres_radius = 0.06;
-    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
-    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
-    int num_of_obstacle_spheres = 20;
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    for (int i = 0; i < num_of_obstacle_spheres; i++)
-    {
-        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
-        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
-        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
-        balls_pos.push_back({x, y, z});
-        ball_radius.push_back(obstacle_spheres_radius);
-    }
+    prepare_obstacles(balls_pos, ball_radius);
 
     // create planning scene
     auto world = std::make_shared<collision_detection::World>();
     auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
 
     // add those balls to the planning scene
-    for (int i = 0; i < num_of_obstacle_spheres; i++)
+    for (size_t i = 0; i < balls_pos.size(); i++)
     {
         Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
         sphere_pose.translation() = Eigen::Vector3d(balls_pos[i][0], balls_pos[i][1], balls_pos[i][2]);
@@ -1187,7 +743,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     planner->setMotionTask(task);
 
     // create termination condition
-    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(10);
+    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(100);
     // CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
 
     // solve the task
@@ -1224,16 +780,13 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         std::cout << "\033[1;31m" << "Task not solved" << "\033[0m" << std::endl;
     }
 
-    /**************************************************************************************************** */
+    /************************************* prepare publishers ******************************************* */
 
     // Create a start robot state publisher
     auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
-
     // Create a goal robot state publisher
     auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
-
     auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
-
     std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>> display_publisher =
         node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
 
@@ -1246,33 +799,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     goal_display_robot_state.state = goal_state_msg;
 
     // Create a obstacle MarkerArray message
-    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
-    for (size_t i = 0; i < balls_pos.size(); i++)
-    {
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "base_link";
-        marker.header.stamp = node->now();
-        marker.ns = "obstacle_collision_spheres";
-        marker.id = i;
-        marker.type = visualization_msgs::msg::Marker::SPHERE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.pose.position.x = balls_pos[i][0];
-        marker.pose.position.y = balls_pos[i][1];
-        marker.pose.position.z = balls_pos[i][2];
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = 2 * ball_radius[i];
-        marker.scale.y = 2 * ball_radius[i];
-        marker.scale.z = 2 * ball_radius[i];
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.5;
-        marker.color.g = 0.5;
-        marker.color.b = 0.0;
-        obstacle_collision_spheres_marker_array.markers.push_back(marker);
-    }
-
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generate_obstacles_markers(balls_pos, ball_radius, node);
     std::cout << "publishing start and goal robot state" << std::endl;
 
     // Publish the message in a loop
@@ -1298,21 +825,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     robot_state.reset();
 }
 
-std::vector<std::vector<double>> interpolate(const std::vector<double> & start, const std::vector<double> & goal, int num_points)
-{
-    std::vector<std::vector<double>> trajectory;
-    for (int i = 0; i < num_points; ++i)
-    {
-        std::vector<double> point;
-        for (size_t j = 0; j < start.size(); ++j)
-        {
-            double value = start[j] + (goal[j] - start[j]) * static_cast<double>(i) / static_cast<double>(num_points - 1);
-            point.push_back(value);
-        }
-        trajectory.push_back(point);
-    }
-    return trajectory;
-}
+
 
 void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
@@ -1321,27 +834,16 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
     // Prepare obstacle constraint
-    float obstacle_spheres_radius = 0.06;
-    // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
-    // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
-    int num_of_obstacle_spheres = 20;
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    for (int i = 0; i < num_of_obstacle_spheres; i++)
-    {
-        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
-        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
-        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
-        balls_pos.push_back({x, y, z});
-        ball_radius.push_back(obstacle_spheres_radius);
-    }
+    prepare_obstacles(balls_pos, ball_radius);
 
     // create planning scene
     auto world = std::make_shared<collision_detection::World>();
     auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
 
     // add those balls to the planning scene
-    for (int i = 0; i < num_of_obstacle_spheres; i++)
+    for (size_t i = 0; i < balls_pos.size(); i++)
     {
         Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
         sphere_pose.translation() = Eigen::Vector3d(balls_pos[i][0], balls_pos[i][1], balls_pos[i][2]);
@@ -1551,32 +1053,7 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
     moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
     goal_display_robot_state.state = goal_state_msg;
     // Create a obstacle MarkerArray message
-    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
-    for (size_t i = 0; i < balls_pos.size(); i++)
-    {
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "base_link";
-        marker.header.stamp = node->now();
-        marker.ns = "obstacle_collision_spheres";
-        marker.id = i;
-        marker.type = visualization_msgs::msg::Marker::SPHERE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.pose.position.x = balls_pos[i][0];
-        marker.pose.position.y = balls_pos[i][1];
-        marker.pose.position.z = balls_pos[i][2];
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = 2 * ball_radius[i];
-        marker.scale.y = 2 * ball_radius[i];
-        marker.scale.z = 2 * ball_radius[i];
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.5;
-        marker.color.g = 0.5;
-        marker.color.b = 0.0;
-        obstacle_collision_spheres_marker_array.markers.push_back(marker);
-    }
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generate_obstacles_markers(balls_pos, ball_radius, node);
 
     std::cout << "publishing start and goal robot state" << std::endl;
     // Publish the message in a loop
