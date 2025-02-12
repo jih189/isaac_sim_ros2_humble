@@ -11,7 +11,7 @@ namespace CUDAMPLib
         // set the parameters
         sample_attempts_ = 50;
         k_ = 5;
-        max_distance_ = 0.5;
+        max_distance_ = 1.0;
     }
 
     // Destructor
@@ -403,10 +403,10 @@ namespace CUDAMPLib
                 }
             }
 
-            start_group_indexs.clear();
-            goal_group_indexs.clear();
-            getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
-            printf("iter %d start group size: %d, goal group size: %d\n", t, start_group_indexs.size(), goal_group_indexs.size());
+            // start_group_indexs.clear();
+            // goal_group_indexs.clear();
+            // getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
+            // printf("iter %d start group size: %d, goal group size: %d\n", t, start_group_indexs.size(), goal_group_indexs.size());
 
             if(has_solution)
                 break;
@@ -438,17 +438,17 @@ namespace CUDAMPLib
             path.push_back(start_node);
 
             // Print the shortest path. 
-            printf("Shortest path from start to goal:\n");
+            // printf("Shortest path from start to goal:\n");
             std::vector<int> path_indexs_in_manager;
             for (auto it = path.rbegin(); it != path.rend(); ++it)
             {
                 if (graph[*it].index_in_manager != -1)
                 {
                     path_indexs_in_manager.push_back(graph[*it].index_in_manager);
-                    printf("%d ", graph[*it].index_in_manager);
+                    // printf("%d ", graph[*it].index_in_manager);
                 }
             }
-            printf("\n");
+            // printf("\n");
 
             auto solution = space_->getPathFromWaypoints(state_manager->get_states(path_indexs_in_manager));
             task_->setSolution(solution, space_);

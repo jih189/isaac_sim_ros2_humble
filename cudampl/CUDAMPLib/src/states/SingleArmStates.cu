@@ -584,7 +584,7 @@ namespace CUDAMPLib
         std::vector<int> actual_k_in_each_group;
         for (size_t i = 0; i < group_indexs.size(); i++)
         {
-            actual_k_in_each_group.push_back(group_indexs[i].size() < k ? group_indexs[i].size() : k);
+            actual_k_in_each_group.push_back((int)(group_indexs[i].size()) < k ? (int)(group_indexs[i].size()) : k);
             total_actual_k += actual_k_in_each_group[i];
         }
 
@@ -619,7 +619,7 @@ namespace CUDAMPLib
 
         for (int i = 0; i < query_states->getNumOfStates(); i++) {
             std::vector<int> index_k_nearest_neighbors;
-            for (int g = 0 ; g < group_indexs.size(); g++)
+            for (size_t g = 0 ; g < group_indexs.size(); g++)
             {
                 // find index of the k least distances of distances_from_query_to_states[i]
                 std::vector<int> index_k_nearest_neighbors_of_group = kLeastIndices(distances_from_query_to_states[i], actual_k_in_each_group[g], group_indexs[g]);

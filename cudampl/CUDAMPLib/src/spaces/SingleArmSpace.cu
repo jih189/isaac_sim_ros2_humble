@@ -124,7 +124,7 @@ namespace CUDAMPLib {
         else
         {
             curandState_t local_state = d_random_state[idx];
-            d_sampled_states[idx] = curand_uniform(&local_state);// * (d_upper_bound[joint_idx] - d_lower_bound[joint_idx]) + d_lower_bound[joint_idx];
+            d_sampled_states[idx] = curand_uniform(&local_state) * (d_upper_bound[joint_idx] - d_lower_bound[joint_idx]) + d_lower_bound[joint_idx];
         }
     }
 

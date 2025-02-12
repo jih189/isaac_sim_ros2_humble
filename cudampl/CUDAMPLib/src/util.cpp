@@ -229,7 +229,7 @@ std::vector<std::vector<float>> CUDAMPLib::interpolateVectors(const std::vector<
 
     int num_steps = std::floor(distance / resolution);
     std::vector<float> step(v1.size());
-    for (int i = 0; i < v1.size(); ++i) {
+    for (size_t i = 0; i < v1.size(); ++i) {
         step[i] = (v2[i] - v1[i]) / num_steps;
     }
 
