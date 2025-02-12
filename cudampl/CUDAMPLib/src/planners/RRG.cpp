@@ -81,6 +81,24 @@ namespace CUDAMPLib
         task_ = task;
     }
 
+    void RRG::getStartAndGoalGroupIndexs(
+        std::vector<int> & start_group_indexs,
+        std::vector<int> & goal_group_indexs
+    )
+    {
+        for(auto v : boost::make_iterator_range(boost::vertices(graph)))
+        {
+            if(graph[v].group == 1 && graph[v].index_in_manager != -1)
+            {
+                start_group_indexs.push_back(graph[v].index_in_manager);
+            }
+            else if(graph[v].group == 2 && graph[v].index_in_manager != -1)
+            {
+                goal_group_indexs.push_back(graph[v].index_in_manager);
+            }
+        }
+    }
+
     /**
         * @brief Solve the task.
 
@@ -173,39 +191,26 @@ namespace CUDAMPLib
 
             std::vector<int> start_group_indexs;
             std::vector<int> goal_group_indexs;
-            // go through the graph and add nodes with group 1 to start_group_indexs
-            for(auto v : boost::make_iterator_range(boost::vertices(graph)))
-            {
-                if(graph[v].group == 1 && graph[v].index_in_manager != -1)
-                {
-                    start_group_indexs.push_back(graph[v].index_in_manager);
-                }
-                else if(graph[v].group == 2 && graph[v].index_in_manager != -1)
-                {
-                    goal_group_indexs.push_back(graph[v].index_in_manager);
-                }
-            }
+            getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
 
             // sample states
             auto states = space_->sample(sample_attempts_);
-
-            // find the nearest neighbors of the states
             std::vector<std::vector<int>> nearest_neighbors_index;
             if (t % 2 == 0)
             {
+                // find the nearest neighbors of the states in the start group
                 state_manager->find_k_nearest_neighbors(1, states, nearest_neighbors_index, {start_group_indexs});
             }
             else
             {
+                // find the nearest neighbors of the states in the goal group
                 state_manager->find_k_nearest_neighbors(1, states, nearest_neighbors_index, {goal_group_indexs});
             }
-            
             std::vector<int> nearest_neighbors_index_for_each_sampled_state;
             for(auto i : nearest_neighbors_index)
             {
                 nearest_neighbors_index_for_each_sampled_state.push_back(i[0]);
             }
-
             auto nearest_states = state_manager->get_states(nearest_neighbors_index_for_each_sampled_state);
 
             // do interpolation between the sampled states and their nearest neighbors
@@ -400,18 +405,7 @@ namespace CUDAMPLib
 
             start_group_indexs.clear();
             goal_group_indexs.clear();
-            // go through the graph and add nodes with group 1 to start_group_indexs
-            for(auto v : boost::make_iterator_range(boost::vertices(graph)))
-            {
-                if(graph[v].group == 1 && graph[v].index_in_manager != -1)
-                {
-                    start_group_indexs.push_back(graph[v].index_in_manager);
-                }
-                else if(graph[v].group == 2 && graph[v].index_in_manager != -1)
-                {
-                    goal_group_indexs.push_back(graph[v].index_in_manager);
-                }
-            }
+            getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
             printf("iter %d start group size: %d, goal group size: %d\n", t, start_group_indexs.size(), goal_group_indexs.size());
 
             if(has_solution)
@@ -459,5 +453,18 @@ namespace CUDAMPLib
             auto solution = space_->getPathFromWaypoints(state_manager->get_states(path_indexs_in_manager));
             task_->setSolution(solution, space_);
         }
+    }
+
+    void RRG::getStartAndGoalGroupStates(
+        BaseStatesPtr & start_group_states,
+        BaseStatesPtr & goal_group_states
+    )
+    {
+        std::vector<int> start_group_indexs;
+        std::vector<int> goal_group_indexs;
+        getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
+
+        start_group_states = state_manager->get_states(start_group_indexs);
+        goal_group_states = state_manager->get_states(goal_group_indexs);
     }
 } // namespace CUDAMPLib

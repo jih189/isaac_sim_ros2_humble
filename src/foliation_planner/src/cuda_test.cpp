@@ -618,6 +618,74 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
     }
 }
 
+void generateRandomStartAndGoal(
+    moveit::core::RobotStatePtr & robot_state,
+    const moveit::core::JointModelGroup* joint_model_group,
+    const planning_scene::PlanningScenePtr & planning_scene,
+    const std::string & group_name,
+    std::vector<float> & start_joint_values,
+    std::vector<float> & goal_joint_values,
+    moveit_msgs::msg::RobotState & start_state_msg,
+    moveit_msgs::msg::RobotState & goal_state_msg
+)
+{
+    // generate random state on the joint model group
+    robot_state->setToRandomPositions(joint_model_group);
+    robot_state->update();
+
+    while(not planning_scene->isStateValid(*robot_state, group_name))
+    {
+        robot_state->setToRandomPositions(joint_model_group);
+        robot_state->update();
+    }
+
+    std::vector<double> start_joint_values_double;
+    robot_state->copyJointGroupPositions(joint_model_group, start_joint_values_double);
+    for (size_t i = 0; i < start_joint_values_double.size(); i++)
+    {
+        start_joint_values.push_back((float)start_joint_values_double[i]);
+    }
+
+    // set start state
+    
+    moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
+    
+    // generate random state on the joint model group
+    robot_state->setToRandomPositions(joint_model_group);
+    robot_state->update();
+
+    while(not planning_scene->isStateValid(*robot_state, group_name))
+    {
+        robot_state->setToRandomPositions(joint_model_group);
+        robot_state->update();
+    }
+
+    std::vector<double> goal_joint_values_double;
+    robot_state->copyJointGroupPositions(joint_model_group, goal_joint_values_double);
+    for (size_t i = 0; i < goal_joint_values_double.size(); i++)
+    {
+        goal_joint_values.push_back((float)goal_joint_values_double[i]);
+    }
+
+    // set goal state
+    moveit::core::robotStateToRobotStateMsg(*robot_state, goal_state_msg);
+
+    // print "start and goal state"
+    std::cout << "start state: ";
+    for (size_t i = 0; i < start_joint_values.size(); i++)
+    {
+        std::cout << start_joint_values[i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "goal state: ";
+    for (size_t i = 0; i < goal_joint_values.size(); i++)
+    {
+        std::cout << goal_joint_values[i] << " ";
+    }
+    std::cout << std::endl;
+}
+
 void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
     std::string collision_spheres_file_path;
@@ -646,61 +714,23 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     robot_state->setToDefaultValues();
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
     
-    // generate random state on the joint model group
-    robot_state->setToRandomPositions(joint_model_group);
-    robot_state->update();
-
-    while(not planning_scene->isStateValid(*robot_state, group_name))
-    {
-        robot_state->setToRandomPositions(joint_model_group);
-        robot_state->update();
-    }
-
-    std::vector<double> start_joint_values_double;
+    // generate start and goal states
     std::vector<float> start_joint_values;
-    robot_state->copyJointGroupPositions(joint_model_group, start_joint_values_double);
-    for (size_t i = 0; i < start_joint_values_double.size(); i++)
-    {
-        start_joint_values.push_back((float)start_joint_values_double[i]);
-    }
-
-    // set start state
-    moveit_msgs::msg::RobotState start_state_msg;
-    moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
-    
-    // generate random state on the joint model group
-    robot_state->setToRandomPositions(joint_model_group);
-    robot_state->update();
-
-    while(not planning_scene->isStateValid(*robot_state, group_name))
-    {
-        robot_state->setToRandomPositions(joint_model_group);
-        robot_state->update();
-    }
-
-    std::vector<double> goal_joint_values_double;
     std::vector<float> goal_joint_values;
-    robot_state->copyJointGroupPositions(joint_model_group, goal_joint_values_double);
-    for (size_t i = 0; i < goal_joint_values_double.size(); i++)
-    {
-        goal_joint_values.push_back((float)goal_joint_values_double[i]);
-    }
-
-    // set goal state
+    moveit_msgs::msg::RobotState start_state_msg;
     moveit_msgs::msg::RobotState goal_state_msg;
-    moveit::core::robotStateToRobotStateMsg(*robot_state, goal_state_msg);
+    generateRandomStartAndGoal(robot_state, joint_model_group, planning_scene, group_name, start_joint_values, goal_joint_values, start_state_msg, goal_state_msg);
 
-    /**************************************************************************************************** */
-
+    // Prepare constraints
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
-
+    // Create obstacle constraint
     CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
         "obstacle_constraint",
         balls_pos,
         ball_radius
     );
     constraints.push_back(env_constraint);
-
+    // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
         robot_info.getSelfCollisionEnabledMap()
@@ -743,11 +773,114 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     planner->setMotionTask(task);
 
     // create termination condition
-    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(100);
+    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(1);
     // CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
 
     // solve the task
     planner->solve(termination_condition);
+
+    /************************** Debug **************************************/
+    // extract the start and goal group states
+    CUDAMPLib::BaseStatesPtr start_group_states;
+    CUDAMPLib::BaseStatesPtr goal_group_states;
+    planner->getStartAndGoalGroupStates(start_group_states, goal_group_states);
+
+    // static_pointer_cast to SingleArmStates
+    CUDAMPLib::SingleArmStatesPtr start_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(start_group_states);
+    CUDAMPLib::SingleArmStatesPtr goal_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(goal_group_states);
+
+    // get the joint values
+    std::vector<std::vector<float>> start_group_joint_values = start_group_states_single_arm->getJointStatesHost();
+    std::vector<std::vector<float>> goal_group_joint_values = goal_group_states_single_arm->getJointStatesHost();
+
+    std::vector<visualization_msgs::msg::MarkerArray> start_group_state_markers;
+    std::vector<visualization_msgs::msg::MarkerArray> goal_group_state_markers;
+
+    std::vector<std::string> display_links_names = joint_model_group->getLinkModelNames();
+    // add end effector link by hard code
+    display_links_names.push_back(std::string("gripper_link"));
+    display_links_names.push_back(std::string("r_gripper_finger_link"));
+    display_links_names.push_back(std::string("l_gripper_finger_link"));
+
+    // print start and goal group joint values
+    for (size_t i = 0; i < start_group_joint_values.size(); i++)
+    {
+        std::vector<double> start_group_joint_values_i_double;
+        for (size_t j = 0; j < start_group_joint_values[i].size(); j++)
+        {
+            // print only active joints
+            if (robot_info.getActiveJointMap()[j])
+            {
+                start_group_joint_values_i_double.push_back((double)start_group_joint_values[i][j]);
+            }
+        }
+
+        robot_state->setJointGroupPositions(joint_model_group, start_group_joint_values_i_double);
+        robot_state->update();
+        visualization_msgs::msg::MarkerArray robot_marker;
+        // color
+        std_msgs::msg::ColorRGBA color;
+        color.r = 1.0;
+        color.g = 0.0;
+        color.b = 0.0;
+        color.a = 0.4;
+        const std::string start_group_ns = "start_group";
+        robot_state->getRobotMarkers(robot_marker, display_links_names, color, start_group_ns, rclcpp::Duration::from_seconds(0));
+        start_group_state_markers.push_back(robot_marker);
+    }
+
+    for (size_t i = 0; i < goal_group_joint_values.size(); i++)
+    {
+        std::vector<double> goal_group_joint_values_i_double;
+        for (size_t j = 0; j < goal_group_joint_values[i].size(); j++)
+        {
+            if (robot_info.getActiveJointMap()[j])
+            {
+                goal_group_joint_values_i_double.push_back((double)goal_group_joint_values[i][j]);
+            }
+        }
+
+        robot_state->setJointGroupPositions(joint_model_group, goal_group_joint_values_i_double);
+        robot_state->update();
+        visualization_msgs::msg::MarkerArray robot_marker;
+        // color
+        std_msgs::msg::ColorRGBA color;
+        color.r = 0.0;
+        color.g = 1.0;
+        color.b = 0.0;
+        color.a = 0.4;
+        const std::string goal_group_ns = "goal_group";
+        robot_state->getRobotMarkers(robot_marker, display_links_names, color, goal_group_ns, rclcpp::Duration::from_seconds(0));
+
+        goal_group_state_markers.push_back(robot_marker);
+    }
+
+    // conbine  start and goal group state markers
+    visualization_msgs::msg::MarkerArray start_group_state_markers_combined;
+    visualization_msgs::msg::MarkerArray goal_group_state_markers_combined;
+    for (size_t i = 0; i < start_group_state_markers.size(); i++)
+    {
+        start_group_state_markers_combined.markers.insert(start_group_state_markers_combined.markers.end(), start_group_state_markers[i].markers.begin(), start_group_state_markers[i].markers.end());
+    }
+
+    // update the id
+    for (size_t i = 0; i < start_group_state_markers_combined.markers.size(); i++)
+    {
+        start_group_state_markers_combined.markers[i].id = i;
+    }
+
+    for (size_t i = 0; i < goal_group_state_markers.size(); i++)
+    {
+        goal_group_state_markers_combined.markers.insert(goal_group_state_markers_combined.markers.end(), goal_group_state_markers[i].markers.begin(), goal_group_state_markers[i].markers.end());
+    }
+
+    // update the id
+    for (size_t i = 0; i < goal_group_state_markers_combined.markers.size(); i++)
+    {
+        goal_group_state_markers_combined.markers[i].id = i;
+    }
+
+    /************************** Debug **************************************/
 
     moveit_msgs::msg::DisplayTrajectory display_trajectory;
     moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
@@ -790,6 +923,9 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>> display_publisher =
         node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
 
+    auto start_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("start_group_states", 1);
+    auto goal_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("goal_group_states", 1);
+
     // Create a DisplayRobotState message
     moveit_msgs::msg::DisplayRobotState start_display_robot_state;
     start_display_robot_state.state = start_state_msg;
@@ -809,6 +945,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         start_robot_state_publisher->publish(start_display_robot_state);
         goal_robot_state_publisher->publish(goal_display_robot_state);
         obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
+        start_group_states_publisher->publish(start_group_state_markers_combined);
+        goal_group_states_publisher->publish(goal_group_state_markers_combined);
 
         if (task->hasSolution())
         {
@@ -855,64 +993,12 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
     robot_state->setToDefaultValues();
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
 
-    // generate random state on the joint model group
-    robot_state->setToRandomPositions(joint_model_group);
-    robot_state->update();
-
-    while(not planning_scene->isStateValid(*robot_state, group_name))
-    {
-        robot_state->setToRandomPositions(joint_model_group);
-        robot_state->update();
-    }
-
-    std::vector<double> start_joint_values_double;
+    // generate start and goal states
     std::vector<float> start_joint_values;
-    robot_state->copyJointGroupPositions(joint_model_group, start_joint_values_double);
-    for (size_t i = 0; i < start_joint_values_double.size(); i++)
-    {
-        start_joint_values.push_back((float)start_joint_values_double[i]);
-    }
-
-    // set start state
-    moveit_msgs::msg::RobotState start_state_msg;
-    moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
-    
-    // generate random state on the joint model group
-    robot_state->setToRandomPositions(joint_model_group);
-    robot_state->update();
-
-    while(not planning_scene->isStateValid(*robot_state, group_name))
-    {
-        robot_state->setToRandomPositions(joint_model_group);
-        robot_state->update();
-    }
-
-    std::vector<double> goal_joint_values_double;
     std::vector<float> goal_joint_values;
-    robot_state->copyJointGroupPositions(joint_model_group, goal_joint_values_double);
-    for (size_t i = 0; i < goal_joint_values_double.size(); i++)
-    {
-        goal_joint_values.push_back((float)goal_joint_values_double[i]);
-    }
-
-    // set goal state
+    moveit_msgs::msg::RobotState start_state_msg;
     moveit_msgs::msg::RobotState goal_state_msg;
-    moveit::core::robotStateToRobotStateMsg(*robot_state, goal_state_msg);
-
-    // print "start and goal state"
-    std::cout << "start state: ";
-    for (size_t i = 0; i < start_joint_values.size(); i++)
-    {
-        std::cout << start_joint_values[i] << " ";
-    }
-    std::cout << std::endl;
-
-    std::cout << "goal state: ";
-    for (size_t i = 0; i < goal_joint_values.size(); i++)
-    {
-        std::cout << goal_joint_values[i] << " ";
-    }
-    std::cout << std::endl;
+    generateRandomStartAndGoal(robot_state, joint_model_group, planning_scene, group_name, start_joint_values, goal_joint_values, start_state_msg, goal_state_msg);
 
     // set group dimension
     int dim = robot_model->getJointModelGroup(group_name)->getActiveJointModels().size();
@@ -1075,7 +1161,6 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    
     robot_state.reset();
 }
 

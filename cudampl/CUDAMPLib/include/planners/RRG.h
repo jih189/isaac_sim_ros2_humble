@@ -17,6 +17,14 @@ namespace CUDAMPLib
 
             void setMotionTask(BaseTaskPtr task) override;
             void solve(BaseTerminationPtr termination_condition) override;
+            BaseStateManagerPtr getStateManager()
+            {
+                return state_manager;
+            }
+            void getStartAndGoalGroupStates(
+                BaseStatesPtr & start_group_states,
+                BaseStatesPtr & goal_group_states
+            );
         private:
             BaseStateManagerPtr state_manager;
 
@@ -59,6 +67,14 @@ namespace CUDAMPLib
             BoostVertex goal_node;
 
             BaseTaskPtr task_;
+
+            /**
+                @brief Get start and goal indexs in the state manager.
+             */
+            void getStartAndGoalGroupIndexs(
+                std::vector<int> & start_group_indexs,
+                std::vector<int> & goal_group_indexs
+            );
     };
 
     typedef std::shared_ptr<RRG> RRGPtr;

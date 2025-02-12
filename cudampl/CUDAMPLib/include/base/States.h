@@ -170,6 +170,9 @@ namespace CUDAMPLib
             // Adds states and returns the index of the states in the manager.
             virtual std::vector<int> add_states(const BaseStatesPtr & states) = 0;
 
+            // Returns the number of states in the manager.
+            int get_num_of_states() const { return num_of_states_; }
+
             /** 
                 @brief Given a query states, finds and returns the index of k nearest neighbors.
             */
@@ -199,6 +202,7 @@ namespace CUDAMPLib
             virtual BaseStatesPtr concatinate_states(const std::vector<BaseStatesPtr> & states) = 0;
 
         protected:
+            int num_of_states_; // number of states in manager
             SpaceInfoPtr space_info_;
     };
     typedef std::shared_ptr<BaseStateManager> BaseStateManagerPtr;

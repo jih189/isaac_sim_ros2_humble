@@ -118,11 +118,11 @@ namespace CUDAMPLib
                 // static cast the space_info to SingleArmSpaceInfoPtr
                 SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(space_info);
                 num_of_joints = single_arm_space_info->num_of_joints;
-                num_of_states = 0; // number of states in the knn
+                num_of_states_ = 0; // number of states in the knn
             }
 
             ~SingleArmStateManager() {
-                if (num_of_states > 0)
+                if (num_of_states_ > 0)
                 {
                     cudaFree(d_joint_states);
                 }
@@ -147,8 +147,7 @@ namespace CUDAMPLib
 
         private:
             int num_of_joints;
-            int num_of_states; // number of states
-            float * d_joint_states; // size is num_of_states * num_of_joints
+            float * d_joint_states; // size is num_of_states_ * num_of_joints
     };
     typedef std::shared_ptr<SingleArmStateManager> SingleArmStateManagerPtr;
 } // namespace CUDAMPLibs
