@@ -128,6 +128,38 @@ namespace CUDAMPLib {
         }
     }
 
+    __global__ void interpolate_kernel(
+        float * d_from_states,
+        float * d_to_states,
+        int num_of_config,
+        int num_of_joints,
+        float * max_distance
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_config) return;
+
+        float * from_state = &d_from_states[idx * num_of_joints];
+        float * to_state = &d_to_states[idx * num_of_joints];
+
+        // calculate the distance between the two states
+        float distance = 0.0f;
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            distance += (from_state[i] - to_state[i]) * (from_state[i] - to_state[i]);
+        }
+        distance = sqrt(distance);
+
+        if (distance > *max_distance)
+        {
+            // interpolate the two states
+            for (size_t i = 0; i < num_of_joints; i++)
+            {
+                to_state[i] = from_state[i] + (*max_distance / distance) * (to_state[i] - from_state[i]);
+            }
+        }
+    }
+
     BaseStatesPtr SingleArmSpace::sample(int num_of_config)
     {
         SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
@@ -362,6 +394,43 @@ namespace CUDAMPLib {
 
         // deallocate interpolated_states
         interpolated_states.reset();
+    }
+
+    void SingleArmSpace::interpolate(
+        const BaseStatesPtr & from_states,
+        const BaseStatesPtr & to_states,
+        float max_distance
+    )
+    {
+        // pass max_distance to device
+        float * d_max_distance;
+        cudaMalloc(&d_max_distance, sizeof(float));
+        cudaMemcpy(d_max_distance, &max_distance, sizeof(float), cudaMemcpyHostToDevice);
+
+        // static cast to SingleArmStatesPtr
+        SingleArmStatesPtr single_arm_from_states = std::dynamic_pointer_cast<SingleArmStates>(from_states);
+        SingleArmStatesPtr single_arm_to_states = std::dynamic_pointer_cast<SingleArmStates>(to_states);
+        // get the joint states from the states in device
+        float * d_from_states = single_arm_from_states->getJointStatesCuda();
+        float * d_to_states = single_arm_to_states->getJointStatesCuda();
+
+        int num_of_states = from_states->getNumOfStates();
+        // call kernel
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_states + threadsPerBlock - 1) / threadsPerBlock;
+        interpolate_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            d_from_states, 
+            d_to_states, 
+            num_of_states, 
+            num_of_joints,
+            d_max_distance
+        );
+
+        // wait for the kernel to finish
+        cudaDeviceSynchronize();
+
+        // deallocate d_max_distance
+        cudaFree(d_max_distance);
     }
 
     BaseStatesPtr SingleArmSpace::getPathFromWaypoints(

@@ -9,7 +9,7 @@ namespace CUDAMPLib
         state_manager = space->createStateManager();
 
         // set the parameters
-        sample_attempts_ = 100;
+        sample_attempts_ = 50;
         k_ = 5;
         max_distance_ = 0.5;
     }
@@ -97,8 +97,6 @@ namespace CUDAMPLib
     {
         bool has_solution = false;
 
-        termination_condition->reset();
-
         //TODO: We should check if direct motion between start and goal states is feasible.
 
         // need to check if start and goal states are feasible
@@ -161,6 +159,8 @@ namespace CUDAMPLib
             printf("\033[1;31m No feasible goal state \033[0m \n");
             return;
         }
+
+        termination_condition->reset();
         
         // main loop
         for(int t = 0 ; t < 1000000; t++)
@@ -169,23 +169,6 @@ namespace CUDAMPLib
             {
                 termination_condition->printTerminationReason();
                 break;
-            }
-
-            // sample states
-            auto states = space_->sample(sample_attempts_);
-            states->update();
-
-            // evaluate the feasibility of the states
-            std::vector<bool> state_feasibility;
-            space_->checkStates(states, state_feasibility);
-
-            // remove the infeasible states
-            states->filterStates(state_feasibility);
-
-            // check if the sampled states are all infeasible, then continue
-            if (states->getNumOfStates() == 0)
-            {
-                continue;
             }
 
             std::vector<int> start_group_indexs;
@@ -203,23 +186,62 @@ namespace CUDAMPLib
                 }
             }
 
-            printf("iteration %d ============== \n", t);
+            // sample states
+            auto states = space_->sample(sample_attempts_);
 
-            // print start group indexs
-            printf("start_group_indexs: ");
-            for(auto i : start_group_indexs)
+            // find the nearest neighbors of the states
+            std::vector<std::vector<int>> nearest_neighbors_index;
+            if (t % 2 == 0)
             {
-                printf("%d ", i);
+                state_manager->find_k_nearest_neighbors(1, states, nearest_neighbors_index, {start_group_indexs});
             }
-            printf("\n");
+            else
+            {
+                state_manager->find_k_nearest_neighbors(1, states, nearest_neighbors_index, {goal_group_indexs});
+            }
+            
+            std::vector<int> nearest_neighbors_index_for_each_sampled_state;
+            for(auto i : nearest_neighbors_index)
+            {
+                nearest_neighbors_index_for_each_sampled_state.push_back(i[0]);
+            }
 
-            // print goal group indexs
-            printf("goal_group_indexs: ");
-            for(auto i : goal_group_indexs)
+            auto nearest_states = state_manager->get_states(nearest_neighbors_index_for_each_sampled_state);
+
+            // do interpolation between the sampled states and their nearest neighbors
+            space_->interpolate(nearest_states, states, max_distance_);
+            states->update();
+
+            // evaluate the feasibility of the states
+            std::vector<bool> state_feasibility;
+            space_->checkStates(states, state_feasibility);
+
+            // remove the infeasible states
+            states->filterStates(state_feasibility);
+
+            // check if the sampled states are all infeasible, then continue
+            if (states->getNumOfStates() == 0)
             {
-                printf("%d ", i);
+                continue;
             }
-            printf("\n");
+
+            // printf("iteration %d ============== \n", t);
+
+            // // print start group indexs
+            // printf("start_group_indexs: ");
+            // for(auto i : start_group_indexs)
+            // {
+            //     printf("%d ", i);
+            // }
+            // printf("\n");
+
+            // // print goal group indexs
+            // printf("goal_group_indexs: ");
+            // for(auto i : goal_group_indexs)
+            // {
+            //     printf("%d ", i);
+            // }
+            // printf("\n");
 
             // find k nearest neighbors for each state
             std::vector<std::vector<int>> neighbors_index;
@@ -243,15 +265,15 @@ namespace CUDAMPLib
                 }
             }
 
-            printf("number of valid sampled states: %d\n", states->getNumOfStates());
+            // printf("number of valid sampled states: %d\n", states->getNumOfStates());
 
-            // print indexs_in_manager
-            printf("indexs_in_manager : ");
-            for(auto i : indexs_in_manager)
-            {
-                printf("%d ", i);
-            }
-            printf("\n");
+            // // print indexs_in_manager
+            // printf("indexs_in_manager : ");
+            // for(auto i : indexs_in_manager)
+            // {
+            //     printf("%d ", i);
+            // }
+            // printf("\n");
 
             auto motion_states_2 = state_manager->get_states(indexs_in_manager);
 
@@ -260,14 +282,14 @@ namespace CUDAMPLib
             std::vector<float> motion_costs;
             space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
 
-            // print motion_feasibility
-            printf("motion_feasibility: ");
-            for(bool i : motion_feasibility)
-            {
-                // print true as T and false as F
-                printf("%c ", i ? 'T' : 'F');
-            }
-            printf("\n");
+            // // print motion_feasibility
+            // printf("motion_feasibility: ");
+            // for(bool i : motion_feasibility)
+            // {
+            //     // print true as T and false as F
+            //     printf("%c ", i ? 'T' : 'F');
+            // }
+            // printf("\n");
 
             /*
                 Assume we have three sampled states and k = 2, and S is the sampled state, N is the neighbor of S.

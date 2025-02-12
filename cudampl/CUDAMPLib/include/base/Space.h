@@ -74,6 +74,16 @@ namespace CUDAMPLib
             virtual void checkStates(const BaseStatesPtr & states) = 0;
 
             /**
+                @brief interpolate between two states. If the distance between two states is larger than max_distance, 
+                        it will interpolate between two states with max_distance. Then the to_states will be updated.
+             */
+            virtual void interpolate(
+                const BaseStatesPtr & from_states,
+                const BaseStatesPtr & to_states,
+                float max_distance
+            ) = 0;
+
+            /**
                 @brief Create a state manager.
              */
             virtual BaseStateManagerPtr createStateManager() = 0;

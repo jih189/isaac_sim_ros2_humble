@@ -64,6 +64,12 @@ namespace CUDAMPLib
                 const BaseStatesPtr & waypoints
             ) override;
 
+            void interpolate(
+                const BaseStatesPtr & from_states,
+                const BaseStatesPtr & to_states,
+                float max_distance
+            ) override;
+
             BaseStateManagerPtr createStateManager() override; 
 
             void getSpaceInfo(SingleArmSpaceInfoPtr space_info);
