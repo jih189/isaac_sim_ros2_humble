@@ -9,8 +9,9 @@ namespace CUDAMPLib
         state_manager = space->createStateManager();
 
         // set the parameters
-        sample_attempts = 200;
-        k = 5;
+        sample_attempts_ = 100;
+        k_ = 5;
+        max_distance_ = 0.5;
     }
 
     // Destructor
@@ -96,9 +97,9 @@ namespace CUDAMPLib
     {
         bool has_solution = false;
 
-        //TODO: We should check if direct motion between start and goal states is feasible.
-
         termination_condition->reset();
+
+        //TODO: We should check if direct motion between start and goal states is feasible.
 
         // need to check if start and goal states are feasible
         std::vector<int> start_state_indexs_in_manager;
@@ -171,7 +172,7 @@ namespace CUDAMPLib
             }
 
             // sample states
-            auto states = space_->sample(sample_attempts);
+            auto states = space_->sample(sample_attempts_);
             states->update();
 
             // evaluate the feasibility of the states
@@ -222,7 +223,7 @@ namespace CUDAMPLib
 
             // find k nearest neighbors for each state
             std::vector<std::vector<int>> neighbors_index;
-            int actual_k = state_manager->find_k_nearest_neighbors(k, states, neighbors_index, {start_group_indexs, goal_group_indexs});
+            int actual_k = state_manager->find_k_nearest_neighbors(k_, states, neighbors_index, {start_group_indexs, goal_group_indexs});
 
             // validate the motion from the sampled states to their neighbors.
             // prepare the motion states 1
@@ -389,7 +390,7 @@ namespace CUDAMPLib
                     goal_group_indexs.push_back(graph[v].index_in_manager);
                 }
             }
-            printf("start group size: %d, goal group size: %d\n", start_group_indexs.size(), goal_group_indexs.size());
+            printf("iter %d start group size: %d, goal group size: %d\n", t, start_group_indexs.size(), goal_group_indexs.size());
 
             if(has_solution)
                 break;

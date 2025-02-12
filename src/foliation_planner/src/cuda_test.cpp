@@ -1060,7 +1060,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     float obstacle_spheres_radius = 0.06;
     // randomly generate some (obstacle_spheres_radius, obstacle_spheres_radius, obstacle_spheres_radius) size balls in base_link frame in range
     // x range [0.3, 0.6], y range [-0.5, 0.5], z range [0.5, 1.5]
-    int num_of_obstacle_spheres = 20;
+    int num_of_obstacle_spheres = 10;
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
     for (int i = 0; i < num_of_obstacle_spheres; i++)
@@ -1142,7 +1142,6 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         balls_pos,
         ball_radius
     );
-    // skip it for now.
     constraints.push_back(env_constraint);
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
@@ -1165,7 +1164,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_info.getActiveJointMap(),
         robot_info.getLowerBounds(),
         robot_info.getUpperBounds(),
-        robot_info.getDefaultJointValues()
+        robot_info.getDefaultJointValues(),
+        0.02 // resolution
     );
 
     std::vector<std::vector<float>> start_joint_values_set;
@@ -1208,7 +1208,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
             // convert solution_path[i] to double vector
             std::vector<double> solution_path_i_double = std::vector<double>(solution_path[i].begin(), solution_path[i].end());
             robot_state->setJointGroupPositions(joint_model_group, solution_path_i_double);
-            solution_robot_trajectory.addSuffixWayPoint(*robot_state, 10.0);
+            solution_robot_trajectory.addSuffixWayPoint(*robot_state, 1.0);
         }
         // Create a DisplayTrajectory message
         solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);

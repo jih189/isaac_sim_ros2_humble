@@ -204,25 +204,45 @@ std::vector<int> CUDAMPLib::kLeastIndices(const std::vector<float>& nums, int k,
 
 std::vector<std::vector<float>> CUDAMPLib::interpolateVectors(const std::vector<float>& v1, 
                                                    const std::vector<float>& v2, 
-                                                   int steps) {
+                                                   float resolution) {
     // Ensure both vectors have the same size
-    if (v1.size() != v2.size() || steps <= 0) {
-        return {}; // Return empty if sizes mismatch or invalid steps
+    if (v1.size() != v2.size()) {
+        throw std::runtime_error("Vectors must be of the same size");
+    }
+
+    // if they are the same, return a vector with only v1
+    if (v1 == v2)
+    {
+        return {v1};
     }
 
     std::vector<std::vector<float>> interpolated;
-    
-    // Generate intermediate vectors
-    for (int i = 0; i <= steps; ++i) {
-        float t = static_cast<float>(i) / steps; // Interpolation factor
-        std::vector<float> stepVector(v1.size());
-        
-        for (size_t j = 0; j < v1.size(); ++j) {
-            stepVector[j] = v1[j] + t * (v2[j] - v1[j]);
-        }
-        
-        interpolated.push_back(stepVector);
+
+    // insert the first vector
+    interpolated.push_back(v1);
+
+    float distance = 0.0f;
+    for (size_t i = 0; i < v1.size(); ++i) {
+        distance += std::pow(v2[i] - v1[i], 2);
+    }
+    distance = std::sqrt(distance);
+
+    int num_steps = std::floor(distance / resolution);
+    std::vector<float> step(v1.size());
+    for (int i = 0; i < v1.size(); ++i) {
+        step[i] = (v2[i] - v1[i]) / num_steps;
     }
 
+    for (int i = 1; i <= num_steps; ++i) {
+        std::vector<float> intermediate(v1.size());
+        for (size_t j = 0; j < v1.size(); ++j) {
+            intermediate[j] = v1[j] + i * step[j];
+        }
+        interpolated.push_back(intermediate);
+    }
+
+    // insert the last vector
+    interpolated.push_back(v2);
+    
     return interpolated;
 }

@@ -17,5 +17,5 @@ namespace CUDAMPLib
     std::vector<Eigen::Isometry3d> fromFloatVectorToIsometry3d(const std::vector<float>& data);
     std::vector<int> kLeastIndices(const std::vector<float>& nums, int k);
     std::vector<int> kLeastIndices(const std::vector<float>& nums, int k, const std::vector<int>& group_indices);
-    std::vector<std::vector<float>> interpolateVectors(const std::vector<float>& v1, const std::vector<float>& v2, int steps);
+    std::vector<std::vector<float>> interpolateVectors(const std::vector<float>& v1, const std::vector<float>& v2, float resolution);
 }

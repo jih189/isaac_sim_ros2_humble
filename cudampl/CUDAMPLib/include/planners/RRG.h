@@ -21,8 +21,9 @@ namespace CUDAMPLib
             BaseStateManagerPtr state_manager;
 
             // parameters
-            int sample_attempts;
-            int k;
+            int sample_attempts_; // the number of sampled state in each iteration
+            int k_; // the number of nearest neighbors
+            float max_distance_; // the maximum distance to expand the graph.
 
             // graph
             struct VertexProperties {

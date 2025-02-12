@@ -34,7 +34,8 @@ namespace CUDAMPLib
                 const std::vector<bool>& active_joint_map,
                 const std::vector<float>& lower,
                 const std::vector<float>& upper,
-                const std::vector<float>& default_joint_values
+                const std::vector<float>& default_joint_values,
+                float resolution = 0.1f
             );
 
             ~SingleArmSpace() override;
@@ -95,6 +96,7 @@ namespace CUDAMPLib
             std::vector<float> upper_bound;
             std::vector<bool> active_joint_map_;
             std::vector<float> default_joint_values_;
+            float resolution_;
 
             // variables for gpu memory
             int * d_joint_types;

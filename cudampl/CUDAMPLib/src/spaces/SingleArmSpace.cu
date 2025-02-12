@@ -15,10 +15,12 @@ namespace CUDAMPLib {
         const std::vector<bool>& active_joint_map,
         const std::vector<float>& lower,
         const std::vector<float>& upper,
-        const std::vector<float>& default_joint_values
+        const std::vector<float>& default_joint_values,
+        float resolution
     )
         : BaseSpace(dim, constraints),
           gen(std::random_device{}()),
+          resolution_(resolution),
           dist(0, std::numeric_limits<unsigned long>::max())
     {
         // need to allocate device memory for joint_types, joint_poses, joint_axes, 
@@ -320,8 +322,7 @@ namespace CUDAMPLib {
         for (int i = 0; i < num_of_states1; i++)
         {
             // get the interpolated states
-            std::vector<std::vector<float>> interpolated_states = interpolateVectors(joint_states1[i], joint_states2[i], 10); 
-            // TODO: the step size is too naive, need to be improved
+            std::vector<std::vector<float>> interpolated_states = interpolateVectors(joint_states1[i], joint_states2[i], resolution_); 
 
             // calculate the sqrt difference between the two states
             float cost = 0.0f;
@@ -383,7 +384,7 @@ namespace CUDAMPLib {
         for (int i = 0; i < num_of_waypoints - 1; i++)
         {
             // get the interpolated states
-            std::vector<std::vector<float>> interpolated_states = interpolateVectors(waypoints_joint_values[i], waypoints_joint_values[i+1], 10); 
+            std::vector<std::vector<float>> interpolated_states = interpolateVectors(waypoints_joint_values[i], waypoints_joint_values[i+1], resolution_); 
             path_in_host.insert(path_in_host.end(), interpolated_states.begin(), interpolated_states.end());
         }
 
