@@ -124,7 +124,7 @@ visualization_msgs::msg::MarkerArray generate_self_collision_markers(
 void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<float> & ball_radius)
 {
     float obstacle_spheres_radius = 0.06;
-    int num_of_obstacle_spheres = 20;
+    int num_of_obstacle_spheres = 30;
     for (int i = 0; i < num_of_obstacle_spheres; i++)
     {
         float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;

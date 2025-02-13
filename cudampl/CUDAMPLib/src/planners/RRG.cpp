@@ -81,6 +81,34 @@ namespace CUDAMPLib
         task_ = task;
     }
 
+    void RRG::getAllCombinations(
+        const std::vector<int> & start_group_indexs,
+        const std::vector<int> & goal_group_indexs,
+        std::vector<int> & left_index_of_pair,
+        std::vector<int> & right_index_of_pair
+    )
+    {
+        if (start_group_indexs.size() == 0 || goal_group_indexs.size() == 0 || start_group_indexs.size() != goal_group_indexs.size())
+        {
+            // throw error
+            throw std::runtime_error("Invalid input for getAllCombinations");
+        }
+
+        // initialize the left and right index of the pair with size. The size of the left and right 
+        // index of the pair is the product of the size of the start and goal group indexs.
+        left_index_of_pair.clear();
+        right_index_of_pair.clear();
+
+        for (size_t i = 0; i < start_group_indexs.size(); i++)
+        {
+            for (size_t j = 0; j < goal_group_indexs.size(); j++)
+            {
+                left_index_of_pair.push_back(start_group_indexs[i]);
+                right_index_of_pair.push_back(goal_group_indexs[j]);
+            }
+        }
+    }
+
     void RRG::getStartAndGoalGroupIndexs(
         std::vector<int> & start_group_indexs,
         std::vector<int> & goal_group_indexs
@@ -99,23 +127,9 @@ namespace CUDAMPLib
         }
     }
 
-    /**
-        * @brief Solve the task.
-
-        The pseudocode of the RRG algorithm in loop is as follows:
-        1. Sample 10 configurations.
-        2. Evaluate the feasibility of the states.
-        3. Filter out the infeasible states.
-        4. Find k nearest neighbors for each state.
-        5. Generate a set of states pairs
-        6. Check the feasibility of motion between the states pairs.
-        7. Add the states to the graph.
-     */
     void RRG::solve(BaseTerminationPtr termination_condition)
     {
         bool has_solution = false;
-
-        //TODO: We should check if direct motion between start and goal states is feasible.
 
         // need to check if start and goal states are feasible
         std::vector<int> start_state_indexs_in_manager;
@@ -140,44 +154,66 @@ namespace CUDAMPLib
         std::vector<bool> goal_state_feasibility;
         space_->checkStates(goal_states_in_cuda, goal_state_feasibility);
 
-        // check if any start state is feasible
-        bool has_feasible_start_state = false;
-        for (size_t i = 0; i < start_state_feasibility.size(); i++)
-        {
-            if (start_state_feasibility[i])
-            {
-                has_feasible_start_state = true;
-                break;
-            }
-        }
-
-        // check if any goal state is feasible
-        bool has_feasible_goal_state = false;
-        for (size_t i = 0; i < goal_state_feasibility.size(); i++)
-        {
-            if (goal_state_feasibility[i])
-            {
-                has_feasible_goal_state = true;
-                break;
-            }
-        }
-
         // deallocate the start and goal states in cuda
         start_states_in_cuda.reset();
         goal_states_in_cuda.reset();
 
-        if (! has_feasible_start_state ){
+        // check if any start state and goal states is feasible
+        if(std::find(start_state_feasibility.begin(), start_state_feasibility.end(), true) == start_state_feasibility.end()
+            || std::find(goal_state_feasibility.begin(), goal_state_feasibility.end(), true) == goal_state_feasibility.end())
+        {
             // print in red color
-            printf("\033[1;31m No feasible start state \033[0m \n");
+            printf("\033[1;31m No feasible start state or goal state \033[0m \n");
             return;
         }
 
-        if (! has_feasible_goal_state ){
-            // print in red color
-            printf("\033[1;31m No feasible goal state \033[0m \n");
+        // check if any pair of start and goal states is connected.
+        std::vector<int> left_index_of_pair;
+        std::vector<int> right_index_of_pair;
+        getAllCombinations(start_state_indexs_in_manager, goal_state_indexs_in_manager, left_index_of_pair, right_index_of_pair);
+        auto states_1_in_cuda = state_manager->get_states(left_index_of_pair);
+        auto states_2_in_cuda = state_manager->get_states(right_index_of_pair);
+
+        // check motions
+        std::vector<bool> init_motion_feasibility;
+        std::vector<float> init_motion_costs;
+        space_->checkMotions(states_1_in_cuda, states_2_in_cuda, init_motion_feasibility, init_motion_costs);
+
+        int feasible_start_index = -1;
+        int feasible_goal_index = -1;
+        float current_cost = std::numeric_limits<float>::max();
+
+        for(size_t i = 0; i < init_motion_feasibility.size(); i++)
+        {
+            if(init_motion_feasibility[i])
+            {
+                has_solution = true;
+                if (init_motion_costs[i] < current_cost)
+                {
+                    // try to return the motion with the minimum cost
+                    current_cost = init_motion_costs[i];
+                    feasible_start_index = left_index_of_pair[i];
+                    feasible_goal_index = right_index_of_pair[i];
+                }
+            }
+        }
+
+        // deallocate the states in cuda
+        states_1_in_cuda.reset();
+        states_2_in_cuda.reset();
+
+        if (has_solution)
+        {
+            // print in green color
+            // printf("\033[1;32m There exists a solution between the start and goal states directly \033[0m \n");
+            // there exists a solution between the start and goal states directly.
+            auto solution = space_->getPathFromWaypoints(state_manager->get_states({feasible_start_index, feasible_goal_index}));
+            task_->setSolution(solution, space_);
+
             return;
         }
 
+        // reset the termination condition
         termination_condition->reset();
         
         // main loop
@@ -230,24 +266,6 @@ namespace CUDAMPLib
                 continue;
             }
 
-            // printf("iteration %d ============== \n", t);
-
-            // // print start group indexs
-            // printf("start_group_indexs: ");
-            // for(auto i : start_group_indexs)
-            // {
-            //     printf("%d ", i);
-            // }
-            // printf("\n");
-
-            // // print goal group indexs
-            // printf("goal_group_indexs: ");
-            // for(auto i : goal_group_indexs)
-            // {
-            //     printf("%d ", i);
-            // }
-            // printf("\n");
-
             // find k nearest neighbors for each state
             std::vector<std::vector<int>> neighbors_index;
             int actual_k = state_manager->find_k_nearest_neighbors(k_, states, neighbors_index, {start_group_indexs, goal_group_indexs});
@@ -270,31 +288,12 @@ namespace CUDAMPLib
                 }
             }
 
-            // printf("number of valid sampled states: %d\n", states->getNumOfStates());
-
-            // // print indexs_in_manager
-            // printf("indexs_in_manager : ");
-            // for(auto i : indexs_in_manager)
-            // {
-            //     printf("%d ", i);
-            // }
-            // printf("\n");
-
             auto motion_states_2 = state_manager->get_states(indexs_in_manager);
 
             // calculate costs and check the feasibility of motion between the states pairs.
             std::vector<bool> motion_feasibility;
             std::vector<float> motion_costs;
             space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
-
-            // // print motion_feasibility
-            // printf("motion_feasibility: ");
-            // for(bool i : motion_feasibility)
-            // {
-            //     // print true as T and false as F
-            //     printf("%c ", i ? 'T' : 'F');
-            // }
-            // printf("\n");
 
             /*
                 Assume we have three sampled states and k = 2, and S is the sampled state, N is the neighbor of S.

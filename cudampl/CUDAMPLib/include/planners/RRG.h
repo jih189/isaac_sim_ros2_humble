@@ -75,6 +75,20 @@ namespace CUDAMPLib
                 std::vector<int> & start_group_indexs,
                 std::vector<int> & goal_group_indexs
             );
+
+            /**
+                @brief Get all conbinations of two indices from two groups.
+                @param start_group_indexs The indexs of the start group.
+                @param goal_group_indexs The indexs of the goal group.
+                @param left_index_of_pair The left index of the pair.
+                @param right_index_of_pair The right index of the pair.
+             */
+            void getAllCombinations(
+                const std::vector<int> & start_group_indexs,
+                const std::vector<int> & goal_group_indexs,
+                std::vector<int> & left_index_of_pair,
+                std::vector<int> & right_index_of_pair
+            );
     };
 
     typedef std::shared_ptr<RRG> RRGPtr;
