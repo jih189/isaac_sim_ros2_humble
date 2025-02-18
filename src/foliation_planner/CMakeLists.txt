@@ -67,6 +67,10 @@ add_executable(evaluate_cudampl src/evaluate_cudampl.cpp)
 target_link_libraries(evaluate_cudampl CUDAMPLib)
 ament_target_dependencies(evaluate_cudampl ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
+add_executable(evaluate_ompl src/evaluate_ompl.cpp)
+target_link_libraries(evaluate_ompl ompl)
+ament_target_dependencies(evaluate_ompl ${THIS_PACKAGE_INCLUDE_DEPENDS})
+
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
 ament_target_dependencies(${MOVEIT_LIB_NAME} ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
@@ -94,6 +98,9 @@ install(TARGETS create_motion_tasks
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS evaluate_cudampl
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS evaluate_ompl
   DESTINATION lib/${PROJECT_NAME})
 
 # Install config files.
