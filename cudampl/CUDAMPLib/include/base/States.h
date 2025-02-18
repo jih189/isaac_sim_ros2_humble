@@ -165,7 +165,13 @@ namespace CUDAMPLib
         public:
             // Default constructor.
             BaseStateManager(SpaceInfoPtr space_info) : space_info_(space_info) {}
-            virtual ~BaseStateManager() {}
+            virtual ~BaseStateManager() {
+                num_of_states_ = 0;
+            }
+
+            virtual void clear() {
+                num_of_states_ = 0;
+            }
 
             // Adds states and returns the index of the states in the manager.
             virtual std::vector<int> add_states(const BaseStatesPtr & states) = 0;

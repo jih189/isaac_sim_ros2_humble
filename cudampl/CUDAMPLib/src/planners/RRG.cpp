@@ -17,7 +17,11 @@ namespace CUDAMPLib
     // Destructor
     RRG::~RRG()
     {
-        // Cleanup code here, if needed
+        // clear the state manager by calling destructor
+        state_manager.reset();
+
+        // clear the graph
+        graph.clear();
     }
 
     // Set the motion task
@@ -79,6 +83,10 @@ namespace CUDAMPLib
         }
 
         task_ = task;
+
+        // clear start and goal states
+        start_states.reset();
+        goal_states.reset();
     }
 
     void RRG::getAllCombinations(
@@ -163,7 +171,8 @@ namespace CUDAMPLib
             || std::find(goal_state_feasibility.begin(), goal_state_feasibility.end(), true) == goal_state_feasibility.end())
         {
             // print in red color
-            printf("\033[1;31m No feasible start state or goal state \033[0m \n");
+            // printf("\033[1;31m No feasible start state or goal state \033[0m \n");
+            task_->setFailureReason("InvalidInput");
             return;
         }
 
@@ -178,6 +187,10 @@ namespace CUDAMPLib
         std::vector<bool> init_motion_feasibility;
         std::vector<float> init_motion_costs;
         space_->checkMotions(states_1_in_cuda, states_2_in_cuda, init_motion_feasibility, init_motion_costs);
+
+        // deallocate the states in cuda
+        states_1_in_cuda.reset();
+        states_2_in_cuda.reset();
 
         int feasible_start_index = -1;
         int feasible_goal_index = -1;
@@ -198,17 +211,16 @@ namespace CUDAMPLib
             }
         }
 
-        // deallocate the states in cuda
-        states_1_in_cuda.reset();
-        states_2_in_cuda.reset();
-
         if (has_solution)
         {
             // print in green color
             // printf("\033[1;32m There exists a solution between the start and goal states directly \033[0m \n");
             // there exists a solution between the start and goal states directly.
-            auto solution = space_->getPathFromWaypoints(state_manager->get_states({feasible_start_index, feasible_goal_index}));
+            auto waypoints = state_manager->get_states({feasible_start_index, feasible_goal_index});
+            auto solution = space_->getPathFromWaypoints(waypoints);
             task_->setSolution(solution, space_);
+            waypoints.reset();
+            solution.reset();
 
             return;
         }
@@ -222,6 +234,7 @@ namespace CUDAMPLib
             if(termination_condition->checkTerminationCondition())
             {
                 termination_condition->printTerminationReason();
+                task_->setFailureReason("MeetTerminationCondition");
                 break;
             }
 
@@ -253,6 +266,8 @@ namespace CUDAMPLib
             space_->interpolate(nearest_states, states, max_distance_);
             states->update();
 
+            nearest_states.reset();
+
             // evaluate the feasibility of the states
             std::vector<bool> state_feasibility;
             space_->checkStates(states, state_feasibility);
@@ -263,6 +278,9 @@ namespace CUDAMPLib
             // check if the sampled states are all infeasible, then continue
             if (states->getNumOfStates() == 0)
             {
+                // clear the states
+                states.reset();
+
                 continue;
             }
 
@@ -294,6 +312,10 @@ namespace CUDAMPLib
             std::vector<bool> motion_feasibility;
             std::vector<float> motion_costs;
             space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
+
+            // clear the states
+            motion_states_1.reset();
+            motion_states_2.reset();
 
             /*
                 Assume we have three sampled states and k = 2, and S is the sampled state, N is the neighbor of S.
@@ -402,6 +424,9 @@ namespace CUDAMPLib
                 }
             }
 
+            // clear states
+            states.reset();
+
             // start_group_indexs.clear();
             // goal_group_indexs.clear();
             // getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
@@ -451,6 +476,7 @@ namespace CUDAMPLib
 
             auto solution = space_->getPathFromWaypoints(state_manager->get_states(path_indexs_in_manager));
             task_->setSolution(solution, space_);
+            solution.reset();
         }
     }
 

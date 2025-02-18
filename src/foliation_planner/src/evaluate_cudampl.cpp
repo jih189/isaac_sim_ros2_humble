@@ -29,6 +29,8 @@
 #include <fstream>
 #include <filesystem>
 
+#include <chrono>
+
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("cudampl Evaluation");
 
 struct MotionPlanningTask
@@ -66,10 +68,6 @@ std::vector<MotionPlanningTask> loadMotionPlanningTasks(const std::string & task
             RCLCPP_ERROR(node->get_logger(), "Failed to open task file");
             continue;
         }
-        else
-        {
-            RCLCPP_INFO(LOGGER, "Loading task file: %s", task_file_path.c_str());
-        }
 
         YAML::Node task_node = YAML::LoadFile(task_file_path);
         MotionPlanningTask task;
@@ -100,6 +98,132 @@ std::vector<MotionPlanningTask> loadMotionPlanningTasks(const std::string & task
     return tasks;
 }
 
+void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, std::vector<MotionPlanningTask> & tasks)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
+
+    // Prepare constraints
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+    
+    // Create self collision constraint
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    long int total_time = 0;
+    long int total_solved = 0;
+    long int total_unsolved = 0;
+
+    // print out the tasks
+    for (size_t i = 0; i < tasks.size(); i++)
+    {
+        RCLCPP_INFO(LOGGER, "Task %zu", i);
+
+        // if constraints contains "obstacle_constraint", then remove it
+        for (size_t j = 0; j < constraints.size(); j++)
+        {
+            if (constraints[j]->getName() == "obstacle_constraint")
+            {
+                constraints.erase(constraints.begin() + j);
+                break;
+            }
+        }
+        // Create obstacle constraint
+        CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+            "obstacle_constraint",
+            tasks[i].obstacle_pos,
+            tasks[i].radius
+        );
+        constraints.push_back(env_constraint);
+
+        // // print number of constraints
+        // RCLCPP_INFO(LOGGER, "Number of constraints: %zu", constraints.size());
+
+        // Create space
+        CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+            robot_info.getDimension(),
+            constraints,
+            robot_info.getJointTypes(),
+            robot_info.getJointPoses(),
+            robot_info.getJointAxes(),
+            robot_info.getLinkMaps(),
+            robot_info.getCollisionSpheresMap(),
+            robot_info.getCollisionSpheresPos(),
+            robot_info.getCollisionSpheresRadius(),
+            robot_info.getActiveJointMap(),
+            robot_info.getLowerBounds(),
+            robot_info.getUpperBounds(),
+            robot_info.getDefaultJointValues(),
+            0.02 // resolution
+        );
+
+        std::vector<std::vector<float>> start_joint_values_set;
+        start_joint_values_set.push_back(tasks[i].start_joint_values);
+
+        std::vector<std::vector<float>> goal_joint_values_set;
+        goal_joint_values_set.push_back(tasks[i].goal_joint_values);
+
+        // create the task
+        CUDAMPLib::SingleArmTaskPtr problem_task = std::make_shared<CUDAMPLib::SingleArmTask>(
+            start_joint_values_set,
+            goal_joint_values_set
+        );
+
+        // create the planner
+        CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
+
+        // set the task
+        planner->setMotionTask(problem_task);
+
+        // record the start time
+        auto start_time = std::chrono::high_resolution_clock::now();
+
+        // solve the task
+        CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(1.0);
+        planner->solve(termination_condition);
+
+        // record the end time
+        auto end_time = std::chrono::high_resolution_clock::now();
+        // calculate the time taken
+        auto time_taken = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+        RCLCPP_INFO(LOGGER, "Time taken: %ld ms", time_taken);
+
+        // check if the task is solved
+        if (problem_task->hasSolution())
+        {
+            RCLCPP_INFO(LOGGER, "Task %zu is solved", i);
+            total_solved++;
+            total_time += time_taken;
+        }
+        else
+        {
+            if (problem_task->getFailureReason() == "InvalidInput")
+            {
+                RCLCPP_INFO(LOGGER, "Task %zu is not solved because %s", i, problem_task->getFailureReason().c_str());
+            }
+            else
+            {
+                RCLCPP_INFO(LOGGER, "Task %zu is not solved because meet termination condition", i);
+                total_unsolved++;
+            }
+        }
+
+        // reset planner
+        planner.reset();
+    }
+
+    // print out the average time
+    RCLCPP_INFO(LOGGER, "Average time: %ld ms", total_time / tasks.size());
+    // print success rate
+    float success_rate = (float)total_solved / (total_solved + total_unsolved);
+    RCLCPP_INFO(LOGGER, "Success rate: %f", success_rate);
+}
+
+
 int main(int argc, char** argv)
 {
     // ============================ parameters =================================== //
@@ -127,33 +251,10 @@ int main(int argc, char** argv)
 
     std::vector<MotionPlanningTask> tasks = loadMotionPlanningTasks(task_dir_path, motion_planning_evaluation_node);
     
-    // // print out the number of tasks
-    // RCLCPP_INFO(LOGGER, "Number of tasks: %zu", tasks.size());
+    // print out the number of tasks
+    RCLCPP_INFO(LOGGER, "Number of tasks: %zu", tasks.size());
 
-    // // print out the tasks
-    // for (size_t i = 0; i < tasks.size(); i++)
-    // {
-    //     RCLCPP_INFO(LOGGER, "Task %zu", i);
-
-    //     // print out the start joint values
-    //     RCLCPP_INFO(LOGGER, "Start joint values: ");
-    //     for (size_t j = 0; j < tasks[i].start_joint_values.size(); j++)
-    //     {
-    //         RCLCPP_INFO(LOGGER, "%f ", tasks[i].start_joint_values[j]);
-    //     }
-
-    //     // print out the goal joint values
-    //     RCLCPP_INFO(LOGGER, "Goal joint values: ");
-    //     for (size_t j = 0; j < tasks[i].goal_joint_values.size(); j++)
-    //     {
-    //         RCLCPP_INFO(LOGGER, "%f ", tasks[i].goal_joint_values[j]);
-    //     }
-
-    //     for (size_t j = 0; j < tasks[i].obstacle_pos.size(); j++)
-    //     {
-    //         RCLCPP_INFO(LOGGER, "Obstacle %zu position: [%f, %f, %f] with radius %f ", j, tasks[i].obstacle_pos[j][0], tasks[i].obstacle_pos[j][1], tasks[i].obstacle_pos[j][2], tasks[i].radius[j]);
-    //     }
-    // }
+    Eval_Planner(kinematic_model, GROUP_NAME, motion_planning_evaluation_node, tasks);
 
     // stop the node
     rclcpp::shutdown();

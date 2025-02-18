@@ -128,6 +128,12 @@ namespace CUDAMPLib
                 }
             }
 
+            void clear() override {
+                // call the base class clear function
+                BaseStateManager::clear();
+                cudaFree(d_joint_states);
+            }
+
             std::vector<int> add_states(const BaseStatesPtr & states) override;
 
             int find_k_nearest_neighbors(
