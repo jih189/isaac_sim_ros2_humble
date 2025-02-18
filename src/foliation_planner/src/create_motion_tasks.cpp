@@ -10,35 +10,12 @@
 #include <moveit_msgs/msg/display_robot_state.hpp>
 #include <moveit/robot_trajectory/robot_trajectory.h>
 
-// cudampl include
-#include <CUDAMPLib/multiply.h>
-#include <CUDAMPLib/kinematics.h>
-#include <CUDAMPLib/cost.h>
-#include <CUDAMPLib/spaces/SingleArmSpace.h>
-#include <CUDAMPLib/constraints/EnvConstraint.h>
-#include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
-#include <CUDAMPLib/tasks/SingleArmTask.h>
-#include <CUDAMPLib/planners/RRG.h>
-#include <CUDAMPLib/termination/StepTermination.h>
-#include <CUDAMPLib/termination/TimeoutTermination.h>
-
-// ompl include
-#include <ompl/base/SpaceInformation.h>
-#include <ompl/base/spaces/RealVectorStateSpace.h>
-#include <ompl/geometric/planners/rrt/RRTConnect.h>
-#include <ompl/geometric/SimpleSetup.h>
-
-#include "foliation_planner/robot_info.hpp"
-
 #include <iostream>
 #include <yaml-cpp/yaml.h>
 #include <fstream>
 #include <filesystem>
 
-namespace ob = ompl::base;
-namespace og = ompl::geometric;
-
-static const rclcpp::Logger LOGGER = rclcpp::get_logger("Motion Planning Evaluation");
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("task generator");
 
 struct MotionPlanningTask
 {
@@ -202,18 +179,18 @@ int main(int argc, char** argv)
         // save the task to the file
         YAML::Emitter out;
         out << YAML::BeginMap;
-        out << YAML::Key << "Task " << i;
-        out << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "Start joint values" << YAML::Value << task.start_joint_values;
         out << YAML::Key << "Goal joint values" << YAML::Value << task.goal_joint_values;
-        out << YAML::Key << "Obstacles" << YAML::Value << YAML::BeginSeq;
+        out << YAML::Key << "Obstacles" << YAML::Value;
+        out << YAML::BeginSeq;
         for (size_t j = 0; j < task.obstacle_pos.size(); j++)
         {
-            out << task.obstacle_pos[j];
+            out << YAML::BeginMap;
+            out << YAML::Key << "Position" << YAML::Value << task.obstacle_pos[j];
+            out << YAML::Key << "Radius" << YAML::Value << task.radius[j];
+            out << YAML::EndMap;
         }
         out << YAML::EndSeq;
-        out << YAML::Key << "Radius" << YAML::Value << task.radius;
-        out << YAML::EndMap;
         out << YAML::EndMap;
 
         // write to file

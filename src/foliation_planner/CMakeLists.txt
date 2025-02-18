@@ -61,8 +61,11 @@ target_link_libraries(cuda_test CUDAMPLib ompl)
 ament_target_dependencies(cuda_test ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 add_executable(create_motion_tasks src/create_motion_tasks.cpp)
-target_link_libraries(create_motion_tasks CUDAMPLib ompl)
 ament_target_dependencies(create_motion_tasks ${THIS_PACKAGE_INCLUDE_DEPENDS})
+
+add_executable(evaluate_cudampl src/evaluate_cudampl.cpp)
+target_link_libraries(evaluate_cudampl CUDAMPLib)
+ament_target_dependencies(evaluate_cudampl ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
 ament_target_dependencies(${MOVEIT_LIB_NAME} ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -88,6 +91,9 @@ install(TARGETS cuda_test
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS create_motion_tasks
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS evaluate_cudampl
   DESTINATION lib/${PROJECT_NAME})
 
 # Install config files.
