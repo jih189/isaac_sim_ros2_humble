@@ -9,9 +9,9 @@ namespace CUDAMPLib
         state_manager = space->createStateManager();
 
         // set the parameters
-        sample_attempts_ = 50;
-        k_ = 5;
-        max_distance_ = 1.0;
+        sample_attempts_ = 30;
+        k_ = 1;
+        max_distance_ = 0.5;
     }
 
     // Destructor
