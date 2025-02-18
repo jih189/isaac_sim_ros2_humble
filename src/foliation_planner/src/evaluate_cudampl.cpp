@@ -217,9 +217,9 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     }
 
     // print out the average time
-    RCLCPP_INFO(LOGGER, "Average time: %ld ms", total_time / tasks.size());
+    RCLCPP_INFO(LOGGER, "Average time: %ld ms", total_time / total_solved);
     // print success rate
-    float success_rate = (float)total_solved / (total_solved + total_unsolved);
+    float success_rate = (float)total_solved / (float)tasks.size();
     RCLCPP_INFO(LOGGER, "Success rate: %f", success_rate);
 }
 
