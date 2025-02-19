@@ -157,34 +157,6 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
             planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(j), shapes::ShapeConstPtr(new shapes::Sphere(tasks[i].radius[j])), sphere_pose);
         }
 
-        std::vector<double> start_state_double;
-        std::vector<double> goal_state_double;
-
-        for (int j = 0; j < dim; j++)
-        {
-            start_state_double.push_back(tasks[i].start_joint_values[j]);
-            goal_state_double.push_back(tasks[i].goal_joint_values[j]);
-        }
-        robot_state->setJointGroupPositions(joint_model_group, start_state_double);
-        robot_state->update();
-
-        // check if the start state is valid and self-collision free
-        if (!planning_scene->isStateValid(*robot_state, group_name))
-        {
-            RCLCPP_ERROR(LOGGER, "Start state is not valid");
-            continue;
-        }
-
-        robot_state->setJointGroupPositions(joint_model_group, goal_state_double);
-        robot_state->update();
-
-        // check if the goal state is valid and self-collision free
-        if (!planning_scene->isStateValid(*robot_state, group_name))
-        {
-            RCLCPP_ERROR(LOGGER, "Goal state is not valid");
-            continue;
-        }
-
         // create space information
         ompl::base::SpaceInformationPtr si(new ompl::base::SpaceInformation(space));
 

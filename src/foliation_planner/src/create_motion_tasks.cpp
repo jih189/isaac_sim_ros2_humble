@@ -41,29 +41,17 @@ void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<
 
 std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, int num_tasks)
 {
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+    
     std::vector<MotionPlanningTask> tasks;
     for(int i = 0; i < num_tasks; i++)
     {
-        moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
-        // set robot state to default state
-        robot_state->setToDefaultValues();
-        const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
-
-        // create planning scene monitor
-        auto world = std::make_shared<collision_detection::World>();
-        auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
-
         MotionPlanningTask task;
         // generate random obstacles
         prepare_obstacles(task.obstacle_pos, task.radius);
-
-        // add those balls to the planning scene
-        for (size_t b = 0; b < task.obstacle_pos.size(); b++)
-        {
-            Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
-            sphere_pose.translation() = Eigen::Vector3d(task.obstacle_pos[b][0], task.obstacle_pos[b][1], task.obstacle_pos[b][2]);
-            planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(b), shapes::ShapeConstPtr(new shapes::Sphere(task.radius[b])), sphere_pose);
-        }
 
         // generate start and goal states
         std::vector<float> start_joint_values;
@@ -72,14 +60,6 @@ std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::
         // generate random start state
         robot_state->setToRandomPositions();
         robot_state->update();
-
-        // check if the start state is valid and self-collision free
-        while (!planning_scene->isStateValid(*robot_state))
-        {
-            // printf("Start state is not valid\n");
-            robot_state->setToRandomPositions();
-            robot_state->update();
-        }
 
         std::vector<double> start_joint_values_double;
         robot_state->copyJointGroupPositions(joint_model_group, start_joint_values_double);
@@ -93,13 +73,6 @@ std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::
         robot_state->setToRandomPositions();
         robot_state->update();
 
-        while (!planning_scene->isStateValid(*robot_state))
-        {
-            // printf("Goal state is not vasslid\n");
-            robot_state->setToRandomPositions();
-            robot_state->update();
-        }
-
         std::vector<double> goal_joint_values_double;
         robot_state->copyJointGroupPositions(joint_model_group, goal_joint_values_double);
         for (size_t j = 0; j < goal_joint_values_double.size(); j++)
@@ -110,13 +83,58 @@ std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::
         task.goal_joint_values = goal_joint_values;
 
         tasks.push_back(task);
-
-        // reset
-        world.reset();
-        planning_scene.reset();
-        robot_state.reset();
     }
+    robot_state.reset();
+
     return tasks;
+}
+
+bool isTaskValid(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, const MotionPlanningTask & task)
+{
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
+    // create planning scene
+    auto world = std::make_shared<collision_detection::World>();
+    auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
+
+    // add those balls to the planning scene
+    for (size_t i = 0; i < task.obstacle_pos.size(); i++)
+    {
+        Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
+        sphere_pose.translation() = Eigen::Vector3d(task.obstacle_pos[i][0], task.obstacle_pos[i][1], task.obstacle_pos[i][2]);
+        planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(task.radius[i])), sphere_pose);
+    }
+
+    std::vector<double> start_state_double;
+    std::vector<double> goal_state_double;
+
+    for (size_t i = 0; i < task.start_joint_values.size(); i++)
+    {
+        start_state_double.push_back((double)task.start_joint_values[i]);
+        goal_state_double.push_back((double)task.goal_joint_values[i]);
+    }
+    robot_state->setJointGroupPositions(joint_model_group, start_state_double);
+    robot_state->update();
+
+    // check if the start state is valid and self-collision free
+    if (!planning_scene->isStateValid(*robot_state, group_name))
+    {
+        return false;
+    }
+
+    robot_state->setJointGroupPositions(joint_model_group, goal_state_double);
+    robot_state->update();
+
+    // check if the goal state is valid and self-collision free
+    if (!planning_scene->isStateValid(*robot_state, group_name))
+    {
+        return false;
+    }
+
+    return true;
 }
 
 
@@ -177,6 +195,14 @@ int main(int argc, char** argv)
     for (size_t i = 0; i < tasks.size(); i++)
     {
         auto task = tasks[i];
+
+        // check if the task is valid
+        if (!isTaskValid(kinematic_model, GROUP_NAME, task))
+        {
+            RCLCPP_WARN(LOGGER, "Task %zu is invalid", i);
+            continue;
+        }
+
         // create a file for each task
         std::string task_file_path = task_dir_path + "/task_" + std::to_string(i) + ".yaml";
         std::ofstream task_file(task_file_path);

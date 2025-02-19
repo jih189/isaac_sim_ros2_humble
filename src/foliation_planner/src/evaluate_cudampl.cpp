@@ -156,10 +156,6 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
-    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
-    robot_state->setToDefaultValues();
-    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
-
     // // Create publishers
     // auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
     // auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
@@ -179,52 +175,10 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     long int total_solved = 0;
     long int total_unsolved = 0;
 
-    int dim = robot_model->getJointModelGroup(group_name)->getActiveJointModels().size();
-
     // print out the tasks
     for (size_t i = 0; i < tasks.size(); i++)
     {
         RCLCPP_INFO(LOGGER, "Task %zu", i);
-
-        // check if start and goal joint values are valid
-        auto world = std::make_shared<collision_detection::World>();
-        auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
-
-        // add those balls to the planning scene
-        for (size_t j = 0; j < tasks[i].obstacle_pos.size(); j++)
-        {
-            Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
-            sphere_pose.translation() = Eigen::Vector3d(tasks[i].obstacle_pos[j][0], tasks[i].obstacle_pos[j][1], tasks[i].obstacle_pos[j][2]);
-            planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(j), shapes::ShapeConstPtr(new shapes::Sphere(tasks[i].radius[j])), sphere_pose);
-        }
-
-        std::vector<double> start_state_double;
-        std::vector<double> goal_state_double;
-
-        for (int j = 0; j < dim; j++)
-        {
-            start_state_double.push_back(tasks[i].start_joint_values[j]);
-            goal_state_double.push_back(tasks[i].goal_joint_values[j]);
-        }
-        robot_state->setJointGroupPositions(joint_model_group, start_state_double);
-        robot_state->update();
-
-        // check if the start state is valid and self-collision free
-        if (!planning_scene->isStateValid(*robot_state, group_name))
-        {
-            RCLCPP_ERROR(LOGGER, "Start state is not valid");
-            continue;
-        }
-
-        robot_state->setJointGroupPositions(joint_model_group, goal_state_double);
-        robot_state->update();
-
-        // check if the goal state is valid and self-collision free
-        if (!planning_scene->isStateValid(*robot_state, group_name))
-        {
-            RCLCPP_ERROR(LOGGER, "Goal state is not valid");
-            continue;
-        }
 
         // if constraints contains "obstacle_constraint", then remove it
         for (size_t j = 0; j < constraints.size(); j++)
@@ -304,6 +258,9 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         }
         else
         {
+            RCLCPP_INFO(LOGGER, "Task %zu is not solved", i);
+            // print reason
+            RCLCPP_INFO(LOGGER, "Failure reason: %s", problem_task->getFailureReason().c_str());
             total_unsolved++;
         }
 
@@ -311,8 +268,6 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         single_arm_space.reset();
         problem_task.reset();
     }
-
-    robot_state.reset();
 
     // print out the average time
     RCLCPP_INFO(LOGGER, "Average time: %ld ms", total_time / total_solved);
