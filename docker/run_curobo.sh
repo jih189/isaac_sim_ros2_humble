@@ -3,6 +3,7 @@ set -ex
 USERNAME="ros"
 docker run -v $PWD/../src/:/home/${USERNAME}/ros2_ws/src \
 	-v $PWD/../cudampl/:/home/${USERNAME}/cudampl \
+	-v $PWD/../curobo_scripts/:/home/${USERNAME}/curobo_scripts \
 	-e DISPLAY \
 	-e QT_X11_NO_MITSHM=1 \
 	-e XAUTHORITY \

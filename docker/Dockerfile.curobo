@@ -42,3 +42,6 @@ RUN pip3 install numpy==1.26.4
 
 # create a directory for cudampl
 RUN mkdir -p /home/$USERNAME/cudampl
+
+# create a directory for curobo scripts
+RUN mkdir -p /home/$USERNAME/curobo_scripts
