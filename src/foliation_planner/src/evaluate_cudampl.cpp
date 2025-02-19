@@ -98,11 +98,72 @@ std::vector<MotionPlanningTask> loadMotionPlanningTasks(const std::string & task
     return tasks;
 }
 
+moveit_msgs::msg::DisplayRobotState getDisplayRobotState(
+    const moveit::core::RobotStatePtr & robot_state, 
+    const moveit::core::JointModelGroup * joint_model_group, 
+    const std::vector<float> & joint_values)
+{
+    std::vector<double> joint_values_double;
+    for (size_t i = 0; i < joint_values.size(); i++)
+    {
+        joint_values_double.push_back((double)joint_values[i]);
+    }
+    robot_state->setJointGroupPositions(joint_model_group, joint_values_double);
+    robot_state->update();
+    moveit_msgs::msg::DisplayRobotState robot_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, robot_state_msg.state);
+    return robot_state_msg;
+}
+
+visualization_msgs::msg::MarkerArray generate_obstacles_markers(
+    const std::vector<std::vector<float>> & balls_pos,
+    const std::vector<float> & ball_radius,
+    rclcpp::Node::SharedPtr node)
+{
+     // Create a obstacle MarkerArray message
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
+    for (size_t i = 0; i < balls_pos.size(); i++)
+    {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = node->now();
+        marker.ns = "obstacle_collision_spheres";
+        marker.id = i;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = balls_pos[i][0];
+        marker.pose.position.y = balls_pos[i][1];
+        marker.pose.position.z = balls_pos[i][2];
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 2 * ball_radius[i];
+        marker.scale.y = 2 * ball_radius[i];
+        marker.scale.z = 2 * ball_radius[i];
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.5;
+        marker.color.g = 0.5;
+        marker.color.b = 0.0;
+        obstacle_collision_spheres_marker_array.markers.push_back(marker);
+    }
+    return obstacle_collision_spheres_marker_array;
+}
+
 void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, std::vector<MotionPlanningTask> & tasks)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
+
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    robot_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
+    // // Create publishers
+    // auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
+    // auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+    // auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
 
     // Prepare constraints
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
@@ -118,10 +179,52 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     long int total_solved = 0;
     long int total_unsolved = 0;
 
+    int dim = robot_model->getJointModelGroup(group_name)->getActiveJointModels().size();
+
     // print out the tasks
     for (size_t i = 0; i < tasks.size(); i++)
     {
         RCLCPP_INFO(LOGGER, "Task %zu", i);
+
+        // check if start and goal joint values are valid
+        auto world = std::make_shared<collision_detection::World>();
+        auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
+
+        // add those balls to the planning scene
+        for (size_t j = 0; j < tasks[i].obstacle_pos.size(); j++)
+        {
+            Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
+            sphere_pose.translation() = Eigen::Vector3d(tasks[i].obstacle_pos[j][0], tasks[i].obstacle_pos[j][1], tasks[i].obstacle_pos[j][2]);
+            planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(j), shapes::ShapeConstPtr(new shapes::Sphere(tasks[i].radius[j])), sphere_pose);
+        }
+
+        std::vector<double> start_state_double;
+        std::vector<double> goal_state_double;
+
+        for (int j = 0; j < dim; j++)
+        {
+            start_state_double.push_back(tasks[i].start_joint_values[j]);
+            goal_state_double.push_back(tasks[i].goal_joint_values[j]);
+        }
+        robot_state->setJointGroupPositions(joint_model_group, start_state_double);
+        robot_state->update();
+
+        // check if the start state is valid and self-collision free
+        if (!planning_scene->isStateValid(*robot_state, group_name))
+        {
+            RCLCPP_ERROR(LOGGER, "Start state is not valid");
+            continue;
+        }
+
+        robot_state->setJointGroupPositions(joint_model_group, goal_state_double);
+        robot_state->update();
+
+        // check if the goal state is valid and self-collision free
+        if (!planning_scene->isStateValid(*robot_state, group_name))
+        {
+            RCLCPP_ERROR(LOGGER, "Goal state is not valid");
+            continue;
+        }
 
         // if constraints contains "obstacle_constraint", then remove it
         for (size_t j = 0; j < constraints.size(); j++)
@@ -177,13 +280,13 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
 
         // set the task
-        planner->setMotionTask(problem_task);
+        planner->setMotionTask(problem_task, false);
 
         // record the start time
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // solve the task
-        CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(1.0);
+        CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
         planner->solve(termination_condition);
 
         // record the end time
@@ -201,25 +304,20 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         }
         else
         {
-            if (problem_task->getFailureReason() == "InvalidInput")
-            {
-                RCLCPP_INFO(LOGGER, "Task %zu is not solved because %s", i, problem_task->getFailureReason().c_str());
-            }
-            else
-            {
-                RCLCPP_INFO(LOGGER, "Task %zu is not solved because meet termination condition", i);
-                total_unsolved++;
-            }
+            total_unsolved++;
         }
 
-        // reset planner
         planner.reset();
+        single_arm_space.reset();
+        problem_task.reset();
     }
+
+    robot_state.reset();
 
     // print out the average time
     RCLCPP_INFO(LOGGER, "Average time: %ld ms", total_time / total_solved);
     // print success rate
-    float success_rate = (float)total_solved / (float)tasks.size();
+    float success_rate = (float)total_solved / (float)(total_solved + total_unsolved);
     RCLCPP_INFO(LOGGER, "Success rate: %f", success_rate);
 }
 

@@ -13,7 +13,7 @@ namespace CUDAMPLib
             // constructor
             BasePlanner(BaseSpacePtr space) {space_ = space;}
             virtual ~BasePlanner() {}
-            virtual void setMotionTask(BaseTaskPtr task) = 0;
+            virtual void setMotionTask(BaseTaskPtr task, bool get_full_path) = 0;
             virtual void solve(BaseTerminationPtr termination_condition) = 0;
             
             /** get planning space */
@@ -22,6 +22,7 @@ namespace CUDAMPLib
             }
         protected:
             BaseSpacePtr space_;
+            bool get_full_path_;
     };
 
     typedef std::shared_ptr<BasePlanner> BasePlannerPtr;

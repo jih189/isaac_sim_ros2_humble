@@ -15,7 +15,7 @@ namespace CUDAMPLib
             RRG(BaseSpacePtr space);
             ~RRG() override;
 
-            void setMotionTask(BaseTaskPtr task) override;
+            void setMotionTask(BaseTaskPtr task, bool get_full_path=true) override;
             void solve(BaseTerminationPtr termination_condition) override;
             BaseStateManagerPtr getStateManager()
             {

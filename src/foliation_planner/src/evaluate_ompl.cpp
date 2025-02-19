@@ -106,10 +106,6 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     robot_state->setToDefaultValues();
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
 
-    // create planning scene
-    auto world = std::make_shared<collision_detection::World>();
-    auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
-
     // set group dimension
     int dim = robot_model->getJointModelGroup(group_name)->getActiveJointModels().size();
 
@@ -138,27 +134,6 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     }
     space->as<ompl::base::RealVectorStateSpace>()->setBounds(bounds);
 
-    // create space information
-    ompl::base::SpaceInformationPtr si(new ompl::base::SpaceInformation(space));
-
-    // set state validity checker
-    si->setStateValidityChecker([&](const ompl::base::State * state) {
-        // convert ompl state to robot state
-        std::vector<double> joint_values_double;
-        for (int i = 0; i < dim; i++)
-        {
-            joint_values_double.push_back(state->as<ompl::base::RealVectorStateSpace::StateType>()->values[i]);
-            // check if joint value is in the joint limits
-            if (joint_values_double[i] < lower_bounds_of_active_joints[i] || joint_values_double[i] > upper_bounds_of_active_joints[i])
-            {
-                return false;
-            }
-        }
-        robot_state->setJointGroupPositions(joint_model_group, joint_values_double);
-        robot_state->update();
-        return planning_scene->isStateValid(*robot_state, group_name);
-    });
-
     // create ompl states for start and goal
     ompl::base::ScopedState<> start_state(ompl::base::StateSpacePtr(new ompl::base::RealVectorStateSpace(dim)));
     ompl::base::ScopedState<> goal_state(ompl::base::StateSpacePtr(new ompl::base::RealVectorStateSpace(dim)));
@@ -170,8 +145,9 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // print out the tasks
     for (size_t i = 0; i < tasks.size(); i++)
     {
-        // clear the planning scene
-        planning_scene->getWorldNonConst()->clearObjects();
+        // create planning scene
+        auto world = std::make_shared<collision_detection::World>();
+        auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
 
         // add those balls to the planning scene
         for (size_t j = 0; j < tasks[i].obstacle_pos.size(); j++)
@@ -180,6 +156,57 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
             sphere_pose.translation() = Eigen::Vector3d(tasks[i].obstacle_pos[j][0], tasks[i].obstacle_pos[j][1], tasks[i].obstacle_pos[j][2]);
             planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(j), shapes::ShapeConstPtr(new shapes::Sphere(tasks[i].radius[j])), sphere_pose);
         }
+
+        std::vector<double> start_state_double;
+        std::vector<double> goal_state_double;
+
+        for (int j = 0; j < dim; j++)
+        {
+            start_state_double.push_back(tasks[i].start_joint_values[j]);
+            goal_state_double.push_back(tasks[i].goal_joint_values[j]);
+        }
+        robot_state->setJointGroupPositions(joint_model_group, start_state_double);
+        robot_state->update();
+
+        // check if the start state is valid and self-collision free
+        if (!planning_scene->isStateValid(*robot_state, group_name))
+        {
+            RCLCPP_ERROR(LOGGER, "Start state is not valid");
+            continue;
+        }
+
+        robot_state->setJointGroupPositions(joint_model_group, goal_state_double);
+        robot_state->update();
+
+        // check if the goal state is valid and self-collision free
+        if (!planning_scene->isStateValid(*robot_state, group_name))
+        {
+            RCLCPP_ERROR(LOGGER, "Goal state is not valid");
+            continue;
+        }
+
+        // create space information
+        ompl::base::SpaceInformationPtr si(new ompl::base::SpaceInformation(space));
+
+        // set state validity checker
+        si->setStateValidityChecker([&](const ompl::base::State * state) {
+            // convert ompl state to robot state
+            std::vector<double> joint_values_double;
+            for (int i = 0; i < dim; i++)
+            {
+                joint_values_double.push_back(state->as<ompl::base::RealVectorStateSpace::StateType>()->values[i]);
+                // check if joint value is in the joint limits
+                if (joint_values_double[i] < lower_bounds_of_active_joints[i] || joint_values_double[i] > upper_bounds_of_active_joints[i])
+                {
+                    return false;
+                }
+            }
+            robot_state->setJointGroupPositions(joint_model_group, joint_values_double);
+            robot_state->update();
+            return planning_scene->isStateValid(*robot_state, group_name);
+        });
+
+        si->setup();
 
         // set start and goal state
         for (int j = 0; j < dim; j++)
@@ -201,13 +228,16 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // solve the problem
-        ompl::base::PlannerStatus solved = planner->ob::Planner::solve(1.0);
+        ompl::base::PlannerStatus solved = planner->ob::Planner::solve(10.0);
 
         // record the end time
         auto end_time = std::chrono::high_resolution_clock::now();
 
         // calculate the time taken
         auto time_taken = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+        // print out the time taken
+        RCLCPP_INFO(LOGGER, "Time taken: %ld ms", time_taken);
 
         if (solved)
         {
@@ -222,13 +252,16 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         }
         
         // reset planner
+        world.reset();
+        planning_scene.reset();
+        si.reset();
         planner.reset();
         pdef.reset();
     }
 
     // print out the average time
     RCLCPP_INFO(LOGGER, "Average time: %ld ms", total_time / total_solved);
-    float success_rate = (float)total_solved / (float)tasks.size();
+    float success_rate = (float)total_solved / (float)(total_solved + total_unsolved);
     RCLCPP_INFO(LOGGER, "Success rate: %f", success_rate);
 
     robot_state.reset();

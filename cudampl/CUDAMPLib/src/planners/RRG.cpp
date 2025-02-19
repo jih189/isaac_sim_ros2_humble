@@ -25,8 +25,11 @@ namespace CUDAMPLib
     }
 
     // Set the motion task
-    void RRG::setMotionTask(BaseTaskPtr task)
+    void RRG::setMotionTask(BaseTaskPtr task, bool get_full_path)
     {
+        // set the get full path flag
+        get_full_path_ = get_full_path;
+
         // get start states
         auto start_states = task->getStartStates(space_);
         start_states->update();
@@ -473,10 +476,23 @@ namespace CUDAMPLib
                 }
             }
             // printf("\n");
-
-            auto solution = space_->getPathFromWaypoints(state_manager->get_states(path_indexs_in_manager));
-            task_->setSolution(solution, space_);
-            solution.reset();
+            if(get_full_path_)
+            {
+                // get the full path
+                auto waypoints = state_manager->get_states(path_indexs_in_manager);
+                auto solution = space_->getPathFromWaypoints(waypoints);
+                task_->setSolution(solution, space_);
+                waypoints.reset();
+                solution.reset();
+            }
+            else
+            {
+                // get the waypoints
+                auto waypoints = state_manager->get_states(path_indexs_in_manager);
+                task_->setSolution(waypoints, space_);
+                waypoints.reset();
+            }
+            
         }
     }
 

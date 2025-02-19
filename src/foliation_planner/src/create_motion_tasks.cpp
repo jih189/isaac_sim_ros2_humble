@@ -41,24 +41,21 @@ void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<
 
 std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, int num_tasks)
 {
-    // create planning scene
-    auto world = std::make_shared<collision_detection::World>();
-    auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
-
-    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
-    // set robot state to default state
-    robot_state->setToDefaultValues();
-    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
-
     std::vector<MotionPlanningTask> tasks;
     for(int i = 0; i < num_tasks; i++)
     {
+        moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+        // set robot state to default state
+        robot_state->setToDefaultValues();
+        const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
+        // create planning scene monitor
+        auto world = std::make_shared<collision_detection::World>();
+        auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
+
         MotionPlanningTask task;
         // generate random obstacles
         prepare_obstacles(task.obstacle_pos, task.radius);
-
-        // clean up the planning scene
-        planning_scene->getWorldNonConst()->clearObjects();
 
         // add those balls to the planning scene
         for (size_t b = 0; b < task.obstacle_pos.size(); b++)
@@ -76,8 +73,10 @@ std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::
         robot_state->setToRandomPositions();
         robot_state->update();
 
-        while (not planning_scene->isStateValid(*robot_state, group_name))
+        // check if the start state is valid and self-collision free
+        while (!planning_scene->isStateValid(*robot_state))
         {
+            // printf("Start state is not valid\n");
             robot_state->setToRandomPositions();
             robot_state->update();
         }
@@ -94,8 +93,9 @@ std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::
         robot_state->setToRandomPositions();
         robot_state->update();
 
-        while (not planning_scene->isStateValid(*robot_state, group_name))
+        while (!planning_scene->isStateValid(*robot_state))
         {
+            // printf("Goal state is not vasslid\n");
             robot_state->setToRandomPositions();
             robot_state->update();
         }
@@ -110,6 +110,11 @@ std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::
         task.goal_joint_values = goal_joint_values;
 
         tasks.push_back(task);
+
+        // reset
+        world.reset();
+        planning_scene.reset();
+        robot_state.reset();
     }
     return tasks;
 }
@@ -119,7 +124,7 @@ int main(int argc, char** argv)
 {
     // ============================ parameters =================================== //
     std::string task_dir_path = "/home/motion_planning_tasks";
-    int num_tasks = 10;
+    int num_tasks = 100;
     const std::string GROUP_NAME = "arm";
     // =========================================================================== //
 
