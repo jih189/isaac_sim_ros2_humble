@@ -7,6 +7,9 @@ from curobo.types.robot import JointState
 from curobo.wrap.reacher.motion_gen import MotionGen, MotionGenConfig, MotionGenPlanConfig
 from curobo.types.base import TensorDeviceType
 
+# include time
+import time
+
 tensor_args = TensorDeviceType(device=torch.device("cuda:0"))
 
 world_config = {
@@ -37,7 +40,10 @@ goal_state = JointState.from_position(
     joint_names=["shoulder_pan_joint", "shoulder_lift_joint", "upperarm_roll_joint", "elbow_flex_joint", "forearm_roll_joint", "wrist_flex_joint", "wrist_roll_joint"],
 )
 
+start_time = time.time()
 result = motion_gen.plan_single_js(start_state, goal_state, MotionGenPlanConfig(enable_graph=True, need_graph_success=True))
+end_time = time.time()
+print("Time taken for planning: ", end_time - start_time)
 
 # check the number of valid states in graph
 traj = result.get_interpolated_plan()  # result.interpolation_dt has the dt between timesteps
