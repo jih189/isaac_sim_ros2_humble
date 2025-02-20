@@ -11,9 +11,6 @@
 #include <moveit/robot_trajectory/robot_trajectory.h>
 
 // cudampl include
-#include <CUDAMPLib/multiply.h>
-#include <CUDAMPLib/kinematics.h>
-#include <CUDAMPLib/cost.h>
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
 #include <CUDAMPLib/constraints/EnvConstraint.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>

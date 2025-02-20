@@ -1,3 +1,6 @@
+#pragma nv_diag_suppress 20012
+#pragma nv_diag_suppress 20014
+
 #include <spaces/SingleArmSpace.h>
 
 namespace CUDAMPLib {

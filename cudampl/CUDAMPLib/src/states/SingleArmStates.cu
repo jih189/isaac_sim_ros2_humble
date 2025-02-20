@@ -1,3 +1,6 @@
+#pragma nv_diag_suppress 20012
+#pragma nv_diag_suppress 20014
+
 #include <states/SingleArmStates.h>
 
 namespace CUDAMPLib
@@ -408,6 +411,24 @@ namespace CUDAMPLib
                 printf("%f ", joint_states[i][j]);
             }
             printf("\n");
+        }
+    }
+
+    SingleArmStateManager::~SingleArmStateManager()
+    {
+        if (num_of_states_ > 0)
+        {
+            cudaFree(d_joint_states);
+        }
+    }
+
+    void SingleArmStateManager::clear()
+    {
+        if (num_of_states_ > 0)
+        {
+            // call the base class clear function
+            BaseStateManager::clear();
+            cudaFree(d_joint_states);
         }
     }
 

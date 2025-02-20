@@ -1,8 +1,5 @@
 #pragma once
 
-#pragma nv_diag_suppress 20012
-#pragma nv_diag_suppress 20014
-
 #include <base/States.h>
 #include <vector>
 #include <stdexcept>
@@ -121,18 +118,9 @@ namespace CUDAMPLib
                 num_of_states_ = 0; // number of states in the knn
             }
 
-            ~SingleArmStateManager() {
-                if (num_of_states_ > 0)
-                {
-                    cudaFree(d_joint_states);
-                }
-            }
+            ~SingleArmStateManager();
 
-            void clear() override {
-                // call the base class clear function
-                BaseStateManager::clear();
-                cudaFree(d_joint_states);
-            }
+            void clear() override;
 
             std::vector<int> add_states(const BaseStatesPtr & states) override;
 
