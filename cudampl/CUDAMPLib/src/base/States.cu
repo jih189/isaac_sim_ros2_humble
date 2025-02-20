@@ -25,12 +25,12 @@ namespace CUDAMPLib{
         // Calculate the total cost of the states by summing the costs of all constraints in kernel
 
         int threadsPerBlock = 256;
-        int blocksPerGrid = (num_of_states + threadsPerBlock - 1) / threadsPerBlock;
+        int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
 
         // Call the kernel to calculate the total cost
         calculateTotalCostsKernel<<<blocksPerGrid, threadsPerBlock>>>(
             d_costs,
-            num_of_states,
+            num_of_states_,
             space_info->num_of_constraints,
             d_total_costs
         );

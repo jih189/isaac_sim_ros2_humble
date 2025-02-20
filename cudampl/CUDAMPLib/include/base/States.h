@@ -27,14 +27,13 @@ namespace CUDAMPLib
     class BaseStates
     {
         public:
-            BaseStates(int num_of_states, SpaceInfoPtr space_info) {
-
-                this->num_of_states = num_of_states;
+            BaseStates(int num_of_states, SpaceInfoPtr space_info) : num_of_states_(num_of_states)
+            {
                 this->space_info = space_info;
 
                 // Allocate memory for the costs
-                cudaMalloc(&d_costs, num_of_states * space_info->num_of_constraints * sizeof(float));
-                cudaMalloc(&d_total_costs, num_of_states * sizeof(float));
+                cudaMalloc(&d_costs, num_of_states_ * space_info->num_of_constraints * sizeof(float));
+                cudaMalloc(&d_total_costs, num_of_states_ * sizeof(float));
             }
 
             virtual ~BaseStates() {
@@ -47,7 +46,7 @@ namespace CUDAMPLib
 
                 // calculate the number of feasible states
                 int num_left_states = 0;
-                for (int i = 0; i < num_of_states; i++) {
+                for (int i = 0; i < num_of_states_; i++) {
                     if (filter_map[i]) {
                         num_left_states++;
                     }
@@ -68,16 +67,16 @@ namespace CUDAMPLib
 
                     // copy the feasible states to the new memory
                     int j = 0;
-                    for (int i = 0; i < num_of_states; i++) {
+                    for (int i = 0; i < num_of_states_; i++) {
                         if (filter_map[i]) {
                             for (int k = 0; k < space_info->num_of_constraints; k++) {
                                 // cudaMemcpy(d_costs_new + j + k * num_left_states,
-                                // d_costs + i + k * num_of_states,
+                                // d_costs + i + k * num_of_states_,
                                 // sizeof(float), 
                                 // cudaMemcpyDeviceToDevice);
                                 // copy asynchonously
                                 cudaMemcpyAsync(d_costs_new + j + k * num_left_states,
-                                d_costs + i + k * num_of_states,
+                                d_costs + i + k * num_of_states_,
                                 sizeof(float),
                                 cudaMemcpyDeviceToDevice);
                             }
@@ -100,10 +99,10 @@ namespace CUDAMPLib
                     d_total_costs = d_total_costs_new;
                 }
 
-                this->num_of_states = num_left_states;
+                num_of_states_ = num_left_states;
             }
 
-            int getNumOfStates() const { return num_of_states; }
+            int getNumOfStates() const { return num_of_states_; }
 
             float * getCostsCuda() {
                 return d_costs;
@@ -116,13 +115,13 @@ namespace CUDAMPLib
             void calculateTotalCosts();
 
             std::vector<std::vector<float>> getCostsHost() {
-                std::vector<std::vector<float>> costs_host(num_of_states, std::vector<float>(space_info->num_of_constraints, 0.0));
-                std::vector<float> costs_host_flatten(num_of_states * space_info->num_of_constraints, 0.0);
-                cudaMemcpy(costs_host_flatten.data(), d_costs, num_of_states * space_info->num_of_constraints * sizeof(float), cudaMemcpyDeviceToHost);
+                std::vector<std::vector<float>> costs_host(num_of_states_, std::vector<float>(space_info->num_of_constraints, 0.0));
+                std::vector<float> costs_host_flatten(num_of_states_ * space_info->num_of_constraints, 0.0);
+                cudaMemcpy(costs_host_flatten.data(), d_costs, num_of_states_ * space_info->num_of_constraints * sizeof(float), cudaMemcpyDeviceToHost);
 
-                for (int i = 0; i < num_of_states; i++) {
+                for (int i = 0; i < num_of_states_; i++) {
                     for (int j = 0; j < space_info->num_of_constraints; j++) {
-                        costs_host[i][j] = costs_host_flatten[j * num_of_states + i];
+                        costs_host[i][j] = costs_host_flatten[j * num_of_states_ + i];
                     }
                 }
 
@@ -130,8 +129,8 @@ namespace CUDAMPLib
             }
 
             std::vector<float> getTotalCostsHost() {
-                std::vector<float> total_costs_host(num_of_states, 0.0);
-                cudaMemcpy(total_costs_host.data(), d_total_costs, num_of_states * sizeof(float), cudaMemcpyDeviceToHost);
+                std::vector<float> total_costs_host(num_of_states_, 0.0);
+                cudaMemcpy(total_costs_host.data(), d_total_costs, num_of_states_ * sizeof(float), cudaMemcpyDeviceToHost);
                 return total_costs_host;
             }
 
@@ -148,7 +147,7 @@ namespace CUDAMPLib
             SpaceInfoPtr getSpaceInfo() const { return space_info; }
 
         protected:
-            int num_of_states;
+            int num_of_states_;
             float * d_costs; // cost of each state and different constraints. The format should be [state1_constraint1, state2_constraint1, ..., state1_constraint2, state2_constraint2, ...]
             float * d_total_costs; // total cost of each state
             SpaceInfoPtr space_info;

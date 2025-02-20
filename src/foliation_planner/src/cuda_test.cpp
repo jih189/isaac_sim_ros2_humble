@@ -165,9 +165,11 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     );
 
     // set a test joint values
-    std::vector<float> joint_values = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<float> joint_values_2 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5};
     std::vector<std::vector<float>> joint_values_set;
-    joint_values_set.push_back(joint_values);
+    joint_values_set.push_back(joint_values_1);
+    joint_values_set.push_back(joint_values_2);
 
     // create states based on the joint values
     auto states = single_arm_space->createStatesFromVector(joint_values_set);
@@ -178,10 +180,19 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     std::vector<Eigen::Isometry3d> end_effector_link_poses_in_base_link = single_arm_states->getLinkPoseInBaseLinkHost("wrist_roll_link");
 
-    // print end effector link pose
-    std::cout << "End effector link pose: " << std::endl;
-    std::cout << end_effector_link_poses_in_base_link[0].translation().transpose() << std::endl;
-    std::cout << end_effector_link_poses_in_base_link[0].rotation() << std::endl;
+    for (size_t i = 0; i < end_effector_link_poses_in_base_link.size(); i++)
+    {
+        // print joint values
+        std::cout << "Joint values: ";
+        for (size_t j = 0; j < joint_values_set[i].size(); j++)
+        {
+            std::cout << joint_values_set[i][j] << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "End effector pose " << i << ": " << std::endl;
+        std::cout << end_effector_link_poses_in_base_link[i].translation().transpose() << std::endl;
+        std::cout << end_effector_link_poses_in_base_link[i].rotation() << std::endl;
+    }
 }
 
 /**

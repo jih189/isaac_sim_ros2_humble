@@ -251,7 +251,7 @@ namespace CUDAMPLib
     SingleArmStates::~SingleArmStates()
     {
         // Free the memory
-        if (num_of_states > 0)
+        if (num_of_states_ > 0)
         {
             cudaFree(d_joint_states);
             cudaFree(d_link_poses_in_base_link);
@@ -261,12 +261,12 @@ namespace CUDAMPLib
 
     void SingleArmStates::filterStates(const std::vector<bool> & filter_map)
     {
-        int initial_num_of_states = num_of_states;
+        int initial_num_of_states = num_of_states_;
 
         // call the base class filterStates
         BaseStates::filterStates(filter_map);
 
-        int new_num_of_states = num_of_states;
+        int new_num_of_states = num_of_states_;
 
         if (new_num_of_states == 0){
             // Free the memory
@@ -322,14 +322,14 @@ namespace CUDAMPLib
     std::vector<std::vector<float>> SingleArmStates::getJointStatesHost() const
     {
         // Allocate memory for the joint states
-        std::vector<float> joint_states_flatten(num_of_states * num_of_joints, 0.0);
+        std::vector<float> joint_states_flatten(num_of_states_ * num_of_joints, 0.0);
 
         // Copy the joint states from device to host
-        cudaMemcpy(joint_states_flatten.data(), d_joint_states, num_of_states * num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(joint_states_flatten.data(), d_joint_states, num_of_states_ * num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
 
         // Reshape the joint states
-        std::vector<std::vector<float>> joint_states(num_of_states, std::vector<float>(num_of_joints, 0.0));
-        for (int i = 0; i < num_of_states; i++)
+        std::vector<std::vector<float>> joint_states(num_of_states_, std::vector<float>(num_of_joints, 0.0));
+        for (int i = 0; i < num_of_states_; i++)
         {
             for (int j = 0; j < num_of_joints; j++)
             {
@@ -345,15 +345,15 @@ namespace CUDAMPLib
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
 
         // Allocate memory for the self collision spheres position in base link frame
-        std::vector<float> self_collision_spheres_pos_in_base_link_flatten(num_of_states * space_info_single_arm_space->num_of_self_collision_spheres * 3, 0.0);
+        std::vector<float> self_collision_spheres_pos_in_base_link_flatten(num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres * 3, 0.0);
 
         // Copy the self collision spheres position in base link frame from device to host
-        cudaMemcpy(self_collision_spheres_pos_in_base_link_flatten.data(), d_self_collision_spheres_pos_in_base_link, num_of_states * space_info_single_arm_space->num_of_self_collision_spheres * 3 * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(self_collision_spheres_pos_in_base_link_flatten.data(), d_self_collision_spheres_pos_in_base_link, num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres * 3 * sizeof(float), cudaMemcpyDeviceToHost);
 
         // Reshape the self collision spheres position in base link frame
-        std::vector<std::vector<std::vector<float>>> self_collision_spheres_pos_in_base_link(num_of_states, std::vector<std::vector<float>>(space_info_single_arm_space->num_of_self_collision_spheres, std::vector<float>(3, 0.0)));
+        std::vector<std::vector<std::vector<float>>> self_collision_spheres_pos_in_base_link(num_of_states_, std::vector<std::vector<float>>(space_info_single_arm_space->num_of_self_collision_spheres, std::vector<float>(3, 0.0)));
 
-        for (int i = 0; i < num_of_states; i++)
+        for (int i = 0; i < num_of_states_; i++)
         {
             for (int j = 0; j < space_info_single_arm_space->num_of_self_collision_spheres; j++)
             {
@@ -370,14 +370,14 @@ namespace CUDAMPLib
     void SingleArmStates::update()
     {
         int threadsPerBlock = 256;
-        int blocksPerGrid = (num_of_states + threadsPerBlock - 1) / threadsPerBlock;
+        int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
         
         // Update the states
         kin_forward_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
             d_joint_states,
             num_of_joints,
-            num_of_states,
+            num_of_states_,
             space_info_single_arm_space->d_joint_types,
             space_info_single_arm_space->d_joint_poses,
             space_info_single_arm_space->num_of_links,
@@ -399,15 +399,15 @@ namespace CUDAMPLib
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
 
         // Allocate memory for the link poses in base link frame
-        std::vector<float> link_poses_in_base_link_flatten(num_of_states * space_info_single_arm_space->num_of_links * 4 * 4, 0.0);
+        std::vector<float> link_poses_in_base_link_flatten(num_of_states_ * space_info_single_arm_space->num_of_links * 4 * 4, 0.0);
 
         // Copy the link poses from device to host
-        cudaMemcpy(link_poses_in_base_link_flatten.data(), d_link_poses_in_base_link, num_of_states * space_info_single_arm_space->num_of_links * 4 * 4 * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(link_poses_in_base_link_flatten.data(), d_link_poses_in_base_link, num_of_states_ * space_info_single_arm_space->num_of_links * 4 * 4 * sizeof(float), cudaMemcpyDeviceToHost);
 
         // Reshape the link poses
-        std::vector<std::vector<Eigen::Isometry3d>> link_poses_in_base_link(num_of_states, std::vector<Eigen::Isometry3d>(space_info_single_arm_space->num_of_links));
+        std::vector<std::vector<Eigen::Isometry3d>> link_poses_in_base_link(num_of_states_, std::vector<Eigen::Isometry3d>(space_info_single_arm_space->num_of_links));
 
-        for (int i = 0; i < num_of_states; i++)
+        for (int i = 0; i < num_of_states_; i++)
         {
             for (int j = 0; j < space_info_single_arm_space->num_of_links; j++)
             {
@@ -448,8 +448,8 @@ namespace CUDAMPLib
         std::vector<std::vector<Eigen::Isometry3d>> link_poses_in_base_link = getLinkPosesInBaseLinkHost();
 
         // Extract the link poses for the given link
-        std::vector<Eigen::Isometry3d> result(num_of_states);
-        for (int i = 0; i < num_of_states; i++)
+        std::vector<Eigen::Isometry3d> result(num_of_states_);
+        for (int i = 0; i < num_of_states_; i++)
         {
             result[i] = link_poses_in_base_link[i][link_index];
         }
@@ -469,7 +469,7 @@ namespace CUDAMPLib
         printf("SingleArmStates: \n");
 
         // Print the joint states
-        for (int i = 0; i < num_of_states; i++)
+        for (int i = 0; i < num_of_states_; i++)
         {
             printf("State %d: ", i);
             for (int j = 0; j < num_of_joints; j++)
