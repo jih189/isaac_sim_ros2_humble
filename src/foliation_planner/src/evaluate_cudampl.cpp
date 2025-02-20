@@ -212,6 +212,7 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
             robot_info.getLowerBounds(),
             robot_info.getUpperBounds(),
             robot_info.getDefaultJointValues(),
+            robot_info.getLinkNames(),
             0.02 // resolution
         );
 

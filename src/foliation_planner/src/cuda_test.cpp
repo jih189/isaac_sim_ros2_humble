@@ -132,6 +132,58 @@ void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<
     }
 }
 
+void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames()
+    );
+
+    // set a test joint values
+    std::vector<float> joint_values = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<std::vector<float>> joint_values_set;
+    joint_values_set.push_back(joint_values);
+
+    // create states based on the joint values
+    auto states = single_arm_space->createStatesFromVector(joint_values_set);
+    states->update();
+
+    // statistic_cast_pointer_cast to SingleArmStates
+    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(states);
+
+    std::vector<Eigen::Isometry3d> end_effector_link_poses_in_base_link = single_arm_states->getLinkPoseInBaseLinkHost("wrist_roll_link");
+
+    // print end effector link pose
+    std::cout << "End effector link pose: " << std::endl;
+    std::cout << end_effector_link_poses_in_base_link[0].translation().transpose() << std::endl;
+    std::cout << end_effector_link_poses_in_base_link[0].rotation() << std::endl;
+}
+
 /**
     Create a CUDAMPLib::SingleArmSpace and sample a set of states.
     Then, we will check the feasibility of the states and visualize the collision spheres in rviz.
@@ -175,7 +227,8 @@ void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::
         robot_info.getActiveJointMap(),
         robot_info.getLowerBounds(),
         robot_info.getUpperBounds(),
-        robot_info.getDefaultJointValues()
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames()
     );
 
     // sample a set of states
@@ -375,6 +428,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_info.getLowerBounds(),
         robot_info.getUpperBounds(),
         robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames(),
         0.02 // resolution
     );
 
@@ -814,9 +868,11 @@ int main(int argc, char** argv)
     // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
+    TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+
     // TEST_CUDAMPLib(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

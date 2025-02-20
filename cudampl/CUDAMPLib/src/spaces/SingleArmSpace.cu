@@ -19,6 +19,7 @@ namespace CUDAMPLib {
         const std::vector<float>& lower,
         const std::vector<float>& upper,
         const std::vector<float>& default_joint_values,
+        const std::vector<std::string>& link_names,
         float resolution
     )
         : BaseSpace(dim, constraints),
@@ -39,6 +40,14 @@ namespace CUDAMPLib {
         // set bounds
         lower_bound = lower;
         upper_bound = upper;
+
+        // set the link names
+        link_names_ = link_names;
+
+        if (num_of_links != link_names_.size())
+        {
+            throw std::runtime_error("Number of link names is not equal to the number of links");
+        }
 
         int byte_size_of_pose_matrix = sizeof(float) * 4 * 4;
         int joint_types_bytes = sizeof(int) * num_of_joints;
@@ -529,6 +538,7 @@ namespace CUDAMPLib {
         space_info->num_of_joints = num_of_joints;
         space_info->num_of_links = num_of_links;
         space_info->num_of_self_collision_spheres = num_of_self_collision_spheres;
+        space_info->link_names = link_names_;
 
         // set the bounds
         space_info->lower_bound = lower_bound;

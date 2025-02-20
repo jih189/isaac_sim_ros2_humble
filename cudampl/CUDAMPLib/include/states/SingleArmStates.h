@@ -22,6 +22,7 @@ namespace CUDAMPLib
         int num_of_self_collision_spheres;
         std::vector<float> lower_bound;
         std::vector<float> upper_bound;
+        std::vector<std::string> link_names;
 
         // address of the device memory about the space information
         int * d_joint_types;
@@ -79,12 +80,30 @@ namespace CUDAMPLib
             std::vector<std::vector<std::vector<float>>> getSelfCollisionSpheresPosInBaseLinkHost();
 
             /**
-                * @brief Get the joint states in host memory.
-                * @return The joint states in host memory. The joint states are represented as a 
+                @brief Get the joint states in host memory.
+                @return The joint states in host memory. The joint states are represented as a 
                           list of configurations, each represented as a list of floats.
              */
             std::vector<std::vector<float>> getJointStatesHost() const;
 
+            /**
+                @brief Get link poses in base link in host memory.
+                @return The link poses in base link in host memory. The link poses are represented as pose matrices.
+            */
+            std::vector<std::vector<Eigen::Isometry3d>> getLinkPosesInBaseLinkHost() const;
+
+            /**
+                @brief Get Link pose in base link in host memory of a specific link.
+                @param link_name The name of the link
+                @return The link pose in base link in host memory of a specific link.
+             */
+            std::vector<Eigen::Isometry3d> getLinkPoseInBaseLinkHost(std::string link_name) const;
+
+            /**
+                @brief Get the joint states in active joints in host memory.
+                @return The joint states in active joints in host memory. The joint states are represented as a 
+                          list of configurations, each represented as a list of floats.
+             */
             std::vector<std::vector<float>> getJointStatesInActiveJointHost() const;
 
             /**

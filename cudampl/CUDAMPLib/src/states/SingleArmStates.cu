@@ -394,8 +394,74 @@ namespace CUDAMPLib
         cudaDeviceSynchronize();
     }
 
+    std::vector<std::vector<Eigen::Isometry3d>> SingleArmStates::getLinkPosesInBaseLinkHost() const
+    {
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+
+        // Allocate memory for the link poses in base link frame
+        std::vector<float> link_poses_in_base_link_flatten(num_of_states * space_info_single_arm_space->num_of_links * 4 * 4, 0.0);
+
+        // Copy the link poses from device to host
+        cudaMemcpy(link_poses_in_base_link_flatten.data(), d_link_poses_in_base_link, num_of_states * space_info_single_arm_space->num_of_links * 4 * 4 * sizeof(float), cudaMemcpyDeviceToHost);
+
+        // Reshape the link poses
+        std::vector<std::vector<Eigen::Isometry3d>> link_poses_in_base_link(num_of_states, std::vector<Eigen::Isometry3d>(space_info_single_arm_space->num_of_links));
+
+        for (int i = 0; i < num_of_states; i++)
+        {
+            for (int j = 0; j < space_info_single_arm_space->num_of_links; j++)
+            {
+                Eigen::Matrix4d M;
+                for (int k = 0; k < 4; k++)
+                {
+                    for (int l = 0; l < 4; l++)
+                    {
+                        M(k, l) = link_poses_in_base_link_flatten[i * space_info_single_arm_space->num_of_links * 4 * 4 + j * 4 * 4 + k * 4 + l];
+                    }
+                }
+                link_poses_in_base_link[i][j] = Eigen::Isometry3d(M);
+            }
+        }
+
+        return link_poses_in_base_link;
+    }
+
+    std::vector<Eigen::Isometry3d> SingleArmStates::getLinkPoseInBaseLinkHost(std::string link_name) const
+    {
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+
+        // get the index of the link
+        int link_index = -1;
+        for (int i = 0; i < space_info_single_arm_space->num_of_links; i++)
+        {
+            if (space_info_single_arm_space->link_names[i] == link_name)
+            {
+                link_index = i;
+                break;
+            }
+        }
+        if (link_index == -1)
+        {
+            throw std::runtime_error("Link " + link_name + " not found in the space");
+        }
+
+        std::vector<std::vector<Eigen::Isometry3d>> link_poses_in_base_link = getLinkPosesInBaseLinkHost();
+
+        // Extract the link poses for the given link
+        std::vector<Eigen::Isometry3d> result(num_of_states);
+        for (int i = 0; i < num_of_states; i++)
+        {
+            result[i] = link_poses_in_base_link[i][link_index];
+        }
+
+        return result;
+    }
+
     void SingleArmStates::print() const
     {
+        // static_cast the space_info to SingleArmSpaceInfo
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+
         // Get the joint states
         std::vector<std::vector<float>> joint_states = getJointStatesHost();
 
@@ -411,6 +477,23 @@ namespace CUDAMPLib
                 printf("%f ", joint_states[i][j]);
             }
             printf("\n");
+
+            // // Get the link poses in base link frame
+            // std::vector<std::vector<Eigen::Isometry3d>> link_poses_in_base_link = getLinkPosesInBaseLinkHost();
+            // for (int j = 0; j < space_info_single_arm_space->num_of_links; j++)
+            // {
+            //     printf("Link %s pose in base link frame: \n", space_info_single_arm_space->link_names[j].c_str());
+            //     // get the matrix
+            //     auto link_matrix = link_poses_in_base_link[i][j].matrix();
+            //     for (int k = 0; k < 4; k++)
+            //     {
+            //         for (int l = 0; l < 4; l++)
+            //         {
+            //             printf("%f ", link_matrix(k, l));
+            //         }
+            //         printf("\n");
+            //     }
+            // }
         }
     }
 

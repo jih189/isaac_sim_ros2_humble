@@ -32,7 +32,8 @@ namespace CUDAMPLib
                 const std::vector<float>& lower,
                 const std::vector<float>& upper,
                 const std::vector<float>& default_joint_values,
-                float resolution = 0.1f
+                const std::vector<std::string>& link_names,
+                float resolution = 0.02f
             );
 
             ~SingleArmSpace() override;
@@ -93,12 +94,13 @@ namespace CUDAMPLib
         private:
 
             int num_of_joints; // number of joints where joints include fixed joints.
-            int num_of_links;
+            size_t num_of_links;
             int num_of_self_collision_spheres;
             std::vector<float> lower_bound;
             std::vector<float> upper_bound;
             std::vector<bool> active_joint_map_;
             std::vector<float> default_joint_values_;
+            std::vector<std::string> link_names_;
             float resolution_;
 
             // variables for gpu memory
