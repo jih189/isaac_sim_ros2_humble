@@ -100,13 +100,6 @@ namespace CUDAMPLib
             std::vector<Eigen::Isometry3d> getLinkPoseInBaseLinkHost(std::string link_name) const;
 
             /**
-                @brief Get the joint states in active joints in host memory.
-                @return The joint states in active joints in host memory. The joint states are represented as a 
-                          list of configurations, each represented as a list of floats.
-             */
-            std::vector<std::vector<float>> getJointStatesInActiveJointHost() const;
-
-            /**
                 * Based on the current states, update link poses, joint poses, and joint axes, collision spheres in base link, etc.
              */
             void update() override;

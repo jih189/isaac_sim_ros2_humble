@@ -165,12 +165,12 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     );
 
     // set a test joint values
-    std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    std::vector<float> joint_values_2 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5};
-    std::vector<float> joint_values_3 = {0.1, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0};
+    // std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    // std::vector<float> joint_values_2 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5};
+    std::vector<float> joint_values_3 = {1.0, 0.2, 0.4, 0.3, 0.0, 0.0, 0.0};
     std::vector<std::vector<float>> joint_values_set;
-    joint_values_set.push_back(joint_values_1);
-    joint_values_set.push_back(joint_values_2);
+    // joint_values_set.push_back(joint_values_1);
+    // joint_values_set.push_back(joint_values_2);
     joint_values_set.push_back(joint_values_3);
 
     // create states based on the joint values
@@ -199,12 +199,119 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         std::cout << "quaternion: " << q.w() << " " << q.x() << " " << q.y() << " " << q.z() << std::endl;
     }
 }
+void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    std::vector<std::vector<float>> balls_pos;
+    std::vector<float> ball_radius;
+    
+    // create obstacles manually
+    balls_pos.push_back({0.4, 0.0, 1.4});
+    ball_radius.push_back(0.2);
+
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
+    CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+        "obstacle_constraint",
+        balls_pos,
+        ball_radius
+    );
+    constraints.push_back(env_constraint);
+
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames()
+    );
+
+    // sample a set of states
+    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(10));
+    single_arm_states->update();
+
+    // // // create states based on the joint values
+    // std::vector<float> joint_values_1 = {0.546425, 0.209272, -1.59996, 0.722765, -1.90513, 0.263605, -1.71856};
+    // std::vector<float> joint_values_2 = {-1.54113, 0.252858, 0.348399, -1.12736, -1.57115, -0.779098, 0.534417};
+    // std::vector<float> joint_values_3 = {0.486819, 1.49364, -2.76078, 0.382366, -1.22063, 1.56475, -1.23166};
+    // std::vector<float> joint_values_4 = {0.351574, 0.15772, -1.4167, 0.465496, 0.25186, -1.93307, -1.46687};
+    // std::vector<std::vector<float>> joint_values_set;
+    // joint_values_set.push_back(joint_values_1);
+    // joint_values_set.push_back(joint_values_2);
+    // joint_values_set.push_back(joint_values_3);
+    // joint_values_set.push_back(joint_values_4);
+
+    // // create states based on the joint values
+    // auto sampled_states = single_arm_space->createStatesFromVector(joint_values_set);
+    // sampled_states->update();
+    // // statistic_cast_pointer_cast to SingleArmStates
+    // CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(sampled_states);
+
+    std::vector<bool> state_feasibility;
+
+    // check states
+    single_arm_space->checkStates(single_arm_states, state_feasibility);
+
+    std::vector<std::vector<float>> states_joint_values = single_arm_states->getJointStatesHost();
+    for (size_t i = 0; i < states_joint_values.size(); i++)
+    {
+        for (size_t j = 0; j < states_joint_values[i].size(); j++)
+        {
+            // only print active joints
+            if (robot_info.getActiveJointMap()[j])
+            {
+                std::cout << states_joint_values[i][j] << ", ";
+            }
+        }
+
+        if (state_feasibility[i])
+        {
+            // print in green
+            std::cout << "\033[1;32m" << " feasible" << "\033[0m" << std::endl;
+        }
+        else
+        {
+            // print in red
+            std::cout << "\033[1;31m" << " infeasible" << "\033[0m" << std::endl;
+        }
+    }
+
+    std::vector<std::vector<float>> cost_values = single_arm_states->getCostsHost();
+    // print cost values
+    for (size_t i = 0; i < cost_values.size(); i++)
+    {
+        for (size_t j = 0; j < cost_values[i].size(); j++)
+        {
+            std::cout << cost_values[i][j] << ", ";
+        }
+        std::cout << std::endl;
+    }
+}
 
 /**
     Create a CUDAMPLib::SingleArmSpace and sample a set of states.
     Then, we will check the feasibility of the states and visualize the collision spheres in rviz.
  */
-void TEST_CUDAMPLib(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
@@ -886,7 +993,7 @@ int main(int argc, char** argv)
 
     TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_CUDAMPLib(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
