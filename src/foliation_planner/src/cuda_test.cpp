@@ -167,9 +167,11 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     // set a test joint values
     std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     std::vector<float> joint_values_2 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5};
+    std::vector<float> joint_values_3 = {0.1, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0};
     std::vector<std::vector<float>> joint_values_set;
     joint_values_set.push_back(joint_values_1);
     joint_values_set.push_back(joint_values_2);
+    joint_values_set.push_back(joint_values_3);
 
     // create states based on the joint values
     auto states = single_arm_space->createStatesFromVector(joint_values_set);
@@ -190,8 +192,11 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         }
         std::cout << std::endl;
         std::cout << "End effector pose " << i << ": " << std::endl;
-        std::cout << end_effector_link_poses_in_base_link[i].translation().transpose() << std::endl;
-        std::cout << end_effector_link_poses_in_base_link[i].rotation() << std::endl;
+        std::cout << "position: " << end_effector_link_poses_in_base_link[i].translation().transpose() << std::endl;
+        // std::cout << end_effector_link_poses_in_base_link[i].rotation() << std::endl;
+        // print it as quaternion
+        Eigen::Quaterniond q(end_effector_link_poses_in_base_link[i].rotation());
+        std::cout << "quaternion: " << q.w() << " " << q.x() << " " << q.y() << " " << q.z() << std::endl;
     }
 }
 
