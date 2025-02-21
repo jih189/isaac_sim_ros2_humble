@@ -33,7 +33,7 @@ curobo_fn = RobotWorld(robot_world_config)
 
 # set test_joint_values
 test_joint_values = [
-    [0, 0, 0, 0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, -1.0, 0.0, 0.6, 0.0],
 ]
 # create q_s based on test_joint_values
 q_s = torch.tensor(test_joint_values, **(tensor_args.as_torch_dict()))
