@@ -991,11 +991,11 @@ int main(int argc, char** argv)
     // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
-    TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
