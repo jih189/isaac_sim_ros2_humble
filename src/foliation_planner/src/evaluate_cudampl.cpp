@@ -256,10 +256,12 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         }
         else
         {
-            RCLCPP_INFO(LOGGER, "Task %zu is not solved", i);
-            // print reason
-            RCLCPP_INFO(LOGGER, "Failure reason: %s", problem_task->getFailureReason().c_str());
-            total_unsolved++;
+            if (problem_task->getFailureReason() == "MeetTerminationCondition")
+            {
+                RCLCPP_INFO(LOGGER, "Task %zu is not solved due to timeout", i);
+                RCLCPP_INFO(LOGGER, "Failure reason: %s", problem_task->getFailureReason().c_str());
+                total_unsolved++;
+            }
         }
 
         planner.reset();

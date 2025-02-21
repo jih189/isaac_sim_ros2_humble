@@ -142,7 +142,7 @@ int main(int argc, char** argv)
 {
     // ============================ parameters =================================== //
     std::string task_dir_path = "/home/motion_planning_tasks";
-    int num_tasks = 100;
+    int num_tasks = 1000;
     const std::string GROUP_NAME = "arm";
     // =========================================================================== //
 

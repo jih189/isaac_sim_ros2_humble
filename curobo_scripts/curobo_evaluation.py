@@ -176,7 +176,7 @@ for t in tasks:
             use_nn_ik_seed=False,
             need_graph_success=False,
             max_attempts=1000,
-            timeout=10.0,
+            timeout=100.0,
             enable_finetune_trajopt=False,
             parallel_finetune=False,
             finetune_attempts=0
