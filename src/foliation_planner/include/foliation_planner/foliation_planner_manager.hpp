@@ -46,6 +46,7 @@ private:
   std::shared_ptr<rclcpp::Node> node_;
   std::map<std::string, std::shared_ptr<FoliationPlanningContext>> planning_contexts_;
   planning_interface::PlannerConfigurationMap planner_configs_;
+  std::vector<std::string> algorithms_;
 };
 
 }  // namespace foliation_interface

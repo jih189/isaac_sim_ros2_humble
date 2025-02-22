@@ -53,6 +53,9 @@ private:
   void interpolate(moveit::core::RobotStatePtr& robot_state,
                    const moveit::core::JointModelGroup* joint_model_group, const std::vector<double>& start_joint_vals,
                    const std::vector<double>& goal_joint_vals, robot_trajectory::RobotTrajectoryPtr& joint_trajectory);
+
+  // convert shape to point cloud
+  std::vector<Eigen::Vector3d> shapeToPointCloud(const shapes::ShapeConstPtr& shape, const Eigen::Isometry3d& pose, float resolution = 0.1);
 };
 
 }  // namespace foliation_interface

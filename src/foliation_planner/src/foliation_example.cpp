@@ -15,6 +15,7 @@ static const rclcpp::Logger LOGGER = rclcpp::get_logger("foliation_example");
 int main(int argc, char** argv)
 {
     const std::string GROUP_NAME = "arm";
+    const std::string PLANNER_ID = "RRG";
 
     rclcpp::init(argc, argv);
     rclcpp::NodeOptions node_options;
@@ -50,6 +51,40 @@ int main(int argc, char** argv)
     /* listen to joint state updates as well as changes in attached collision objects
                             and update the internal planning scene accordingly*/
     psm->startStateMonitor();
+
+    /*********************************************** Add Obstacles ***********************************************/
+
+    // Add a collision object to the planning scene
+    moveit_msgs::msg::CollisionObject collision_object;
+    collision_object.header.frame_id = kinematic_model->getModelFrame();
+    collision_object.id = "box1";
+
+    // Define a box to add to the world
+    shape_msgs::msg::SolidPrimitive primitive;
+    primitive.type = primitive.BOX;
+    primitive.dimensions.resize(3);
+    primitive.dimensions[0] = 0.5;
+    primitive.dimensions[1] = 0.5;
+    primitive.dimensions[2] = 0.5;
+
+    // Define a pose for the box (specified relative to frame_id)
+    geometry_msgs::msg::Pose box_pose;
+    box_pose.orientation.w = 1.0;
+    box_pose.position.x = 0.7;
+    box_pose.position.y = 0.0;
+    box_pose.position.z = 0.8;
+
+    collision_object.primitives.push_back(primitive);
+    collision_object.primitive_poses.push_back(box_pose);
+    collision_object.operation = collision_object.ADD;
+
+    // Add the collision object to the planning scene
+    moveit_msgs::msg::PlanningScene planning_scene_msg;
+    planning_scene_msg.world.collision_objects.push_back(collision_object);
+    planning_scene_msg.is_diff = true;
+    psm->newPlanningSceneMessage(planning_scene_msg);
+
+    /*****************************************************************************************************/
     
     // Create a robot state
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(kinematic_model);
@@ -80,10 +115,12 @@ int main(int argc, char** argv)
     planning_interface::MotionPlanResponse res;
 
     // Set the start and goal joint values
-    std::vector<double> start_joint_vals = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    std::vector<double> goal_joint_vals = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.57};
+    std::vector<double> start_joint_vals = {1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<double> goal_joint_vals = {-1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
     req.group_name = GROUP_NAME;
+
+    req.planner_id = PLANNER_ID;
 
     // Get the start state
     robot_state->setJointGroupPositions(joint_model_group, start_joint_vals);
@@ -142,6 +179,8 @@ int main(int argc, char** argv)
 
     std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>> display_publisher =
       foliation_example_node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
+    std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::PlanningScene>> planning_scene_publisher =
+      foliation_example_node->create_publisher<moveit_msgs::msg::PlanningScene>("/planning_scene", 1);
 
     moveit_msgs::msg::DisplayTrajectory display_trajectory;
     /* Visualize the trajectory */
@@ -155,6 +194,9 @@ int main(int argc, char** argv)
     while (rclcpp::ok())
     {
         display_publisher->publish(display_trajectory);
+
+        // publish the planning scene
+        planning_scene_publisher->publish(planning_scene_msg);
         
         rclcpp::spin_some(foliation_example_node);
 

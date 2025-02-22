@@ -19,18 +19,26 @@ bool FoliationPlannerManager::initialize(
     planning_contexts_[group_name] =
       std::make_shared<FoliationPlanningContext>("foliation_planning_context", group_name, node, model, parameter_namespace);
   }
+
+  algorithms_.clear();
+
+  // set the algorithms
+  algorithms_.push_back("RRG");
+
+  // @TODO Load the algorithms
+
   return true;
 }
 
 std::string FoliationPlannerManager::getDescription() const
 {
-  return "Foliation for Moveit2";
+  return "Foliation Planner for Moveit2";
 }
 
 void FoliationPlannerManager::getPlanningAlgorithms(std::vector<std::string> & algs) const
 {
   algs.clear();
-  algs.push_back("foliation");
+  algs.insert(algs.end(), algorithms_.begin(), algorithms_.end());
 }
 
 planning_interface::PlanningContextPtr FoliationPlannerManager::getPlanningContext(
@@ -49,6 +57,20 @@ planning_interface::PlanningContextPtr FoliationPlannerManager::getPlanningConte
   if (req.group_name.empty()) {
     RCLCPP_ERROR(node_->get_logger(), "No group specified to plan for");
     error_code.val = moveit_msgs::msg::MoveItErrorCodes::INVALID_GROUP_NAME;
+    return planning_interface::PlanningContextPtr();
+  }
+
+  // check if planner id is specified
+  if (req.planner_id.empty()) {
+    RCLCPP_ERROR(node_->get_logger(), "No planner specified");
+    error_code.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE; // we don't have a specific error code for this
+    return planning_interface::PlanningContextPtr();
+  }
+
+  // check if planner id is valid by checking if it is in the list of available algorithms_
+  if (std::find(algorithms_.begin(), algorithms_.end(), req.planner_id) == algorithms_.end()) {
+    RCLCPP_ERROR(node_->get_logger(), "Unknown planner: %s", req.planner_id.c_str());
+    error_code.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE; // we don't have a specific error code for this
     return planning_interface::PlanningContextPtr();
   }
 
