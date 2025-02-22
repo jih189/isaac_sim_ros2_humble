@@ -258,7 +258,8 @@ namespace CUDAMPLib {
             if (joint_values[i].size() != dim)
             {
                 // throw an exception
-                throw std::runtime_error("Joint values size is not correct");
+                // throw std::runtime_error("Joint values size is not correct");
+                throw std::runtime_error("Joint values size is not correct. Expected: " + std::to_string(dim) + " Got: " + std::to_string(joint_values[i].size()));
             }
         }
 

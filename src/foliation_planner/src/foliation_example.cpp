@@ -122,6 +122,9 @@ int main(int argc, char** argv)
 
     req.planner_id = PLANNER_ID;
 
+    // Set the planning time
+    req.allowed_planning_time = 10.0; // 5 sec
+
     // Get the start state
     robot_state->setJointGroupPositions(joint_model_group, start_joint_vals);
     robot_state->update();

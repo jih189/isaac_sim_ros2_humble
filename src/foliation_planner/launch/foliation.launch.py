@@ -21,11 +21,13 @@ def generate_launch_description():
     srdf_file_path = 'config/fetch.srdf'
     rviz_file_path = 'rviz/fetch.rviz'
     moveit_controllers_file_path = 'config/controllers.yaml'
+    collision_spheres_file_path = 'robots/fetch.collision_spheres.yaml'
 
     urdf_model_path = os.path.join(pkg_share_description, urdf_file_path)
     srdf_model_path = os.path.join(pkg_share_moveit_config, srdf_file_path)
     rviz_config_path = os.path.join(pkg_share_foliation_planner, rviz_file_path)
     moveit_controllers_file_path = os.path.join(pkg_share_moveit_config, moveit_controllers_file_path)
+    collision_spheres_file_path = os.path.join(pkg_share_description, collision_spheres_file_path)
 
     moveit_config = (
         MoveItConfigsBuilder("fetch", package_name=package_name_foliation_planner)
@@ -44,6 +46,9 @@ def generate_launch_description():
         output='screen',
         parameters=[
             moveit_config.to_dict(),
+            {
+                "collision_spheres_file_path": collision_spheres_file_path
+            }
         ]
     )
 

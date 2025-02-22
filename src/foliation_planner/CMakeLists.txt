@@ -56,7 +56,7 @@ add_library(${MOVEIT_LIB_NAME}
   src/foliation_interface.cpp
   src/foliation_planner_manager.cpp
   src/foliation_planning_context.cpp
-  )
+)
 
 add_executable(foliation_example src/foliation_example.cpp)
 ament_target_dependencies(foliation_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -77,6 +77,7 @@ target_link_libraries(evaluate_ompl ompl)
 ament_target_dependencies(evaluate_ompl ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
+target_link_libraries(${MOVEIT_LIB_NAME} CUDAMPLib)
 ament_target_dependencies(${MOVEIT_LIB_NAME} ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 
