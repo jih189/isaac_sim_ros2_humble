@@ -1,5 +1,8 @@
 #include <planners/RRG.h>
 
+// include for time
+#include <chrono>
+
 namespace CUDAMPLib
 {
     // Constructor
@@ -234,6 +237,8 @@ namespace CUDAMPLib
         // main loop
         for(int t = 0 ; t < 1000000; t++)
         {
+            auto start_time_iteration = std::chrono::high_resolution_clock::now();
+
             if(termination_condition->checkTerminationCondition())
             {
                 termination_condition->printTerminationReason();
@@ -246,8 +251,15 @@ namespace CUDAMPLib
             getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
 
             // sample states
+            auto start_time_samples = std::chrono::high_resolution_clock::now();
             auto states = space_->sample(sample_attempts_in_each_iteration_);
+            auto end_time_samples = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_time_samples = end_time_samples - start_time_samples;
+            // print
+            printf("Time taken by sample: %f seconds\n", elapsed_time_samples.count());
+
             std::vector<std::vector<int>> nearest_neighbors_index;
+            auto start_time_find_k_nearest_neighbors = std::chrono::high_resolution_clock::now();
             if (t % 2 == 0)
             {
                 // find the nearest neighbors of the states in the start group
@@ -258,6 +270,11 @@ namespace CUDAMPLib
                 // find the nearest neighbors of the states in the goal group
                 state_manager->find_k_nearest_neighbors(1, states, nearest_neighbors_index, {goal_group_indexs});
             }
+            auto end_time_find_k_nearest_neighbors = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_time_find_k_nearest_neighbors = end_time_find_k_nearest_neighbors - start_time_find_k_nearest_neighbors;
+            // print
+            printf("Time taken by find_k_nearest_neighbors: %f seconds\n", elapsed_time_find_k_nearest_neighbors.count());
+
             std::vector<int> nearest_neighbors_index_for_each_sampled_state;
             for(auto i : nearest_neighbors_index)
             {
@@ -267,7 +284,12 @@ namespace CUDAMPLib
 
             // do interpolation between the sampled states and their nearest neighbors
             space_->interpolate(nearest_states, states, max_travel_distance_);
+            auto start_time_update = std::chrono::high_resolution_clock::now();
             states->update();
+            auto end_time_update = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_time_update = end_time_update - start_time_update;
+            // print
+            printf("Time taken by update: %f seconds\n", elapsed_time_update.count());
 
             nearest_states.reset();
 
@@ -289,7 +311,12 @@ namespace CUDAMPLib
 
             // find k nearest neighbors for each state
             std::vector<std::vector<int>> neighbors_index;
+            auto start_time_find_k_nearest_neighbors_2 = std::chrono::high_resolution_clock::now();
             int actual_k = state_manager->find_k_nearest_neighbors(k_, states, neighbors_index, {start_group_indexs, goal_group_indexs});
+            auto end_time_find_k_nearest_neighbors_2 = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_time_find_k_nearest_neighbors_2 = end_time_find_k_nearest_neighbors_2 - start_time_find_k_nearest_neighbors_2;
+            // print
+            printf("Time taken by find_k_nearest_neighbors_2: %f seconds\n", elapsed_time_find_k_nearest_neighbors_2.count());
 
             // validate the motion from the sampled states to their neighbors.
             // prepare the motion states 1
@@ -314,7 +341,12 @@ namespace CUDAMPLib
             // calculate costs and check the feasibility of motion between the states pairs.
             std::vector<bool> motion_feasibility;
             std::vector<float> motion_costs;
+            auto start_time_check_motions = std::chrono::high_resolution_clock::now();
             space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
+            auto end_time_check_motions = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
+            // print
+            printf("Time taken by checkMotions: %f seconds\n", elapsed_time_check_motions.count());
 
             // clear the states
             motion_states_1.reset();
@@ -356,8 +388,13 @@ namespace CUDAMPLib
                 }
             }
 
+            auto start_time_filter_states = std::chrono::high_resolution_clock::now();
             // remove the states can not connect to any neighbors
             states->filterStates(can_connect);
+            auto end_time_filter_states = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_time_filter_states = end_time_filter_states - start_time_filter_states;
+            // print
+            printf("Time taken by filterStates: %f seconds\n", elapsed_time_filter_states.count());
 
             // add the states to the manager and get their indexs in the manager
             std::vector<int> indexs_of_new_state_in_manager = state_manager->add_states(states);
@@ -367,6 +404,7 @@ namespace CUDAMPLib
                 throw std::runtime_error("indexs_of_new_state_in_manager.size() != neighbors_index_actual.size()");
             }
 
+            auto start_time_update_graph = std::chrono::high_resolution_clock::now();
             // add the states to the graph
             for(size_t i = 0; i < indexs_of_new_state_in_manager.size(); i++)
             {
@@ -426,9 +464,18 @@ namespace CUDAMPLib
                     throw std::runtime_error("Error: has_connect_to_start && has_connect_to_goal are both false");
                 }
             }
+            auto end_time_update_graph = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_time_update_graph = end_time_update_graph - start_time_update_graph;
+            // print
+            printf("Time taken by update_graph: %f seconds\n", elapsed_time_update_graph.count());
 
             // clear states
             states.reset();
+
+            auto end_time_iteration = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_time_iteration = end_time_iteration - start_time_iteration;
+            // print in green color
+            printf("\033[1;32m" "Time taken by iteration %d: %f seconds" "\033[0m \n", t, elapsed_time_iteration.count());
 
             // start_group_indexs.clear();
             // goal_group_indexs.clear();

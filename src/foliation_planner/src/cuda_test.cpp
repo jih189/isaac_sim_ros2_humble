@@ -27,6 +27,9 @@
 
 #include "foliation_planner/robot_info.hpp"
 
+// include for time
+#include <chrono>
+
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
 
@@ -121,7 +124,7 @@ visualization_msgs::msg::MarkerArray generate_self_collision_markers(
 void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<float> & ball_radius)
 {
     float obstacle_spheres_radius = 0.06;
-    int num_of_obstacle_spheres = 30;
+    int num_of_obstacle_spheres = 40;
     for (int i = 0; i < num_of_obstacle_spheres; i++)
     {
         float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
@@ -305,6 +308,75 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
         }
         std::cout << std::endl;
     }
+}
+
+/**
+    Test filter states
+ */
+void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames()
+    );
+
+    // sample a set of states
+    int num_of_test_states = 100000;
+    CUDAMPLib::SingleArmStatesPtr single_arm_states_1 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    CUDAMPLib::SingleArmStatesPtr single_arm_states_2 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    single_arm_states_1->update();
+    single_arm_states_2->update();
+
+    // generate filter mask to filter state anlteratively
+    std::vector<bool> filter_mask(num_of_test_states, true);
+
+    for (size_t i = 0; i < filter_mask.size(); i++)
+    {
+        if (i % 2 == 0)
+        {
+            filter_mask[i] = false;
+        }
+    }
+
+    // filter states
+    auto start_time_filter = std::chrono::high_resolution_clock::now();
+    single_arm_states_1->filterStates(filter_mask);
+    auto end_time_filter = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_filter = end_time_filter - start_time_filter;
+    // print in green
+    std::cout << "\033[1;32m" << "Time taken by old filter state function: " << elapsed_time_filter.count() << " seconds" << "\033[0m" << std::endl;
+
+    // new filter states
+    auto start_time_new_filter = std::chrono::high_resolution_clock::now();
+    single_arm_states_2->cudaFilterStates(filter_mask);
+    auto end_time_new_filter = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_new_filter = end_time_new_filter - start_time_new_filter;
+    // print in green
+    std::cout << "\033[1;32m" << "Time taken by cuda filter state function: " << elapsed_time_new_filter.count() << " seconds" << "\033[0m" << std::endl;
 }
 
 /**
@@ -574,10 +646,16 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // create termination condition
     // CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(10);
-    CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(1.0);
+    CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
 
     // solve the task
+    // record the time
+    auto start_time = std::chrono::high_resolution_clock::now();
     planner->solve(termination_condition);
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time = end_time - start_time;
+    // print in green
+    std::cout << "\033[1;32m" << "Time taken by function: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
 
     /************************** Debug **************************************/
     // extract the start and goal group states
@@ -995,9 +1073,11 @@ int main(int argc, char** argv)
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // list ros parameters
     // RCLCPP_INFO(cuda_test_node->get_logger(), "List all parameters");

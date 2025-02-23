@@ -236,6 +236,44 @@ namespace CUDAMPLib
 
         d_distances[idx] = sqrtf(sum);
     }
+
+    __global__ void filterStatesKernel(
+        const int* d_filter,              // 0/1 flag per state
+        const int* d_prefix,              // exclusive prefix sum of d_filter
+        const float* d_joint_states,      // original joint states
+        float* d_joint_states_new,        // output joint states
+        const float* d_link_poses,        // original link poses
+        float* d_link_poses_new,          // output link poses
+        const float* d_spheres,           // original self-collision spheres
+        float* d_spheres_new,             // output self-collision sphere positions
+        int initial_num_of_states,        // total number of states before filtering
+        int num_joints,                   // number of joint values per state
+        int link_elements,                // number of floats per state for link poses (num_of_links * 4 * 4)
+        int sphere_elements               // number of floats per state for spheres (num_of_self_collision_spheres * 3)
+    )
+    {
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i < initial_num_of_states) {
+            if (d_filter[i]) {  // if state i is feasible
+                int new_index = d_prefix[i];
+                // Copy joint states (each state has num_joints floats)
+                for (int j = 0; j < num_joints; j++) {
+                    d_joint_states_new[new_index * num_joints + j] =
+                        d_joint_states[i * num_joints + j];
+                }
+                // Copy link poses (each state has link_elements floats)
+                for (int j = 0; j < link_elements; j++) {
+                    d_link_poses_new[new_index * link_elements + j] =
+                        d_link_poses[i * link_elements + j];
+                }
+                // Copy self-collision sphere data (each state has sphere_elements floats)
+                for (int j = 0; j < sphere_elements; j++) {
+                    d_spheres_new[new_index * sphere_elements + j] =
+                        d_spheres[i * sphere_elements + j];
+                }
+            }
+        }
+    }
     
     SingleArmStates::SingleArmStates(int num_of_states, SingleArmSpaceInfoPtr space_info)
     : BaseStates(num_of_states, space_info)
@@ -266,7 +304,7 @@ namespace CUDAMPLib
         // call the base class filterStates
         BaseStates::filterStates(filter_map);
 
-        int new_num_of_states = num_of_states_;
+        int new_num_of_states = num_of_states_; // number of state is updated in the base class.
 
         if (new_num_of_states == 0){
             // Free the memory
@@ -293,9 +331,6 @@ namespace CUDAMPLib
             {
                 if (filter_map[i])
                 {
-                    // cudaMemcpy(d_joint_states_new + j * num_of_joints, d_joint_states + i * num_of_joints, num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
-                    // cudaMemcpy(d_link_poses_in_base_link_new + j * single_arm_space_info->num_of_links * 4 * 4, d_link_poses_in_base_link + i * single_arm_space_info->num_of_links * 4 * 4, single_arm_space_info->num_of_links * 4 * 4 * sizeof(float), cudaMemcpyDeviceToDevice);
-                    // cudaMemcpy(d_self_collision_spheres_pos_in_base_link_new + j * single_arm_space_info->num_of_self_collision_spheres * 3, d_self_collision_spheres_pos_in_base_link + i * single_arm_space_info->num_of_self_collision_spheres * 3, single_arm_space_info->num_of_self_collision_spheres * 3 * sizeof(float), cudaMemcpyDeviceToDevice);
                     // copy asynchrounously
                     cudaMemcpyAsync(d_joint_states_new + j * num_of_joints, d_joint_states + i * num_of_joints, num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
                     cudaMemcpyAsync(d_link_poses_in_base_link_new + j * single_arm_space_info->num_of_links * 4 * 4, d_link_poses_in_base_link + i * single_arm_space_info->num_of_links * 4 * 4, single_arm_space_info->num_of_links * 4 * 4 * sizeof(float), cudaMemcpyDeviceToDevice);
@@ -317,6 +352,82 @@ namespace CUDAMPLib
             d_link_poses_in_base_link = d_link_poses_in_base_link_new;
             d_self_collision_spheres_pos_in_base_link = d_self_collision_spheres_pos_in_base_link_new;
         }
+    }
+
+    void SingleArmStates::cudaFilterStates(const std::vector<bool>& filter_map)
+    {
+        int initial_num_of_states = num_of_states_;
+
+        // Call the base class cudaFilterStates to update num_of_states_
+        BaseStates::cudaFilterStates(filter_map);
+        int new_num_of_states = num_of_states_;
+
+        if (new_num_of_states == 0) {
+            cudaFree(d_joint_states);
+            cudaFree(d_link_poses_in_base_link);
+            cudaFree(d_self_collision_spheres_pos_in_base_link);
+            return;
+        }
+
+        // Cast the space_info to SingleArmSpaceInfo
+        SingleArmSpaceInfoPtr single_arm_space_info =
+            std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+
+        int num_joints = this->num_of_joints;
+        int num_links = single_arm_space_info->num_of_links;
+        int num_spheres = single_arm_space_info->num_of_self_collision_spheres;
+        
+        // Each link pose is a 4x4 matrix (16 floats)
+        int link_elements = num_links * 16;
+        // Each self-collision sphere is represented by 3 floats
+        int sphere_elements = num_spheres * 3;
+
+        // Allocate new device memory for the filtered data
+        float* d_joint_states_new = nullptr;
+        float* d_link_poses_new = nullptr;
+        float* d_spheres_new = nullptr;
+        cudaMalloc(&d_joint_states_new, new_num_of_states * num_joints * sizeof(float));
+        cudaMalloc(&d_link_poses_new, new_num_of_states * link_elements * sizeof(float));
+        cudaMalloc(&d_spheres_new, new_num_of_states * sphere_elements * sizeof(float));
+
+        // Create a device vector for the filter (convert bools to ints: 0 or 1)
+        thrust::device_vector<int> d_filter(initial_num_of_states);
+        for (int i = 0; i < initial_num_of_states; i++) {
+            d_filter[i] = filter_map[i] ? 1 : 0;
+        }
+
+        // Compute the exclusive prefix sum to determine new indices
+        thrust::device_vector<int> d_prefix(initial_num_of_states);
+        thrust::exclusive_scan(d_filter.begin(), d_filter.end(), d_prefix.begin());
+
+        // Launch the kernel to compact the states in parallel.
+        int threadsPerBlock = 256;
+        int blocks = (initial_num_of_states + threadsPerBlock - 1) / threadsPerBlock;
+        filterStatesKernel<<<blocks, threadsPerBlock>>>(
+            thrust::raw_pointer_cast(d_filter.data()),
+            thrust::raw_pointer_cast(d_prefix.data()),
+            d_joint_states,
+            d_joint_states_new,
+            d_link_poses_in_base_link,
+            d_link_poses_new,
+            d_self_collision_spheres_pos_in_base_link,
+            d_spheres_new,
+            initial_num_of_states,
+            num_joints,
+            link_elements,
+            sphere_elements
+        );
+        cudaDeviceSynchronize(); // Ensure the kernel has completed
+
+        // Free old device memory
+        cudaFree(d_joint_states);
+        cudaFree(d_link_poses_in_base_link);
+        cudaFree(d_self_collision_spheres_pos_in_base_link);
+
+        // Update the pointers to point to the new filtered data
+        d_joint_states = d_joint_states_new;
+        d_link_poses_in_base_link = d_link_poses_new;
+        d_self_collision_spheres_pos_in_base_link = d_spheres_new;
     }
 
     std::vector<std::vector<float>> SingleArmStates::getJointStatesHost() const

@@ -10,7 +10,7 @@ obstacle_configs:
 planner_configs:
   RRGConfigDefault:
     k: 3
-    sample_attempts_in_each_iteration: 30
+    sample_attempts_in_each_iteration: 100
     max_travel_distance: 0.5
 arm:
   planner_configs:

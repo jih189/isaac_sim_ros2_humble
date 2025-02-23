@@ -113,6 +113,8 @@ namespace CUDAMPLib
                 return num_of_joints;
             }
 
+            void cudaFilterStates(const std::vector<bool> & filter_map) override;
+
         private:
             int num_of_joints; // number of joints. This includes fixed joints.
             float * d_joint_states; // joint states of each state

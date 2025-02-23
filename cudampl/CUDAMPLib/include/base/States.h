@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+#include <thrust/device_vector.h>
+#include <thrust/scan.h>
+#include <thrust/copy.h>
+
 namespace CUDAMPLib
 {
 
@@ -45,12 +49,7 @@ namespace CUDAMPLib
             virtual void filterStates(const std::vector<bool> & filter_map){
 
                 // calculate the number of feasible states
-                int num_left_states = 0;
-                for (int i = 0; i < num_of_states_; i++) {
-                    if (filter_map[i]) {
-                        num_left_states++;
-                    }
-                }
+                int num_left_states = std::count(filter_map.begin(), filter_map.end(), true);
                 
                 if (num_left_states == 0) {
                     // if there is no feasible states, clear the memory
@@ -101,6 +100,12 @@ namespace CUDAMPLib
 
                 num_of_states_ = num_left_states;
             }
+
+            /**
+                This new filter states function is implemented by using cuda kernel to filter the states.
+                After evaluating, we do not see any performance improvement. It is even worse than the previous implementation.
+             */
+            virtual void cudaFilterStates(const std::vector<bool> & filter_map);
 
             int getNumOfStates() const { return num_of_states_; }
 
