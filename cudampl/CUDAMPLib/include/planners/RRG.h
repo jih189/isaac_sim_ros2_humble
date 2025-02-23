@@ -25,13 +25,28 @@ namespace CUDAMPLib
                 BaseStatesPtr & start_group_states,
                 BaseStatesPtr & goal_group_states
             );
+
+            void setK(int k)
+            {
+                k_ = k;
+            }
+
+            void setMaxTravelDistance(float max_travel_distance)
+            {
+                max_travel_distance_ = max_travel_distance;
+            }
+
+            void setSampleAttemptsInEachIteration(int sample_attempts_in_each_iteration)
+            {
+                sample_attempts_in_each_iteration_ = sample_attempts_in_each_iteration;
+            }
         private:
             BaseStateManagerPtr state_manager;
 
             // parameters
-            int sample_attempts_; // the number of sampled state in each iteration
+            int sample_attempts_in_each_iteration_; // the number of sampled state in each iteration
             int k_; // the number of nearest neighbors
-            float max_distance_; // the maximum distance to expand the graph.
+            float max_travel_distance_; // the maximum distance to expand the graph.
 
             // graph
             struct VertexProperties {

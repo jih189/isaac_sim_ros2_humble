@@ -8,10 +8,10 @@ namespace CUDAMPLib
     {
         state_manager = space->createStateManager();
 
-        // set the parameters
-        sample_attempts_ = 30;
+        // set the parameters as default values
+        sample_attempts_in_each_iteration_ = 30;
         k_ = 1;
-        max_distance_ = 0.5;
+        max_travel_distance_ = 0.5;
     }
 
     // Destructor
@@ -246,7 +246,7 @@ namespace CUDAMPLib
             getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
 
             // sample states
-            auto states = space_->sample(sample_attempts_);
+            auto states = space_->sample(sample_attempts_in_each_iteration_);
             std::vector<std::vector<int>> nearest_neighbors_index;
             if (t % 2 == 0)
             {
@@ -266,7 +266,7 @@ namespace CUDAMPLib
             auto nearest_states = state_manager->get_states(nearest_neighbors_index_for_each_sampled_state);
 
             // do interpolation between the sampled states and their nearest neighbors
-            space_->interpolate(nearest_states, states, max_distance_);
+            space_->interpolate(nearest_states, states, max_travel_distance_);
             states->update();
 
             nearest_states.reset();

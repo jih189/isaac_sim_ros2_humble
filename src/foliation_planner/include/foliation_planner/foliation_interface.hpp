@@ -35,8 +35,6 @@ public:
     parameter_namespace_(parameter_namespace)
   {
     loadPlannerConfigurations();
-    num_steps_ = 10;
-    obstacle_sphere_radius_ = 0.025;
 
     // check if the parameter exists
     if (!node->has_parameter("collision_spheres_file_path"))
@@ -65,16 +63,15 @@ public:
     const planning_interface::MotionPlanRequest & request,
     planning_interface::MotionPlanDetailedResponse & response);
 
-  bool planner_busy = false;
-
 protected:
-  // /** @brief Load planner configurations for specified group into planner_config */
-  // bool loadPlannerConfiguration(const std::string & group_name, const std::string & planner_id,
-  //                               const std::map<std::string, std::string> &  group_params,
-  //                               planning_interface::PlannerConfigurationSettings & planner_config);
+  /** @brief Load planner configurations for specified group into planner_config */
+  bool loadPlannerConfiguration(const std::string & group_name, const std::string & planner_id,
+                                planning_interface::PlannerConfigurationSettings & planner_config);
 
   /** @brief Configure the planners*/
   void loadPlannerConfigurations();
+
+  planning_interface::PlannerConfigurationMap planner_configs_;
 
 private:
   std::shared_ptr<rclcpp::Node> node_;
@@ -83,8 +80,10 @@ private:
   std::string parameter_namespace_;
 
   // Planner parameters
-  int num_steps_;
   float obstacle_sphere_radius_;
+  // int k_;
+  // int sample_attempts_in_each_iteration_;
+  // float max_travel_distance_;
 
   int dof_;
 

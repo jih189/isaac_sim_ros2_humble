@@ -5,6 +5,13 @@ request_adapters: >-
   default_planner_request_adapters/FixStartStateCollision
   default_planner_request_adapters/FixStartStatePathConstraints
 start_state_max_bounds_error: 0.1
+obstacle_configs:
+  obstacle_sphere_radius: 0.025
 planner_configs:
-  foliation:
-    num_step: 10
+  RRGConfigDefault:
+    k: 3
+    sample_attempts_in_each_iteration: 30
+    max_travel_distance: 0.5
+arm:
+  planner_configs:
+    - RRGConfigDefault

@@ -51,14 +51,14 @@ bool FoliationInterface::solve(
   // we need to reinitialize the planner.
   bool is_solved = solve_motion_task(start_state, joint_model_group, obstacle_points, start_joint_vals, goal_joint_vals, result_traj, request.allowed_planning_time);
 
-  std::cout << "Planning done" << std::endl;
+  rclcpp::Time end_time = node_->now();
 
   if (is_solved)
   {
     RCLCPP_INFO(node_->get_logger(), "Task is solved");
     response.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
     response.processing_time_.clear();
-    response.processing_time_.push_back(node_->now().seconds() - start_time.seconds());
+    response.processing_time_.push_back(end_time.seconds() - start_time.seconds());
     response.description_.clear();
     response.description_.push_back("Foliation planner");
     response.trajectory_.clear();
@@ -69,7 +69,7 @@ bool FoliationInterface::solve(
     RCLCPP_ERROR(node_->get_logger(), "Task is failed to solve");
     response.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
     response.processing_time_.clear();
-    response.processing_time_.push_back(node_->now().seconds() - start_time.seconds());
+    response.processing_time_.push_back(end_time.seconds() - start_time.seconds());
     response.description_.clear();
     response.description_.push_back("Foliation planner");
     response.trajectory_.clear();
@@ -159,6 +159,29 @@ bool FoliationInterface::solve_motion_task(
 
   // create the planner
   CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
+
+  // find the planner configuration from planner_configs_
+  std::string planner_config_name = joint_model_group->getName() + "[RRGConfigDefault]";
+  if (planner_configs_.find(planner_config_name) != planner_configs_.end())
+  {
+    RCLCPP_INFO(node_->get_logger(), "Found planner configuration '%s' and use them", planner_config_name.c_str());
+    auto config_settings = planner_configs_[planner_config_name];
+
+    if (config_settings.config.find("k") != config_settings.config.end())
+    {
+      planner->setK(std::stoi(config_settings.config["k"]));
+    }
+
+    if (config_settings.config.find("sample_attempts_in_each_iteration") != config_settings.config.end())
+    {
+      planner->setSampleAttemptsInEachIteration(std::stoi(config_settings.config["sample_attempts_in_each_iteration"]));
+    }
+
+    if (config_settings.config.find("max_travel_distance") != config_settings.config.end())
+    {
+      planner->setMaxTravelDistance(std::stof(config_settings.config["max_travel_distance"]));
+    }
+  }
 
   // set the task
   planner->setMotionTask(problem_task, true);
@@ -336,22 +359,77 @@ std::vector<Eigen::Vector3d> FoliationInterface::genPointCloudFromWorld(const co
 
 void FoliationInterface::loadPlannerConfigurations()
 {
-  if (node_->has_parameter(parameter_namespace_ + ".planner_configs.foliation.num_step")){
-    RCLCPP_INFO(node_->get_logger(), "foliation planner_configs.num_step found");
-    const rclcpp::Parameter parameter = node_->get_parameter(parameter_namespace_ + ".planner_configs.foliation.num_step");
-    if (parameter.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER){
-      num_steps_ = parameter.as_int();
+  // Load obstacle configurations
+  if (node_->has_parameter(parameter_namespace_ + ".obstacle_configs.obstacle_sphere_radius")){
+    const rclcpp::Parameter parameter = node_->get_parameter(parameter_namespace_ + ".obstacle_configs.obstacle_sphere_radius");
+    if (parameter.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE){
+      obstacle_sphere_radius_ = parameter.as_double();
+      if (obstacle_sphere_radius_ <= 0){
+        RCLCPP_ERROR(node_->get_logger(), "OBSTACLE CONFIGURATION obstacle_configs.obstacle_sphere_radius must be greater than 0");
+      }
+      else{
+        RCLCPP_INFO(node_->get_logger(), "OBSTACLE CONFIGURATION obstacle_configs.obstacle_sphere_radius: %f", obstacle_sphere_radius_);
+      }
     }
     else{
-      RCLCPP_ERROR(node_->get_logger(), "foliation planner_configs.num_step is not an integer");
+      RCLCPP_ERROR(node_->get_logger(), "OBSTACLE CONFIGURATION obstacle_configs.obstacle_sphere_radius is not an double");
     }
   }
   else{
-    RCLCPP_ERROR(node_->get_logger(), "foliation planner_configs.num_step not found");
+    RCLCPP_ERROR(node_->get_logger(), "OBSTACLE CONFIGURATION obstacle_configs.obstacle_sphere_radius not found");
   }
   
-  // // print the parameter value
-  // RCLCPP_INFO(node_->get_logger(), "Parameter value: %s", parameter.value_to_string().c_str());
+  // reset planner_configs_ which is a map of group name to planner configuration settings
+  planner_configs_.clear();
+
+  // read the planning configuration for each group
+  for (const std::string& group_name : robot_model_->getJointModelGroupNames())
+  {
+    const std::string group_name_param = parameter_namespace_ + "." + group_name;
+
+    // get parameters specific to each planner type
+    std::vector<std::string> config_names;
+
+    if (node_->get_parameter(group_name_param + ".planner_configs", config_names))
+    {
+      for (const auto& planner_id : config_names)
+      {
+        planning_interface::PlannerConfigurationSettings pc;
+        if (loadPlannerConfiguration(group_name, planner_id, pc))
+        {
+          planner_configs_[pc.name] = pc;
+        }
+      }
+    }
+  }
+}
+
+bool FoliationInterface::loadPlannerConfiguration(const std::string& group_name, const std::string& planner_id,
+                                             planning_interface::PlannerConfigurationSettings& planner_config)
+{
+  rcl_interfaces::msg::ListParametersResult planner_params_result =
+      node_->list_parameters({ parameter_namespace_ + ".planner_configs." + planner_id }, 2);
+
+  if (planner_params_result.names.empty())
+  {
+    RCLCPP_ERROR(node_->get_logger(), "Could not find the planner configuration '%s' on the param server", planner_id.c_str());
+    return false;
+  }
+
+  planner_config.name = group_name + "[" + planner_id + "]";
+  planner_config.group = group_name;
+
+  planner_config.config = std::map<std::string, std::string>();
+
+  // read parameters specific for this configuration
+  for (const auto& planner_param : planner_params_result.names)
+  {
+    const rclcpp::Parameter param = node_->get_parameter(planner_param);
+    auto param_name = planner_param.substr(planner_param.find(planner_id) + planner_id.size() + 1);
+    planner_config.config[param_name] = param.value_to_string();
+  }
+
+  return true;
 }
 
 }  // namespace foliation_interface
