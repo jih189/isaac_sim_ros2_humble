@@ -27,8 +27,8 @@ namespace CUDAMPLib
 
             void computeCost(BaseStatesPtr states) override;
 
-            void newComputeCost(BaseStatesPtr states) override;
-        
+            void computeCostLarge(BaseStatesPtr states) override;
+            
         private:
             int num_of_env_collision_spheres;
             float *d_env_collision_spheres_pos_in_base_link;

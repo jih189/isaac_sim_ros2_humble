@@ -278,19 +278,19 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // check states
     single_arm_space->checkStates(single_arm_states_1); // dummy check
 
-    auto start_time_new_check_states = std::chrono::high_resolution_clock::now();
-    single_arm_space->newCheckStates(single_arm_states_2);
-    auto end_time_new_check_states = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed_time_new_check_states = end_time_new_check_states - start_time_new_check_states;
-    // print in green color
-    printf("\033[1;32m" "Time taken by newCheckStates: %f seconds" "\033[0m \n", elapsed_time_new_check_states.count());
-
     auto start_time_check_states = std::chrono::high_resolution_clock::now();
-    single_arm_space->checkStates(single_arm_states_3);
+    single_arm_space->checkStates(single_arm_states_2);
     auto end_time_check_states = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_time_check_states = end_time_check_states - start_time_check_states;
     // print in green color
     printf("\033[1;32m" "Time taken by checkStates: %f seconds" "\033[0m \n", elapsed_time_check_states.count());
+
+    auto start_time_old_check_states = std::chrono::high_resolution_clock::now();
+    single_arm_space->oldCheckStates(single_arm_states_3);
+    auto end_time_old_check_states = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_old_check_states = end_time_old_check_states - start_time_old_check_states;
+    // print in green color
+    printf("\033[1;32m" "Time taken by oldCheckStates: %f seconds" "\033[0m \n", elapsed_time_old_check_states.count());
 }
 
 /**
@@ -421,7 +421,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
     std::vector<bool> state_feasibility;
 
     // check states
-    single_arm_space->newCheckStates(sampled_states, state_feasibility);
+    single_arm_space->checkStates(sampled_states, state_feasibility);
 
     std::vector<std::string> display_links_names = joint_model_group->getLinkModelNames();
     // add end effector link by hard code

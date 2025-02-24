@@ -478,6 +478,23 @@ namespace CUDAMPLib {
         return path_in_cuda;
     }
 
+    void SingleArmSpace::oldCheckStates(
+        const BaseStatesPtr & states,
+        std::vector<bool>& state_feasibility
+    )
+    {
+        this->oldCheckStates(states);
+
+        std::vector<float> total_costs = states->getTotalCostsHost();
+
+        state_feasibility.assign(total_costs.size(), false);
+
+        for (size_t i = 0; i < total_costs.size(); i++)
+        {
+            state_feasibility[i] = (total_costs[i] == 0.0f);
+        }
+    }
+
     void SingleArmSpace::checkStates(
         const BaseStatesPtr & states,
         std::vector<bool>& state_feasibility
@@ -495,30 +512,13 @@ namespace CUDAMPLib {
         }
     }
 
-    void SingleArmSpace::newCheckStates(
-        const BaseStatesPtr & states,
-        std::vector<bool>& state_feasibility
-    )
-    {
-        this->newCheckStates(states);
-
-        std::vector<float> total_costs = states->getTotalCostsHost();
-
-        state_feasibility.assign(total_costs.size(), false);
-
-        for (size_t i = 0; i < total_costs.size(); i++)
-        {
-            state_feasibility[i] = (total_costs[i] == 0.0f);
-        }
-    }
-
-    void SingleArmSpace::checkStates(const BaseStatesPtr & states)
+    void SingleArmSpace::oldCheckStates(const BaseStatesPtr & states)
     {
         // based on all the constraints, check if the states are feasible
         for (size_t i = 0; i < constraints_.size(); i++)
         {
             // auto start_time = std::chrono::high_resolution_clock::now();
-            constraints_[i]->computeCost(states);
+            constraints_[i]->computeCostLarge(states);
             // auto end_time = std::chrono::high_resolution_clock::now();
             // std::chrono::duration<double> elapsed_seconds = end_time - start_time;
             // std::cout << "Constraint " << constraints_[i]->getName() << " took: " << elapsed_seconds.count() << "s" << std::endl;
@@ -528,13 +528,13 @@ namespace CUDAMPLib {
         states->calculateTotalCosts();
     }
 
-    void SingleArmSpace::newCheckStates(const BaseStatesPtr & states)
+    void SingleArmSpace::checkStates(const BaseStatesPtr & states)
     {
         // based on all the constraints, check if the states are feasible
         for (size_t i = 0; i < constraints_.size(); i++)
         {
             // auto start_time = std::chrono::high_resolution_clock::now();
-            constraints_[i]->newComputeCost(states);
+            constraints_[i]->computeCost(states);
             // auto end_time = std::chrono::high_resolution_clock::now();
             // std::chrono::duration<double> elapsed_seconds = end_time - start_time;
             // std::cout << "Constraint " << constraints_[i]->getName() << " took: " << elapsed_seconds.count() << "s" << std::endl;

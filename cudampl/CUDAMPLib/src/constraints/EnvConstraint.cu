@@ -32,7 +32,7 @@ namespace CUDAMPLib{
         cudaFree(d_env_collision_spheres_radius);
     }
 
-    __global__ void computeCollisionCostKernel(
+    __global__ void computeCollisionCostLargeKernel(
         float* d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
         float* d_self_collision_spheres_radius, // num_of_self_collision_spheres
         int num_of_self_collision_spheres,
@@ -65,7 +65,7 @@ namespace CUDAMPLib{
         }
     }
 
-    __global__ void newComputeCollisionCostKernel(
+    __global__ void computeCollisionCostKernel(
         float* d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
         float* d_self_collision_spheres_radius, // num_of_self_collision_spheres
         int num_of_self_collision_spheres,
@@ -118,7 +118,7 @@ namespace CUDAMPLib{
         }
     }
 
-    void EnvConstraint::computeCost(BaseStatesPtr states)
+    void EnvConstraint::computeCostLarge(BaseStatesPtr states)
     {
         // Cast the states and space information for SingleArmSpace
         SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
@@ -137,7 +137,7 @@ namespace CUDAMPLib{
         int threadsPerBlock = 256;
         int blocksPerGrid = (single_arm_states->getNumOfStates() + threadsPerBlock - 1) / threadsPerBlock;
 
-        computeCollisionCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
+        computeCollisionCostLargeKernel<<<blocksPerGrid, threadsPerBlock>>>(
             single_arm_states->getSelfCollisionSpheresPosInBaseLinkCuda(), 
             space_info->d_self_collision_spheres_radius, 
             space_info->num_of_self_collision_spheres, 
@@ -151,7 +151,7 @@ namespace CUDAMPLib{
         cudaDeviceSynchronize();
     }
 
-    void EnvConstraint::newComputeCost(BaseStatesPtr states)
+    void EnvConstraint::computeCost(BaseStatesPtr states)
     {
         // Cast the states and space information for SingleArmSpace
         SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
@@ -177,7 +177,7 @@ namespace CUDAMPLib{
 
         // auto start_first_kernel = std::chrono::high_resolution_clock::now();
 
-        newComputeCollisionCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
+        computeCollisionCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
             single_arm_states->getSelfCollisionSpheresPosInBaseLinkCuda(), 
             space_info->d_self_collision_spheres_radius, 
             space_info->num_of_self_collision_spheres, 

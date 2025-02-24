@@ -56,14 +56,14 @@ namespace CUDAMPLib
                 std::vector<bool>& state_feasibility
             ) override;
 
-            void newCheckStates(
+            void oldCheckStates(
                 const BaseStatesPtr & states, 
                 std::vector<bool>& state_feasibility
-            ) override;
+            );
 
             void checkStates(const BaseStatesPtr & states) override;
 
-            void newCheckStates(const BaseStatesPtr & states) override;
+            void oldCheckStates(const BaseStatesPtr & states);
 
             BaseStatesPtr getPathFromWaypoints(
                 const BaseStatesPtr & waypoints

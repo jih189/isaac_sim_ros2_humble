@@ -65,11 +65,6 @@ namespace CUDAMPLib
                 std::vector<bool> & state_feasibility
             ) = 0;
 
-            virtual void newCheckStates(
-                const BaseStatesPtr & states,
-                std::vector<bool> & state_feasibility
-            ) = 0;
-
             /**
                 * @brief Check the feasibility of a set of states.
                 * @param states The states to check.
@@ -77,8 +72,6 @@ namespace CUDAMPLib
                 does not slow down the process.
              */
             virtual void checkStates(const BaseStatesPtr & states) = 0;
-
-            virtual void newCheckStates(const BaseStatesPtr & states) = 0;
 
             /**
                 @brief interpolate between two states. If the distance between two states is larger than max_distance, 
