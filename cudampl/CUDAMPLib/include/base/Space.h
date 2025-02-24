@@ -15,7 +15,7 @@ namespace CUDAMPLib
                 later, the states will not be aware of the new constraints. Or we have to update all
                 generated states with the new constraints which is not efficient.
              */
-            BaseSpace(size_t dim, std::vector<BaseConstraintPtr> constraints) : dim(dim), constraints(constraints) {}
+            BaseSpace(size_t dim, std::vector<BaseConstraintPtr> constraints) : dim(dim), constraints_(constraints) {}
 
             virtual ~BaseSpace() {}
 
@@ -73,6 +73,8 @@ namespace CUDAMPLib
              */
             virtual void checkStates(const BaseStatesPtr & states) = 0;
 
+            virtual void newCheckStates(const BaseStatesPtr & states) = 0;
+
             /**
                 @brief interpolate between two states. If the distance between two states is larger than max_distance, 
                         it will interpolate between two states with max_distance. Then the to_states will be updated.
@@ -94,15 +96,15 @@ namespace CUDAMPLib
              */
             void getSpaceInfo(SpaceInfoPtr space_info) {
                 space_info->dim = dim;
-                space_info->num_of_constraints = constraints.size();
-                for (const auto & constraint : constraints) {
+                space_info->num_of_constraints = constraints_.size();
+                for (const auto & constraint : constraints_) {
                     space_info->constraint_names.push_back(constraint->getName());
                 }
             }
 
         protected:
             size_t dim;
-            std::vector<BaseConstraintPtr> constraints;
+            std::vector<BaseConstraintPtr> constraints_;
     };
 
     typedef std::shared_ptr<BaseSpace> BaseSpacePtr;

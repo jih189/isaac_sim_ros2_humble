@@ -145,6 +145,11 @@ namespace CUDAMPLib
             virtual void update() = 0;
 
             /**
+                @brief Based on the current states, update robot information and states.
+             */
+            virtual void newUpdate() = 0;
+
+            /**
                 @brief Print the states.
              */
             virtual void print() const = 0;

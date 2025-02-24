@@ -6,27 +6,35 @@
 namespace CUDAMPLib
 {
     /**
-        * @brief Multiply two 4x4 matrices
+        * @brief Multiply two 4x4 matrices.
      */
-    __device__ void multiply4x4(const float* A, const float* B, float* C)
+    __device__ __forceinline__ void multiply4x4(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C)
     {
-        for(int row = 0; row < 4; ++row)
-        {
-            for(int col = 0; col < 4; ++col)
-            {
-                C[row * 4 + col] = 0.f;
-                for(int k = 0; k < 4; ++k)
-                {
-                    C[row * 4 + col] += A[row * 4 + k] * B[k * 4 + col];
-                }
-            }
-        }
+        C[0] = A[0] * B[0] + A[1] * B[4] + A[2] * B[8] + A[3] * B[12];
+        C[1] = A[0] * B[1] + A[1] * B[5] + A[2] * B[9] + A[3] * B[13];
+        C[2] = A[0] * B[2] + A[1] * B[6] + A[2] * B[10] + A[3] * B[14];
+        C[3] = A[0] * B[3] + A[1] * B[7] + A[2] * B[11] + A[3] * B[15];
+
+        C[4] = A[4] * B[0] + A[5] * B[4] + A[6] * B[8] + A[7] * B[12];
+        C[5] = A[4] * B[1] + A[5] * B[5] + A[6] * B[9] + A[7] * B[13];
+        C[6] = A[4] * B[2] + A[5] * B[6] + A[6] * B[10] + A[7] * B[14];
+        C[7] = A[4] * B[3] + A[5] * B[7] + A[6] * B[11] + A[7] * B[15];
+
+        C[8] = A[8] * B[0] + A[9] * B[4] + A[10] * B[8] + A[11] * B[12];
+        C[9] = A[8] * B[1] + A[9] * B[5] + A[10] * B[9] + A[11] * B[13];
+        C[10] = A[8] * B[2] + A[9] * B[6] + A[10] * B[10] + A[11] * B[14];
+        C[11] = A[8] * B[3] + A[9] * B[7] + A[10] * B[11] + A[11] * B[15];
+
+        C[12] = A[12] * B[0] + A[13] * B[4] + A[14] * B[8] + A[15] * B[12];
+        C[13] = A[12] * B[1] + A[13] * B[5] + A[14] * B[9] + A[15] * B[13];
+        C[14] = A[12] * B[2] + A[13] * B[6] + A[14] * B[10] + A[15] * B[14];
+        C[15] = A[12] * B[3] + A[13] * B[7] + A[14] * B[11] + A[15] * B[15];
     }
 
     /**
         * @brief Set the matrix to identity
      */
-    __device__ void set_identity(float* M)
+    __device__ __forceinline__ void set_identity(float* __restrict__ M)
     {
         M[0]  = 1.f;  M[1]  = 0.f;  M[2]  = 0.f;  M[3]  = 0.f;
         M[4]  = 0.f;  M[5]  = 1.f;  M[6]  = 0.f;  M[7]  = 0.f;
@@ -38,8 +46,8 @@ namespace CUDAMPLib
         * @brief Forward kinematics for a fixed joint
      */
     __device__ void fixed_joint_fn_cuda(
-        float* parent_link_pose,
-        float* joint_pose,
+        const float* parent_link_pose,
+        const float* joint_pose,
         float* link_pose
     )
     {
@@ -162,14 +170,7 @@ namespace CUDAMPLib
         if (idx < configuration_size) {
 
             // set the first link pose to identity matrix because it is the base link
-            for (int i = 0; i < 4; i++)
-            {
-                for (int j = 0; j < 4; j++)
-                {
-                    link_poses_set[idx * num_of_links * 16 + i * 4 + j] = 0.0f;
-                }
-                link_poses_set[idx * num_of_links * 16 + i * 4 + i] = 1.0f;
-            }
+            set_identity(&link_poses_set[idx * num_of_links * 16]);
 
             // Calculate forward kinematics for each link
             // size_t j = 0;
@@ -210,6 +211,76 @@ namespace CUDAMPLib
             }
         }
     }
+
+    __global__ void new_kin_forward_kernel(
+        const float* __restrict__ joint_values, 
+        const int num_of_joint,
+        const int configuration_size,
+        const int* __restrict__ joint_types,
+        const float* __restrict__ joint_poses,
+        const int num_of_links,
+        const float* __restrict__ joint_axes,
+        const int* __restrict__ link_maps,
+        float* __restrict__ link_poses_set
+    ) 
+    {
+        int idx = threadIdx.x + blockIdx.x * blockDim.x;
+        if (idx < configuration_size) {
+
+            // set the first link pose to identity matrix because it is the base link
+            set_identity(&link_poses_set[idx * num_of_links * 16]);
+
+            // Calculate forward kinematics for each link
+            for (size_t i = 1; i < num_of_links; i++) // The first link is the base link, so we can skip it
+            {
+                float* parent_link_pose = &link_poses_set[idx * num_of_links * 16 + link_maps[i] * 16];
+                float* current_link_pose = &link_poses_set[idx * num_of_links * 16 + i * 16];
+                // based on the joint type, calculate the link pose
+                switch (joint_types[i])
+                {
+                    case CUDAMPLib_REVOLUTE:
+                        revolute_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
+                        break;
+                    case CUDAMPLib_PRISMATIC:
+                        prism_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
+                        break;
+                    case CUDAMPLib_FIXED:
+                        fixed_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], current_link_pose);
+                        break;
+                    default:
+                        printf("Unknown joint type: %d\n", joint_types[i]);
+                        break;
+                }
+            }
+        }
+    }
+
+    __global__ void update_collision_spheres_kernel(
+        const int num_of_states,
+        const int num_of_links,
+        const int num_of_self_collision_spheres,
+        const int* collision_spheres_map,
+        const float* collision_spheres_pos, // collision sphere position in link frame
+        const float* link_poses_set,
+        float* collision_spheres_pos_in_baselink
+    )
+    {
+        int idx = threadIdx.x + blockIdx.x * blockDim.x;
+        if (idx >= num_of_states * num_of_self_collision_spheres)
+            return;
+
+        int state_idx = idx / num_of_self_collision_spheres;
+        int sphere_idx = idx % num_of_self_collision_spheres;
+
+        const float* collision_sphere_pos = &collision_spheres_pos[sphere_idx * 3]; // collision sphere position in link frame
+        float* collision_sphere_pos_in_baselink = &collision_spheres_pos_in_baselink[state_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3]; // collision sphere position in base link frame
+        const float* link_pose = &link_poses_set[state_idx * num_of_links * 16 + collision_spheres_map[sphere_idx] * 16]; // link pose in base link frame
+
+        collision_sphere_pos_in_baselink[0] = link_pose[0] * collision_sphere_pos[0] + link_pose[1] * collision_sphere_pos[1] + link_pose[2] * collision_sphere_pos[2] + link_pose[3];
+        collision_sphere_pos_in_baselink[1] = link_pose[4] * collision_sphere_pos[0] + link_pose[5] * collision_sphere_pos[1] + link_pose[6] * collision_sphere_pos[2] + link_pose[7];
+        collision_sphere_pos_in_baselink[2] = link_pose[8] * collision_sphere_pos[0] + link_pose[9] * collision_sphere_pos[1] + link_pose[10] * collision_sphere_pos[2] + link_pose[11];
+    }
+        
 
     // kernel to calculate the distance between two states
     __global__ void calculate_joint_state_distance(
@@ -494,6 +565,45 @@ namespace CUDAMPLib
             space_info_single_arm_space->num_of_links,
             space_info_single_arm_space->d_joint_axes,
             space_info_single_arm_space->d_link_parent_link_maps,
+            space_info_single_arm_space->num_of_self_collision_spheres,
+            space_info_single_arm_space->d_collision_spheres_to_link_map,
+            space_info_single_arm_space->d_self_collision_spheres_pos_in_link,
+            d_link_poses_in_base_link,
+            d_self_collision_spheres_pos_in_base_link
+        );
+
+        // Wait for the kernel to finish
+        cudaDeviceSynchronize();
+    }
+
+    void SingleArmStates::newUpdate()
+    {
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+        
+        // Update the states
+        new_kin_forward_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            d_joint_states,
+            num_of_joints,
+            num_of_states_,
+            space_info_single_arm_space->d_joint_types,
+            space_info_single_arm_space->d_joint_poses,
+            space_info_single_arm_space->num_of_links,
+            space_info_single_arm_space->d_joint_axes,
+            space_info_single_arm_space->d_link_parent_link_maps,
+            d_link_poses_in_base_link
+        );
+
+        // Wait for the kernel to finish
+        cudaDeviceSynchronize();
+
+        // update the self collision spheres position in base link frame
+        blocksPerGrid = (num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres + threadsPerBlock - 1) / threadsPerBlock;
+
+        update_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            num_of_states_,
+            space_info_single_arm_space->num_of_links,
             space_info_single_arm_space->num_of_self_collision_spheres,
             space_info_single_arm_space->d_collision_spheres_to_link_map,
             space_info_single_arm_space->d_self_collision_spheres_pos_in_link,

@@ -481,11 +481,24 @@ namespace CUDAMPLib {
         std::vector<bool>& state_feasibility
     )
     {
-        // based on all the constraints, check if the states are feasible
-        for (size_t i = 0; i < constraints.size(); i++)
+        this->checkStates(states);
+
+        std::vector<float> total_costs = states->getTotalCostsHost();
+
+        state_feasibility.assign(total_costs.size(), false);
+
+        for (size_t i = 0; i < total_costs.size(); i++)
         {
-            BaseConstraintPtr constraint = constraints[i];
-            constraint->computeCost(states);
+            state_feasibility[i] = (total_costs[i] == 0.0f);
+        }
+    }
+
+    void SingleArmSpace::checkStates(const BaseStatesPtr & states)
+    {
+        // based on all the constraints, check if the states are feasible
+        for (size_t i = 0; i < constraints_.size(); i++)
+        {
+            constraints_[i]->computeCost(states);
         }
 
         // wait for the kernel to finish
@@ -493,22 +506,14 @@ namespace CUDAMPLib {
 
         // get the total cost
         states->calculateTotalCosts();
-
-        std::vector<float> total_costs = states->getTotalCostsHost();
-
-        for (size_t i = 0; i < total_costs.size(); i++)
-        {
-            state_feasibility.push_back(total_costs[i] == 0.0f);
-        }
     }
 
-    void SingleArmSpace::checkStates(const BaseStatesPtr & states)
+    void SingleArmSpace::newCheckStates(const BaseStatesPtr & states)
     {
         // based on all the constraints, check if the states are feasible
-        for (size_t i = 0; i < constraints.size(); i++)
+        for (size_t i = 0; i < constraints_.size(); i++)
         {
-            BaseConstraintPtr constraint = constraints[i];
-            constraint->computeCost(states);
+            constraints_[i]->computeCost(states);
         }
 
         // wait for the kernel to finish

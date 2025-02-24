@@ -104,6 +104,8 @@ namespace CUDAMPLib
              */
             void update() override;
 
+            void newUpdate() override;
+
             /**
                 @brief Print the joint states. For debugging purposes.
              */

@@ -35,8 +35,8 @@ namespace CUDAMPLib
 
         // get start states
         auto start_states = task->getStartStates(space_);
-        start_states->update();
-        space_->checkStates(start_states);
+        // start_states->update();
+        // space_->checkStates(start_states);
         // add start states to the state manager
         std::vector<int> start_node_indexs = state_manager->add_states(start_states);
 
@@ -65,8 +65,8 @@ namespace CUDAMPLib
 
         // get goal states
         auto goal_states = task->getGoalStates(space_);
-        goal_states->update();
-        space_->checkStates(goal_states);
+        // goal_states->update();
+        // space_->checkStates(goal_states);
         // add goal states to the state manager
         std::vector<int> goal_node_indexs = state_manager->add_states(goal_states);
 
@@ -295,7 +295,12 @@ namespace CUDAMPLib
 
             // evaluate the feasibility of the states
             std::vector<bool> state_feasibility;
+            auto start_time_check_states = std::chrono::high_resolution_clock::now();
             space_->checkStates(states, state_feasibility);
+            auto end_time_check_states = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_time_check_states = end_time_check_states - start_time_check_states;
+            // print
+            printf("Time taken by checkStates: %f seconds\n", elapsed_time_check_states.count());
 
             // remove the infeasible states
             states->filterStates(state_feasibility);

@@ -58,6 +58,8 @@ namespace CUDAMPLib
 
             void checkStates(const BaseStatesPtr & states) override;
 
+            void newCheckStates(const BaseStatesPtr & states) override;
+
             BaseStatesPtr getPathFromWaypoints(
                 const BaseStatesPtr & waypoints
             ) override;

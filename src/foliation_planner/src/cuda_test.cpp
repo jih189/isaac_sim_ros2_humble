@@ -211,9 +211,12 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
     
-    // create obstacles manually
-    balls_pos.push_back({0.4, 0.0, 1.4});
-    ball_radius.push_back(0.2);
+    // // create obstacles manually
+    // balls_pos.push_back({0.4, 0.0, 1.4});
+    // ball_radius.push_back(0.2);
+
+    // create obstacles randomly
+    prepare_obstacles(balls_pos, ball_radius);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -248,66 +251,47 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
         robot_info.getLinkNames()
     );
 
+    int num_of_test_states = 100000;
+
     // sample a set of states
-    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(10));
-    single_arm_states->update();
+    CUDAMPLib::SingleArmStatesPtr single_arm_states_1 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    CUDAMPLib::SingleArmStatesPtr single_arm_states_2 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    CUDAMPLib::SingleArmStatesPtr single_arm_states_3 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
 
-    // // // create states based on the joint values
-    // std::vector<float> joint_values_1 = {0.546425, 0.209272, -1.59996, 0.722765, -1.90513, 0.263605, -1.71856};
-    // std::vector<float> joint_values_2 = {-1.54113, 0.252858, 0.348399, -1.12736, -1.57115, -0.779098, 0.534417};
-    // std::vector<float> joint_values_3 = {0.486819, 1.49364, -2.76078, 0.382366, -1.22063, 1.56475, -1.23166};
-    // std::vector<float> joint_values_4 = {0.351574, 0.15772, -1.4167, 0.465496, 0.25186, -1.93307, -1.46687};
-    // std::vector<std::vector<float>> joint_values_set;
-    // joint_values_set.push_back(joint_values_1);
-    // joint_values_set.push_back(joint_values_2);
-    // joint_values_set.push_back(joint_values_3);
-    // joint_values_set.push_back(joint_values_4);
+    // dumpy update
+    single_arm_states_1->update();
 
-    // // create states based on the joint values
-    // auto sampled_states = single_arm_space->createStatesFromVector(joint_values_set);
-    // sampled_states->update();
-    // // statistic_cast_pointer_cast to SingleArmStates
-    // CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(sampled_states);
+    auto start_time_new_update = std::chrono::high_resolution_clock::now();
+    single_arm_states_2->newUpdate();
+    auto end_time_new_update = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_new_update = end_time_new_update - start_time_new_update;
+    // print in green color
+    printf("\033[1;32m" "Time taken by newUpdate: %f seconds" "\033[0m \n", elapsed_time_new_update.count());
 
-    std::vector<bool> state_feasibility;
+    auto start_time_update = std::chrono::high_resolution_clock::now();
+    single_arm_states_3->update();
+    auto end_time_update = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_update = end_time_update - start_time_update;
+    // print in green color
+    printf("\033[1;32m" "Time taken by update: %f seconds" "\033[0m \n", elapsed_time_update.count());
 
     // check states
-    single_arm_space->checkStates(single_arm_states, state_feasibility);
+    single_arm_space->checkStates(single_arm_states_1); // dummy check
 
-    std::vector<std::vector<float>> states_joint_values = single_arm_states->getJointStatesHost();
-    for (size_t i = 0; i < states_joint_values.size(); i++)
-    {
-        for (size_t j = 0; j < states_joint_values[i].size(); j++)
-        {
-            // only print active joints
-            if (robot_info.getActiveJointMap()[j])
-            {
-                std::cout << states_joint_values[i][j] << ", ";
-            }
-        }
+    auto start_time_new_check_states = std::chrono::high_resolution_clock::now();
+    single_arm_space->newCheckStates(single_arm_states_2);
+    auto end_time_new_check_states = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_new_check_states = end_time_new_check_states - start_time_new_check_states;
+    // print in green color
+    printf("\033[1;32m" "Time taken by newCheckStates: %f seconds" "\033[0m \n", elapsed_time_new_check_states.count());
 
-        if (state_feasibility[i])
-        {
-            // print in green
-            std::cout << "\033[1;32m" << " feasible" << "\033[0m" << std::endl;
-        }
-        else
-        {
-            // print in red
-            std::cout << "\033[1;31m" << " infeasible" << "\033[0m" << std::endl;
-        }
-    }
+    auto start_time_check_states = std::chrono::high_resolution_clock::now();
+    single_arm_space->checkStates(single_arm_states_3);
+    auto end_time_check_states = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_check_states = end_time_check_states - start_time_check_states;
+    // print in green color
+    printf("\033[1;32m" "Time taken by checkStates: %f seconds" "\033[0m \n", elapsed_time_check_states.count());
 
-    std::vector<std::vector<float>> cost_values = single_arm_states->getCostsHost();
-    // print cost values
-    for (size_t i = 0; i < cost_values.size(); i++)
-    {
-        for (size_t j = 0; j < cost_values[i].size(); j++)
-        {
-            std::cout << cost_values[i][j] << ", ";
-        }
-        std::cout << std::endl;
-    }
 }
 
 /**
@@ -1071,13 +1055,13 @@ int main(int argc, char** argv)
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // list ros parameters
     // RCLCPP_INFO(cuda_test_node->get_logger(), "List all parameters");
