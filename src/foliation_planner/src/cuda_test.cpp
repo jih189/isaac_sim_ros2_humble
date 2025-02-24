@@ -372,6 +372,11 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
     prepare_obstacles(balls_pos, ball_radius);
@@ -418,22 +423,78 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
     // check states
     single_arm_space->checkStates(sampled_states, state_feasibility);
 
+    std::vector<std::string> display_links_names = joint_model_group->getLinkModelNames();
+    // add end effector link by hard code
+    display_links_names.push_back(std::string("gripper_link"));
+    display_links_names.push_back(std::string("r_gripper_finger_link"));
+    display_links_names.push_back(std::string("l_gripper_finger_link"));
+
+    std::vector<visualization_msgs::msg::MarkerArray> sample_group_state_markers;
+
     std::vector<std::vector<float>> states_joint_values = sampled_states->getJointStatesHost();
     for (size_t i = 0; i < states_joint_values.size(); i++)
     {
+        // for (size_t j = 0; j < states_joint_values[i].size(); j++)
+        // {
+        //     std::cout << states_joint_values[i][j] << " ";
+        // }
+
+        // if (state_feasibility[i])
+        // {
+        //     std::cout << " feasible" << std::endl;
+        // }
+        // else
+        // {
+        //     std::cout << " infeasible" << std::endl;
+        // }
+
+        std::vector<double> states_joint_values_i_double;
         for (size_t j = 0; j < states_joint_values[i].size(); j++)
         {
-            std::cout << states_joint_values[i][j] << " ";
+            // print only active joints
+            if (robot_info.getActiveJointMap()[j])
+            {
+                states_joint_values_i_double.push_back((double)states_joint_values[i][j]);
+            }
         }
 
+        robot_state->setJointGroupPositions(joint_model_group, states_joint_values_i_double);
+        robot_state->update();
+
+        visualization_msgs::msg::MarkerArray robot_marker;
+        // color
+        std_msgs::msg::ColorRGBA color;
         if (state_feasibility[i])
         {
-            std::cout << " feasible" << std::endl;
+            color.r = 0.0;
+            color.g = 1.0;
+            color.b = 0.0;
+            color.a = 0.4;
         }
         else
         {
-            std::cout << " infeasible" << std::endl;
+            color.r = 1.0;
+            color.g = 0.0;
+            color.b = 0.0;
+            color.a = 0.4;
         }
+        const std::string sample_group_ns = "sampled_group";
+        robot_state->getRobotMarkers(robot_marker, display_links_names, color, sample_group_ns, rclcpp::Duration::from_seconds(0));
+        sample_group_state_markers.push_back(robot_marker);
+    }
+
+    visualization_msgs::msg::MarkerArray sample_group_state_markers_combined;
+    for (size_t i = 0; i < sample_group_state_markers.size(); i++)
+    {
+        sample_group_state_markers_combined.markers.insert(
+            sample_group_state_markers_combined.markers.end(), 
+            sample_group_state_markers[i].markers.begin(), sample_group_state_markers[i].markers.end());
+    }
+
+    // update the id
+    for (size_t i = 0; i < sample_group_state_markers_combined.markers.size(); i++)
+    {
+        sample_group_state_markers_combined.markers[i].id = i;
     }
 
     std::vector<std::vector<std::vector<float>>> self_collision_spheres_pos =  sampled_states->getSelfCollisionSpheresPosInBaseLinkHost();
@@ -445,6 +506,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
     // Create marker publisher
     auto self_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("self_collision_spheres", 1);
     auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
+    auto sample_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("sample_group_states", 1);
     // Create a self MarkerArray message
     visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array = generate_self_collision_markers(
         collision_spheres_pos_of_selected_config,
@@ -460,12 +522,15 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
         // Publish the message
         self_marker_publisher->publish(robot_collision_spheres_marker_array);
         obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
+        sample_group_states_publisher->publish(sample_group_state_markers_combined);
         
         rclcpp::spin_some(node);
 
         // sleep for 1 second
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
+
+    robot_state.reset();
 }
 
 /**
@@ -1054,7 +1119,9 @@ int main(int argc, char** argv)
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 

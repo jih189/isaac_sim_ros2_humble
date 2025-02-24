@@ -9,7 +9,7 @@ obstacle_configs:
   obstacle_sphere_radius: 0.025
 planner_configs:
   RRGConfigDefault:
-    k: 3
+    k: 1
     sample_attempts_in_each_iteration: 100
     max_travel_distance: 0.5
 arm:
