@@ -12,6 +12,8 @@ namespace CUDAMPLib
             
             virtual void computeCost(BaseStatesPtr states) = 0;
 
+            virtual void newComputeCost(BaseStatesPtr states) = 0;
+
             std::string getName() const { return constraint_name; }
 
             int getConstraintIndex(const SpaceInfoPtr space_info) {

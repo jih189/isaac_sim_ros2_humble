@@ -26,6 +26,8 @@ namespace CUDAMPLib
             ~EnvConstraint() override;
 
             void computeCost(BaseStatesPtr states) override;
+
+            void newComputeCost(BaseStatesPtr states) override;
         
         private:
             int num_of_env_collision_spheres;

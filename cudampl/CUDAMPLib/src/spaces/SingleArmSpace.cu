@@ -501,9 +501,6 @@ namespace CUDAMPLib {
             constraints_[i]->computeCost(states);
         }
 
-        // wait for the kernel to finish
-        cudaDeviceSynchronize();
-
         // get the total cost
         states->calculateTotalCosts();
     }
@@ -513,11 +510,8 @@ namespace CUDAMPLib {
         // based on all the constraints, check if the states are feasible
         for (size_t i = 0; i < constraints_.size(); i++)
         {
-            constraints_[i]->computeCost(states);
+            constraints_[i]->newComputeCost(states);
         }
-
-        // wait for the kernel to finish
-        cudaDeviceSynchronize();
 
         // get the total cost
         states->calculateTotalCosts();

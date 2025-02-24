@@ -212,7 +212,7 @@ namespace CUDAMPLib
         }
     }
 
-    __global__ void new_kin_forward_kernel(
+    __global__ void kin_forward_kernel(
         const float* __restrict__ joint_values, 
         const int num_of_joint,
         const int configuration_size,
@@ -549,7 +549,7 @@ namespace CUDAMPLib
         return self_collision_spheres_pos_in_base_link;
     }
 
-    void SingleArmStates::update()
+    void SingleArmStates::oldUpdate()
     {
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
@@ -576,14 +576,14 @@ namespace CUDAMPLib
         cudaDeviceSynchronize();
     }
 
-    void SingleArmStates::newUpdate()
+    void SingleArmStates::update()
     {
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
         
         // Update the states
-        new_kin_forward_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+        kin_forward_kernel<<<blocksPerGrid, threadsPerBlock>>>(
             d_joint_states,
             num_of_joints,
             num_of_states_,

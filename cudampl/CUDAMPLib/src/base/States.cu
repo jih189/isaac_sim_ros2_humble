@@ -3,21 +3,21 @@
 namespace CUDAMPLib{
 
     __global__ void calculateTotalCostsKernel(
-        float* d_costs,
+        const float* __restrict__ d_costs,
         int num_of_states,
         int num_of_constraints,
-        float* d_total_costs
+        float* __restrict__ d_total_costs
     )
     {
-        // Get the index of the thread
         int idx = threadIdx.x + blockIdx.x * blockDim.x;
-        if (idx < num_of_states){
-            float total_cost = 0.0f;
-            for (int i = 0; i < num_of_constraints; i++){
-                total_cost += d_costs[num_of_states * i + idx];
-            }
-            d_total_costs[idx] = total_cost;
+        if (idx >= num_of_states)
+            return;
+        
+        float total_cost = 0.0f;
+        for (int i = 0; i < num_of_constraints; i++){
+            total_cost += d_costs[num_of_states * i + idx];
         }
+        d_total_costs[idx] = total_cost;
     }
 
     __global__ void filterStatesKernel(const int* d_filter,
