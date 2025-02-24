@@ -65,6 +65,11 @@ namespace CUDAMPLib
                 std::vector<bool> & state_feasibility
             ) = 0;
 
+            virtual void newCheckStates(
+                const BaseStatesPtr & states,
+                std::vector<bool> & state_feasibility
+            ) = 0;
+
             /**
                 * @brief Check the feasibility of a set of states.
                 * @param states The states to check.

@@ -1,5 +1,7 @@
 #include <constraints/SelfCollisionConstraint.h>
 
+#include <chrono>
+
 #define CUDA_CHECK(call) { \
     cudaError_t err = call; \
     if (err != cudaSuccess) { \
@@ -74,13 +76,13 @@ namespace CUDAMPLib{
     }
 
     __global__ void newComputeSelfCollisionCostKernel(
-        float* d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
-        float* d_self_collision_spheres_radius, // num_of_self_collision_spheres
+        const float* __restrict__ d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
+        const float* __restrict__ d_self_collision_spheres_radius, // num_of_self_collision_spheres
         int num_of_self_collision_spheres,
         int num_of_configurations,
-        int* d_self_collision_spheres_map, // num_of_self_collision_spheres
+        const int* __restrict__ d_self_collision_spheres_map, // num_of_self_collision_spheres
         int num_of_robot_links,
-        int* d_self_collision_enables_map, // num_of_robot_links x num_of_robot_links
+        const int* __restrict__ d_self_collision_enables_map, // num_of_robot_links x num_of_robot_links
         float* d_cost // num_of_configurations x num_of_self_collision_spheres
     )
     {
@@ -194,6 +196,8 @@ namespace CUDAMPLib{
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_collision_pairs + threadsPerBlock - 1) / threadsPerBlock;
 
+        // auto start_first_kernel = std::chrono::high_resolution_clock::now();
+
         newComputeSelfCollisionCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
             single_arm_states->getSelfCollisionSpheresPosInBaseLinkCuda(), 
             space_info->d_self_collision_spheres_radius, 
@@ -206,10 +210,15 @@ namespace CUDAMPLib{
         );
 
         // wait for the kernel to finish
-        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
-        CUDA_CHECK(cudaDeviceSynchronize());
+        cudaDeviceSynchronize();
+
+        // auto end_first_kernel = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed_seconds = end_first_kernel - start_first_kernel;
+        // std::cout << "Self constraint Elapsed time for the first kernel: " << elapsed_seconds.count() << "s\n";
 
         blocksPerGrid = (single_arm_states->getNumOfStates() + threadsPerBlock - 1) / threadsPerBlock;
+
+        // auto start_second_kernel = std::chrono::high_resolution_clock::now();
 
         sumSelfCollisionCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
             d_collision_cost,
@@ -217,9 +226,11 @@ namespace CUDAMPLib{
             single_arm_states->getNumOfStates(),
             d_cost_of_current_constraint
         );
+        cudaDeviceSynchronize();
 
-        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
-        CUDA_CHECK(cudaDeviceSynchronize());
+        // auto end_second_kernel = std::chrono::high_resolution_clock::now();
+        // elapsed_seconds = end_second_kernel - start_second_kernel;
+        // std::cout << "Self constraint Elapsed time for the second kernel: " << elapsed_seconds.count() << "s\n";
 
         cudaFree(d_collision_cost);
     }

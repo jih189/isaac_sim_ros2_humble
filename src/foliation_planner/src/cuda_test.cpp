@@ -251,7 +251,7 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
         robot_info.getLinkNames()
     );
 
-    int num_of_test_states = 100;
+    int num_of_test_states = 10000;
 
     // sample a set of states
     CUDAMPLib::SingleArmStatesPtr single_arm_states_1 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
@@ -276,21 +276,21 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     printf("\033[1;32m" "Time taken by old update: %f seconds" "\033[0m \n", elapsed_time_old_update.count());
 
     // check states
-    // single_arm_space->checkStates(single_arm_states_1); // dummy check
+    single_arm_space->checkStates(single_arm_states_1); // dummy check
 
-    // auto start_time_new_check_states = std::chrono::high_resolution_clock::now();
-    // single_arm_space->newCheckStates(single_arm_states_2);
-    // auto end_time_new_check_states = std::chrono::high_resolution_clock::now();
-    // std::chrono::duration<double> elapsed_time_new_check_states = end_time_new_check_states - start_time_new_check_states;
-    // // print in green color
-    // printf("\033[1;32m" "Time taken by newCheckStates: %f seconds" "\033[0m \n", elapsed_time_new_check_states.count());
+    auto start_time_new_check_states = std::chrono::high_resolution_clock::now();
+    single_arm_space->newCheckStates(single_arm_states_2);
+    auto end_time_new_check_states = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_new_check_states = end_time_new_check_states - start_time_new_check_states;
+    // print in green color
+    printf("\033[1;32m" "Time taken by newCheckStates: %f seconds" "\033[0m \n", elapsed_time_new_check_states.count());
 
-    // auto start_time_check_states = std::chrono::high_resolution_clock::now();
-    // single_arm_space->checkStates(single_arm_states_3);
-    // auto end_time_check_states = std::chrono::high_resolution_clock::now();
-    // std::chrono::duration<double> elapsed_time_check_states = end_time_check_states - start_time_check_states;
-    // // print in green color
-    // printf("\033[1;32m" "Time taken by checkStates: %f seconds" "\033[0m \n", elapsed_time_check_states.count());
+    auto start_time_check_states = std::chrono::high_resolution_clock::now();
+    single_arm_space->checkStates(single_arm_states_3);
+    auto end_time_check_states = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_check_states = end_time_check_states - start_time_check_states;
+    // print in green color
+    printf("\033[1;32m" "Time taken by checkStates: %f seconds" "\033[0m \n", elapsed_time_check_states.count());
 }
 
 /**
@@ -415,13 +415,13 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
     );
 
     // sample a set of states
-    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(10));
+    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(20));
     sampled_states->update();
 
     std::vector<bool> state_feasibility;
 
     // check states
-    single_arm_space->checkStates(sampled_states, state_feasibility);
+    single_arm_space->newCheckStates(sampled_states, state_feasibility);
 
     std::vector<std::string> display_links_names = joint_model_group->getLinkModelNames();
     // add end effector link by hard code
@@ -1119,9 +1119,9 @@ int main(int argc, char** argv)
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
