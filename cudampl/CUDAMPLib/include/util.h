@@ -6,6 +6,15 @@
 #include <utility>  // For std::pair
 #include <iostream>
 
+// This is a macro to check CUDA errors.
+#define CUDA_CHECK(call) { \
+    cudaError_t err = call; \
+    if (err != cudaSuccess) { \
+        std::cerr << "CUDA Error at " << __FILE__ << ":" << __LINE__ << " - " \
+                  << cudaGetErrorString(err) << std::endl; \
+        exit(EXIT_FAILURE); \
+    } \
+}
 
 namespace CUDAMPLib
 {

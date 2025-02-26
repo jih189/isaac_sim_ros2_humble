@@ -255,8 +255,23 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
 
     // sample a set of states
     CUDAMPLib::SingleArmStatesPtr single_arm_states_1 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    if (single_arm_states_1 == nullptr)
+    {
+        RCLCPP_ERROR(LOGGER, "Failed to sample states for single arm space 1");
+        return;
+    }
     CUDAMPLib::SingleArmStatesPtr single_arm_states_2 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    if (single_arm_states_2 == nullptr)
+    {
+        RCLCPP_ERROR(LOGGER, "Failed to sample states for single arm space 2");
+        return;
+    }
     CUDAMPLib::SingleArmStatesPtr single_arm_states_3 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    if (single_arm_states_3 == nullptr)
+    {
+        RCLCPP_ERROR(LOGGER, "Failed to sample states for single arm space 3");
+        return;
+    }
 
     // dumpy update
     single_arm_states_1->oldUpdate();
@@ -291,6 +306,24 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     std::chrono::duration<double> elapsed_time_old_check_states = end_time_old_check_states - start_time_old_check_states;
     // print in green color
     printf("\033[1;32m" "Time taken by oldCheckStates: %f seconds" "\033[0m \n", elapsed_time_old_check_states.count());
+
+    // check motions
+    std::vector<bool> motion_feasibility;
+    std::vector<float> motion_costs;
+
+    auto start_time_check_motions = std::chrono::high_resolution_clock::now();
+    single_arm_space->checkMotions(single_arm_states_1, single_arm_states_2, motion_feasibility, motion_costs);
+    auto end_time_check_motions = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
+    // print in green color
+    printf("\033[1;32m" "Time taken by checkMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
+
+    // start_time_check_motions = std::chrono::high_resolution_clock::now();
+    // single_arm_space->checkMotions(single_arm_states_2, single_arm_states_3, motion_feasibility, motion_costs);
+    // end_time_check_motions = std::chrono::high_resolution_clock::now();
+    // elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
+    // // print in green color
+    // printf("\033[1;32m" "Time taken by second checkMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
 }
 
 /**
@@ -1119,11 +1152,11 @@ int main(int argc, char** argv)
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

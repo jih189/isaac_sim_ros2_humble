@@ -226,33 +226,34 @@ namespace CUDAMPLib
     ) 
     {
         int idx = threadIdx.x + blockIdx.x * blockDim.x;
-        if (idx < configuration_size) {
+        if (idx >= configuration_size) {
+            return;
+        }
 
-            // set the first link pose to identity matrix because it is the base link
-            set_identity(&link_poses_set[idx * num_of_links * 16]);
+        // set the first link pose to identity matrix because it is the base link
+        set_identity(&link_poses_set[idx * num_of_links * 16]);
 
-            // Calculate forward kinematics for each link
-            for (size_t i = 1; i < num_of_links; i++) // The first link is the base link, so we can skip it
+        // Calculate forward kinematics for each link
+        for (size_t i = 1; i < num_of_links; i++) // The first link is the base link, so we can skip it
+        {
+            float* parent_link_pose = &link_poses_set[idx * num_of_links * 16 + link_maps[i] * 16];
+            float* current_link_pose = &link_poses_set[idx * num_of_links * 16 + i * 16];
+            // based on the joint type, calculate the link pose
+            int j_type = joint_types[i];
+            switch (j_type)
             {
-                float* parent_link_pose = &link_poses_set[idx * num_of_links * 16 + link_maps[i] * 16];
-                float* current_link_pose = &link_poses_set[idx * num_of_links * 16 + i * 16];
-                // based on the joint type, calculate the link pose
-                int j_type = joint_types[i];
-                switch (j_type)
-                {
-                    case CUDAMPLib_REVOLUTE:
-                        revolute_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
-                        break;
-                    case CUDAMPLib_PRISMATIC:
-                        prism_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
-                        break;
-                    case CUDAMPLib_FIXED:
-                        fixed_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], current_link_pose);
-                        break;
-                    default:
-                        printf("Unknown joint type: %d\n", joint_types[i]);
-                        break;
-                }
+                case CUDAMPLib_REVOLUTE:
+                    revolute_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
+                    break;
+                case CUDAMPLib_PRISMATIC:
+                    prism_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
+                    break;
+                case CUDAMPLib_FIXED:
+                    fixed_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], current_link_pose);
+                    break;
+                default:
+                    printf("Unknown joint type: %d\n", joint_types[i]);
+                    break;
             }
         }
     }
@@ -407,12 +408,61 @@ namespace CUDAMPLib
     SingleArmStates::SingleArmStates(int num_of_states, SingleArmSpaceInfoPtr space_info)
     : BaseStates(num_of_states, space_info)
     {
+        // check if base class is initialized
+        if (isValid() == false)
+        {
+            // If not initialized, return.
+            std::cerr << "BaseStates is not initialized" << std::endl;
+            return;
+        }
+
         this->num_of_joints = space_info->num_of_joints;
 
         // Allocate memory for the joint states
-        cudaMalloc(&d_joint_states, num_of_states * this->num_of_joints * sizeof(float));
-        cudaMalloc(&d_link_poses_in_base_link, num_of_states * space_info->num_of_links * 4 * 4 * sizeof(float));
-        cudaMalloc(&d_self_collision_spheres_pos_in_base_link, num_of_states * space_info->num_of_self_collision_spheres * 3 * sizeof(float));
+        size_t d_joint_states_bytes = (size_t)num_of_states * this->num_of_joints * sizeof(float);
+        size_t d_link_poses_in_base_link_bytes = (size_t)num_of_states * space_info->num_of_links * 4 * 4 * sizeof(float);
+        size_t d_self_collision_spheres_pos_in_base_link_bytes = (size_t)num_of_states * space_info->num_of_self_collision_spheres * 3 * sizeof(float);
+
+        auto allocate_result = cudaMalloc(&d_joint_states, d_joint_states_bytes);
+        if (allocate_result != cudaSuccess) {
+            cudaGetLastError();
+            size_t free_memory, total_memory;
+            cudaMemGetInfo(&free_memory, &total_memory);
+            std::cerr << "Free memory: " << free_memory / (1024 * 1024) << " MB" << std::endl;
+            std::cerr << "Requested d_joint_states_bytes: " << d_joint_states_bytes / (1024 * 1024) << " MB" << std::endl;
+            // print in red
+            std::cerr << "\033[31m" << "CUDA Error: " << cudaGetErrorString(allocate_result) << " d_joint_states_bytes is too large " << "\033[0m" << std::endl;
+
+            setValid(false);
+            // return;
+        }
+        allocate_result = cudaMalloc(&d_link_poses_in_base_link, d_link_poses_in_base_link_bytes);
+        if (allocate_result != cudaSuccess) {
+            cudaGetLastError();
+            size_t free_memory, total_memory;
+            cudaMemGetInfo(&free_memory, &total_memory);
+            std::cerr << "Free memory: " << free_memory / (1024 * 1024) << " MB" << std::endl;
+            std::cerr << "Requested d_link_poses_in_base_link_bytes: " << d_link_poses_in_base_link_bytes / (1024 * 1024) << " MB" << std::endl;
+            // print in red
+            std::cerr << "\033[31m" << "CUDA Error: " << cudaGetErrorString(allocate_result) << " d_link_poses_in_base_link_bytes is too large "<< "\033[0m" << std::endl;
+
+            setValid(false);
+            // return;
+        }
+        allocate_result = cudaMalloc(&d_self_collision_spheres_pos_in_base_link, d_self_collision_spheres_pos_in_base_link_bytes);
+        if (allocate_result != cudaSuccess) {
+            cudaGetLastError();
+            size_t free_memory, total_memory;
+            cudaMemGetInfo(&free_memory, &total_memory);
+            std::cerr << "Free memory: " << free_memory / (1024 * 1024) << " MB" << std::endl;
+            std::cerr << "Requested d_self_collision_spheres_pos_in_base_link_bytes: " << d_self_collision_spheres_pos_in_base_link_bytes / (1024 * 1024) << " MB" << std::endl;
+            // print in red
+            std::cerr << "\033[31m" << "CUDA Error: " << cudaGetErrorString(allocate_result) << " d_self_collision_spheres_pos_in_base_link_bytes is too large " << "\033[0m" << std::endl;
+
+            setValid(false);
+            // return;
+        }
+        // CUDA_CHECK(cudaGetLastError());
     }
 
     SingleArmStates::~SingleArmStates()
@@ -423,6 +473,10 @@ namespace CUDAMPLib
             cudaFree(d_joint_states);
             cudaFree(d_link_poses_in_base_link);
             cudaFree(d_self_collision_spheres_pos_in_base_link);
+            // set the pointers to nullptr for safety
+            d_joint_states = nullptr;
+            d_link_poses_in_base_link = nullptr;
+            d_self_collision_spheres_pos_in_base_link = nullptr;
         }
     }
 
@@ -433,7 +487,7 @@ namespace CUDAMPLib
         // call the base class filterStates
         BaseStates::filterStates(filter_map);
 
-        int new_num_of_states = num_of_states_; // number of state is updated in the base class.
+        size_t new_num_of_states = num_of_states_; // number of state is updated in the base class.
 
         if (new_num_of_states == 0){
             // Free the memory
@@ -449,10 +503,14 @@ namespace CUDAMPLib
             float * d_link_poses_in_base_link_new;
             float * d_self_collision_spheres_pos_in_base_link_new;
 
+            size_t d_joint_states_new_bytes = new_num_of_states * this->num_of_joints * sizeof(float);
+            size_t d_link_poses_in_base_link_new_bytes = new_num_of_states * single_arm_space_info->num_of_links * 4 * 4 * sizeof(float);
+            size_t d_self_collision_spheres_pos_in_base_link_new_bytes = new_num_of_states * single_arm_space_info->num_of_self_collision_spheres * 3 * sizeof(float);
+
             // Allocate memory for the joint states
-            cudaMalloc(&d_joint_states_new, new_num_of_states * num_of_joints * sizeof(float));
-            cudaMalloc(&d_link_poses_in_base_link_new, new_num_of_states * single_arm_space_info->num_of_links * 4 * 4 * sizeof(float));
-            cudaMalloc(&d_self_collision_spheres_pos_in_base_link_new, new_num_of_states * single_arm_space_info->num_of_self_collision_spheres * 3 * sizeof(float));
+            cudaMalloc(&d_joint_states_new, d_joint_states_new_bytes);
+            cudaMalloc(&d_link_poses_in_base_link_new, d_link_poses_in_base_link_new_bytes);
+            cudaMalloc(&d_self_collision_spheres_pos_in_base_link_new, d_self_collision_spheres_pos_in_base_link_new_bytes);
 
             // Copy the joint states from the old memory to the new memory
             int j = 0;
@@ -481,6 +539,8 @@ namespace CUDAMPLib
             d_link_poses_in_base_link = d_link_poses_in_base_link_new;
             d_self_collision_spheres_pos_in_base_link = d_self_collision_spheres_pos_in_base_link_new;
         }
+
+        CUDA_CHECK(cudaGetLastError());
     }
 
     void SingleArmStates::cudaFilterStates(const std::vector<bool>& filter_map)
@@ -489,7 +549,7 @@ namespace CUDAMPLib
 
         // Call the base class cudaFilterStates to update num_of_states_
         BaseStates::cudaFilterStates(filter_map);
-        int new_num_of_states = num_of_states_;
+        size_t new_num_of_states = num_of_states_;
 
         if (new_num_of_states == 0) {
             cudaFree(d_joint_states);
@@ -515,9 +575,12 @@ namespace CUDAMPLib
         float* d_joint_states_new = nullptr;
         float* d_link_poses_new = nullptr;
         float* d_spheres_new = nullptr;
-        cudaMalloc(&d_joint_states_new, new_num_of_states * num_joints * sizeof(float));
-        cudaMalloc(&d_link_poses_new, new_num_of_states * link_elements * sizeof(float));
-        cudaMalloc(&d_spheres_new, new_num_of_states * sphere_elements * sizeof(float));
+        size_t d_joint_states_new_bytes = new_num_of_states * num_joints * sizeof(float);
+        size_t d_link_poses_new_bytes = new_num_of_states * link_elements * sizeof(float);
+        size_t d_spheres_new_bytes = new_num_of_states * sphere_elements * sizeof(float);
+        cudaMalloc(&d_joint_states_new, d_joint_states_new_bytes);
+        cudaMalloc(&d_link_poses_new, d_link_poses_new_bytes);
+        cudaMalloc(&d_spheres_new, d_spheres_new_bytes);
 
         // Create a device vector for the filter (convert bools to ints: 0 or 1)
         thrust::device_vector<int> d_filter(initial_num_of_states);
@@ -640,9 +703,6 @@ namespace CUDAMPLib
         int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
 
-        // Create a CUDA event for synchronization.
-        // cudaEvent_t syncEvent;
-        // cudaEventCreate(&syncEvent);
         
         // Update the states
         kin_forward_kernel<<<blocksPerGrid, threadsPerBlock>>>(
@@ -656,10 +716,9 @@ namespace CUDAMPLib
             space_info_single_arm_space->d_link_parent_link_maps,
             d_link_poses_in_base_link
         );
-        // // Wait for the kernel to finish
-        // cudaEventRecord(syncEvent, 0);
-        // cudaEventSynchronize(syncEvent);
-        cudaDeviceSynchronize();
+
+        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         // update the self collision spheres position in base link frame
         blocksPerGrid = (num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres + threadsPerBlock - 1) / threadsPerBlock;
@@ -673,13 +732,8 @@ namespace CUDAMPLib
             d_self_collision_spheres_pos_in_base_link
         );
 
-        // Wait for the kernel to finish
-        // cudaEventRecord(syncEvent, 0);
-        // cudaEventSynchronize(syncEvent);
-        cudaDeviceSynchronize();
-
-        // Destroy the CUDA event.
-        // cudaEventDestroy(syncEvent);
+        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+        CUDA_CHECK(cudaDeviceSynchronize());
     }
 
     std::vector<std::vector<Eigen::Isometry3d>> SingleArmStates::getLinkPosesInBaseLinkHost() const
@@ -790,6 +844,7 @@ namespace CUDAMPLib
         if (num_of_states_ > 0)
         {
             cudaFree(d_joint_states);
+            d_joint_states = nullptr;
         }
     }
 
@@ -800,6 +855,7 @@ namespace CUDAMPLib
             // call the base class clear function
             BaseStateManager::clear();
             cudaFree(d_joint_states);
+            d_joint_states = nullptr;
         }
     }
 
@@ -815,14 +871,14 @@ namespace CUDAMPLib
         }
 
         // get the data size of those new states
-        int data_size = single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float);
+        size_t d_joint_states_bytes = single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float);
 
         if (num_of_states_ == 0) {
             // allocate memory for the states
-            cudaMalloc(&d_joint_states, data_size);
+            cudaMalloc(&d_joint_states, d_joint_states_bytes);
 
             // copy the data to the device
-            cudaMemcpy(d_joint_states, single_arm_states->getJointStatesCuda(), data_size, cudaMemcpyDeviceToDevice);
+            cudaMemcpy(d_joint_states, single_arm_states->getJointStatesCuda(), d_joint_states_bytes, cudaMemcpyDeviceToDevice);
 
             // update the number of states
             num_of_states_ = single_arm_states->getNumOfStates();
@@ -835,7 +891,7 @@ namespace CUDAMPLib
             int old_num_of_states = num_of_states_;
 
             // manager's states is not empty, we need to extend the d_joint_states.
-            int d_new_joint_states_bytes = (num_of_states_ + single_arm_states->getNumOfStates()) * num_of_joints * sizeof(float);
+            size_t d_new_joint_states_bytes = (num_of_states_ + single_arm_states->getNumOfStates()) * num_of_joints * sizeof(float);
 
             float * d_new_joint_states;
 
@@ -905,7 +961,8 @@ namespace CUDAMPLib
         }
 
         float * d_distances_from_query_to_states;
-        cudaMalloc(&d_distances_from_query_to_states, query_states->getNumOfStates() * num_of_states_ * sizeof(float));
+        size_t d_distances_from_query_to_states_bytes = query_states->getNumOfStates() * num_of_states_ * sizeof(float);
+        cudaMalloc(&d_distances_from_query_to_states, d_distances_from_query_to_states_bytes);
 
         // calculate the distance between the query states and the states in the manager
         int block_size = 256;
@@ -981,7 +1038,8 @@ namespace CUDAMPLib
         }
 
         float * d_distances_from_query_to_states;
-        cudaMalloc(&d_distances_from_query_to_states, query_states->getNumOfStates() * num_of_states_ * sizeof(float));
+        size_t d_distances_from_query_to_states_bytes = query_states->getNumOfStates() * num_of_states_ * sizeof(float);
+        cudaMalloc(&d_distances_from_query_to_states, d_distances_from_query_to_states_bytes);
 
         // calculate the distance between the query states and the states in the manager
         int block_size = 256;
@@ -1023,6 +1081,8 @@ namespace CUDAMPLib
 
         // free the memory
         cudaFree(d_distances_from_query_to_states);
+
+        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
 
         return total_actual_k;
     }

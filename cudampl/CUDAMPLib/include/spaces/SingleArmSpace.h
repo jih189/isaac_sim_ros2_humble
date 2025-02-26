@@ -44,7 +44,7 @@ namespace CUDAMPLib
 
             BaseStatesPtr sample(int num_of_config) override;
 
-            void checkMotions(
+            bool checkMotions(
                 const BaseStatesPtr & states1, 
                 const BaseStatesPtr & states2, 
                 std::vector<bool>& motion_feasibility,
@@ -84,7 +84,7 @@ namespace CUDAMPLib
                 This is used later to create start states and goal states.
                 @param joint_values The joint values of the states. Be careful with the size of the joint values.
                                     The size of the joint values should be equal to the number of active joints not the number of joints.
-                @return The states.
+                @return The states. If it fails, return nullptr.
              */
             BaseStatesPtr createStatesFromVector(const std::vector<std::vector<float>>& joint_values);
 
@@ -94,7 +94,7 @@ namespace CUDAMPLib
                 @brief helper function to create a set of states based on task.
                 This is used for motion checking.
                 @param joint_values The joint values of the states include non-active joints.
-                @return The states.
+                @return The states. If it fails, return nullptr.
              */
             BaseStatesPtr createStatesFromVectorFull(const std::vector<std::vector<float>>& joint_values);
 

@@ -36,8 +36,9 @@ namespace CUDAMPLib
                 * @param states2 The second set of states.
                 * @param motion_feasibility The feasibility of the motions.
                 * @param motion_costs The costs of the motions.
+                * @return True if the check motions feasible.
              */
-            virtual void checkMotions(
+            virtual bool checkMotions(
                 const BaseStatesPtr & states1, 
                 const BaseStatesPtr & states2, 
                 std::vector<bool>& motion_feasibility,

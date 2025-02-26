@@ -15,8 +15,8 @@ namespace CUDAMPLib{
         num_of_env_collision_spheres = env_collision_spheres_pos.size();
 
         // Allocate memory for the environment collision spheres
-        int env_collision_spheres_pos_bytes = num_of_env_collision_spheres * sizeof(float) * 3;
-        int env_collision_spheres_radius_bytes = num_of_env_collision_spheres * sizeof(float);
+        size_t env_collision_spheres_pos_bytes = (size_t)num_of_env_collision_spheres * sizeof(float) * 3;
+        size_t env_collision_spheres_radius_bytes = (size_t)num_of_env_collision_spheres * sizeof(float);
 
         cudaMalloc(&d_env_collision_spheres_pos_in_base_link, env_collision_spheres_pos_bytes);
         cudaMalloc(&d_env_collision_spheres_radius, env_collision_spheres_radius_bytes);
@@ -65,38 +65,99 @@ namespace CUDAMPLib{
         }
     }
 
+    // __global__ void computeCollisionCostKernel(
+    //     float* d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
+    //     float* d_self_collision_spheres_radius, // num_of_self_collision_spheres
+    //     int num_of_self_collision_spheres,
+    //     int num_of_configurations,
+    //     float* d_obstacle_sphere_pos_in_base_link, // num_of_obstacle_spheres x 3
+    //     float* d_obstacle_sphere_radius, // num_of_obstacle_spheres
+    //     int num_of_obstacle_collision_spheres,
+    //     float* d_cost // num_of_configurations x num_of_self_collision_spheres
+    // )
+    // {
+    //     // Get the index of the thread
+    //     int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    //     if (idx < num_of_configurations * num_of_self_collision_spheres)
+    //     {
+    //         int configuration_index = idx / num_of_self_collision_spheres;
+    //         int self_collision_sphere_index = idx % num_of_self_collision_spheres;
+
+    //         float cost = 0.0f;
+
+    //         for (int j = 0; j < num_of_obstacle_collision_spheres; j++)
+    //         {
+    //             float diff_in_x = d_self_collision_spheres_pos_in_base_link[configuration_index * num_of_self_collision_spheres * 3 + self_collision_sphere_index * 3 + 0] - d_obstacle_sphere_pos_in_base_link[j * 3 + 0];
+    //             float diff_in_y = d_self_collision_spheres_pos_in_base_link[configuration_index * num_of_self_collision_spheres * 3 + self_collision_sphere_index * 3 + 1] - d_obstacle_sphere_pos_in_base_link[j * 3 + 1];
+    //             float diff_in_z = d_self_collision_spheres_pos_in_base_link[configuration_index * num_of_self_collision_spheres * 3 + self_collision_sphere_index * 3 + 2] - d_obstacle_sphere_pos_in_base_link[j * 3 + 2];
+
+    //             float distance = sqrt(diff_in_x * diff_in_x + diff_in_y * diff_in_y + diff_in_z * diff_in_z); // Euclidean distance
+    //             float sum_of_radius = d_self_collision_spheres_radius[self_collision_sphere_index] + d_obstacle_sphere_radius[j];
+
+    //             // the cost the overlap of the two spheres
+    //             cost += fmaxf(0.0f, sum_of_radius - distance);
+    //         }
+    //         d_cost[idx] = cost;
+    //     }
+    // }
+
     __global__ void computeCollisionCostKernel(
-        float* d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
-        float* d_self_collision_spheres_radius, // num_of_self_collision_spheres
+        const float* __restrict__ d_self_collision_spheres_pos_in_base_link, // [num_configurations x num_self_collision_spheres x 3]
+        const float* __restrict__ d_self_collision_spheres_radius,            // [num_self_collision_spheres]
         int num_of_self_collision_spheres,
         int num_of_configurations,
-        float* d_obstacle_sphere_pos_in_base_link, // num_of_obstacle_spheres x 3
-        float* d_obstacle_sphere_radius, // num_of_obstacle_spheres
+        const float* __restrict__ d_obstacle_sphere_pos_in_base_link,         // [num_of_obstacle_collision_spheres x 3]
+        const float* __restrict__ d_obstacle_sphere_radius,                   // [num_of_obstacle_collision_spheres]
         int num_of_obstacle_collision_spheres,
-        float* d_cost // num_of_configurations x num_of_self_collision_spheres
+        float* d_cost                                                         // [num_configurations x num_of_self_collision_spheres]
     )
     {
-        // Get the index of the thread
+        // Global thread index: one thread per self-collision sphere per configuration.
         int idx = threadIdx.x + blockIdx.x * blockDim.x;
         if (idx < num_of_configurations * num_of_self_collision_spheres)
         {
+            // Determine configuration and sphere indices.
             int configuration_index = idx / num_of_self_collision_spheres;
             int self_collision_sphere_index = idx % num_of_self_collision_spheres;
 
+            // Compute the base index for this configuration.
+            int config_base = configuration_index * num_of_self_collision_spheres * 3;
+            int pos_index = config_base + self_collision_sphere_index * 3;
+
+            // Load current sphere's position and radius.
+            float self_x = d_self_collision_spheres_pos_in_base_link[pos_index + 0];
+            float self_y = d_self_collision_spheres_pos_in_base_link[pos_index + 1];
+            float self_z = d_self_collision_spheres_pos_in_base_link[pos_index + 2];
+            float self_radius = d_self_collision_spheres_radius[self_collision_sphere_index];
+
             float cost = 0.0f;
 
+            // Loop over all obstacle spheres.
             for (int j = 0; j < num_of_obstacle_collision_spheres; j++)
             {
-                float diff_in_x = d_self_collision_spheres_pos_in_base_link[configuration_index * num_of_self_collision_spheres * 3 + self_collision_sphere_index * 3 + 0] - d_obstacle_sphere_pos_in_base_link[j * 3 + 0];
-                float diff_in_y = d_self_collision_spheres_pos_in_base_link[configuration_index * num_of_self_collision_spheres * 3 + self_collision_sphere_index * 3 + 1] - d_obstacle_sphere_pos_in_base_link[j * 3 + 1];
-                float diff_in_z = d_self_collision_spheres_pos_in_base_link[configuration_index * num_of_self_collision_spheres * 3 + self_collision_sphere_index * 3 + 2] - d_obstacle_sphere_pos_in_base_link[j * 3 + 2];
+                int obs_index = j * 3;
+                float obs_x = d_obstacle_sphere_pos_in_base_link[obs_index + 0];
+                float obs_y = d_obstacle_sphere_pos_in_base_link[obs_index + 1];
+                float obs_z = d_obstacle_sphere_pos_in_base_link[obs_index + 2];
+                float obs_radius = d_obstacle_sphere_radius[j];
 
-                float distance = sqrt(diff_in_x * diff_in_x + diff_in_y * diff_in_y + diff_in_z * diff_in_z); // Euclidean distance
-                float sum_of_radius = d_self_collision_spheres_radius[self_collision_sphere_index] + d_obstacle_sphere_radius[j];
+                float diff_x = self_x - obs_x;
+                float diff_y = self_y - obs_y;
+                float diff_z = self_z - obs_z;
+                float dist_sq = diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
 
-                // the cost the overlap of the two spheres
-                cost += fmaxf(0.0f, sum_of_radius - distance);
+                float sum_radii = self_radius + obs_radius;
+                float sum_radii_sq = sum_radii * sum_radii;
+
+                // Only compute the square root if spheres are overlapping.
+                if (dist_sq < sum_radii_sq)
+                {
+                    float distance = sqrtf(dist_sq);
+                    cost += fmaxf(0.0f, sum_radii - distance);
+                }
             }
+
+            // Write the computed cost back to global memory.
             d_cost[idx] = cost;
         }
     }
@@ -169,8 +230,9 @@ namespace CUDAMPLib{
 
         // allocate memory for 3d collision cost, num_of_configurations x num_of_self_collision_spheres x num_of_obstacle_collision_spheres
         float * d_collision_cost;
-        int num_of_env_collision_check = single_arm_states->getNumOfStates() * space_info->num_of_self_collision_spheres;
-        cudaMalloc(&d_collision_cost, num_of_env_collision_check * sizeof(float));
+        size_t num_of_env_collision_check = (size_t)(single_arm_states->getNumOfStates()) * space_info->num_of_self_collision_spheres;
+        size_t d_collision_cost_bytes = num_of_env_collision_check * sizeof(float);
+        cudaMalloc(&d_collision_cost, d_collision_cost_bytes);
 
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_env_collision_check + threadsPerBlock - 1) / threadsPerBlock;
@@ -189,11 +251,7 @@ namespace CUDAMPLib{
         );
         
         // wait for the kernel to finish
-        cudaDeviceSynchronize();
-
-        // auto end_first_kernel = std::chrono::high_resolution_clock::now();
-        // std::chrono::duration<double> elapsed_seconds = end_first_kernel - start_first_kernel;
-        // std::cout << "Env constraint Elapsed time for the first kernel: " << elapsed_seconds.count() << "s\n";
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         // sum the collision cost
         blocksPerGrid = (single_arm_states->getNumOfStates() + threadsPerBlock - 1) / threadsPerBlock;
@@ -207,11 +265,7 @@ namespace CUDAMPLib{
         );
 
         // wait for the kernel to finish
-        cudaDeviceSynchronize();
-
-        // auto end_second_kernel = std::chrono::high_resolution_clock::now();
-        // elapsed_seconds = end_second_kernel - start_second_kernel;
-        // std::cout << "Env constraint Elapsed time for the second kernel: " << elapsed_seconds.count() << "s\n";
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         cudaFree(d_collision_cost);
     }

@@ -289,18 +289,18 @@ void CUDAMPLib::kin_forward_cuda(
     }
     
     // Prepare cuda memory
-    int num_of_joints = joint_values[0].size();
-    int num_of_links = link_maps.size();
-    int num_of_config = joint_values.size();
-    int joint_values_size = num_of_config * num_of_joints;
-    int joint_values_bytes = joint_values_size * sizeof(float);
-    int joint_types_bytes = joint_types.size() * sizeof(int);
-    int size_of_pose_matrix = 4 * 4 * sizeof(float); // We do not need the last row of the matrix
-    int joint_poses_bytes = joint_poses.size() * size_of_pose_matrix;
-    int joint_axes_bytes = joint_axes.size() * sizeof(float) * 3;
-    int link_maps_bytes = link_maps.size() * sizeof(int);
-    int link_poses_set_size = num_of_links * num_of_config * size_of_pose_matrix;
-    int link_poses_set_bytes = link_poses_set_size * sizeof(float);
+    size_t num_of_joints = joint_values[0].size();
+    size_t num_of_links = link_maps.size();
+    size_t num_of_config = joint_values.size();
+    size_t joint_values_size = num_of_config * num_of_joints;
+    size_t joint_values_bytes = joint_values_size * sizeof(float);
+    size_t joint_types_bytes = joint_types.size() * sizeof(int);
+    size_t size_of_pose_matrix = 4 * 4 * sizeof(float); // We do not need the last row of the matrix
+    size_t joint_poses_bytes = joint_poses.size() * size_of_pose_matrix;
+    size_t joint_axes_bytes = joint_axes.size() * sizeof(float) * 3;
+    size_t link_maps_bytes = link_maps.size() * sizeof(int);
+    size_t link_poses_set_size = num_of_links * num_of_config * size_of_pose_matrix;
+    size_t link_poses_set_bytes = link_poses_set_size * sizeof(float);
 
     // Allocate device memory
     float *d_joint_values;

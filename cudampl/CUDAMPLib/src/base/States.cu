@@ -78,8 +78,10 @@ namespace CUDAMPLib{
         float* d_costs_new = nullptr;
         float* d_total_costs_new = nullptr;
         int numConstraints = space_info->num_of_constraints;
-        cudaMalloc(&d_costs_new, num_left_states * numConstraints * sizeof(float));
-        cudaMalloc(&d_total_costs_new, num_left_states * sizeof(float));
+        size_t d_costs_new_bytes = (size_t)num_left_states * numConstraints * sizeof(float);
+        size_t d_total_costs_new_bytes = (size_t)num_left_states * sizeof(float);
+        cudaMalloc(&d_costs_new, d_costs_new_bytes);
+        cudaMalloc(&d_total_costs_new, d_total_costs_new_bytes);
 
         // Prepare the filter map on device.
         // We'll convert the bool filter_map to an int array (0 or 1).

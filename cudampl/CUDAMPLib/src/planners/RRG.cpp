@@ -35,8 +35,6 @@ namespace CUDAMPLib
 
         // get start states
         auto start_states = task->getStartStates(space_);
-        // start_states->update();
-        // space_->checkStates(start_states);
         // add start states to the state manager
         std::vector<int> start_node_indexs = state_manager->add_states(start_states);
 
@@ -65,8 +63,6 @@ namespace CUDAMPLib
 
         // get goal states
         auto goal_states = task->getGoalStates(space_);
-        // goal_states->update();
-        // space_->checkStates(goal_states);
         // add goal states to the state manager
         std::vector<int> goal_node_indexs = state_manager->add_states(goal_states);
 
@@ -246,17 +242,24 @@ namespace CUDAMPLib
                 break;
             }
 
-            std::vector<int> start_group_indexs;
-            std::vector<int> goal_group_indexs;
-            getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
-
             // sample states
             // auto start_time_samples = std::chrono::high_resolution_clock::now();
             auto states = space_->sample(sample_attempts_in_each_iteration_);
+            if (states == nullptr)
+            {
+                // print in red color "falied to sample states"
+                printf("\033[1;31m failed to sample states \033[0m \n");
+
+                break;
+            }
             // auto end_time_samples = std::chrono::high_resolution_clock::now();
             // std::chrono::duration<double> elapsed_time_samples = end_time_samples - start_time_samples;
             // // print
             // printf("Time taken by sample: %f seconds\n", elapsed_time_samples.count());
+
+            std::vector<int> start_group_indexs;
+            std::vector<int> goal_group_indexs;
+            getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
 
             std::vector<std::vector<int>> nearest_neighbors_index;
             // auto start_time_find_k_nearest_neighbors = std::chrono::high_resolution_clock::now();
@@ -310,7 +313,6 @@ namespace CUDAMPLib
             {
                 // clear the states
                 states.reset();
-
                 continue;
             }
 
@@ -342,7 +344,7 @@ namespace CUDAMPLib
             std::vector<bool> motion_feasibility;
             std::vector<float> motion_costs;
             // auto start_time_check_motions = std::chrono::high_resolution_clock::now();
-            space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
+            bool check_motions_feasiblity = space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
             // auto end_time_check_motions = std::chrono::high_resolution_clock::now();
             // std::chrono::duration<double> elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
             // // print
@@ -351,6 +353,17 @@ namespace CUDAMPLib
             // clear the states
             motion_states_1.reset();
             motion_states_2.reset();
+
+            if (!check_motions_feasiblity)
+            {
+                // print in red color
+                printf("\033[1;31m failed to check motions \033[0m \n");
+
+                // clear the states
+                states.reset();
+
+                break;
+            }
 
             /*
                 Assume we have three sampled states and k = 2, and S is the sampled state, N is the neighbor of S.

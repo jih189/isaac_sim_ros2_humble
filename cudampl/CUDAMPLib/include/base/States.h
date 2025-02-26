@@ -31,20 +31,43 @@ namespace CUDAMPLib
     class BaseStates
     {
         public:
-            BaseStates(int num_of_states, SpaceInfoPtr space_info) : num_of_states_(num_of_states)
+            BaseStates(int num_of_states, SpaceInfoPtr space_info) : num_of_states_(num_of_states), is_valid_(true)
             {
                 this->space_info = space_info;
 
                 // Allocate memory for the costs
-                cudaMalloc(&d_costs, num_of_states_ * space_info->num_of_constraints * sizeof(float));
-                cudaMalloc(&d_total_costs, num_of_states_ * sizeof(float));
+                size_t d_costs_bytes = (size_t)num_of_states_ * space_info->num_of_constraints * sizeof(float);
+                size_t d_total_costs_bytes = (size_t)num_of_states_ * sizeof(float);
+                auto allocate_result = cudaMalloc(&d_costs, d_costs_bytes);
+                if (allocate_result != cudaSuccess) {
+                    cudaGetLastError();
+                    std::cerr << "Error allocating memory for d_costs: " << cudaGetErrorString(allocate_result) << std::endl;
+                    setValid(false);
+                    return;
+                }
+                allocate_result = cudaMalloc(&d_total_costs, d_total_costs_bytes);
+                if (allocate_result != cudaSuccess) {
+                    cudaGetLastError();
+                    std::cerr << "Error allocating memory for d_total_costs: " << cudaGetErrorString(allocate_result) << std::endl;
+                    setValid(false);
+                    return;
+                }
             }
 
             virtual ~BaseStates() {
-                // Free the memory
-                cudaFree(d_costs);
-                cudaFree(d_total_costs);
+                if (num_of_states_ > 0)
+                {
+                    // Free the memory
+                    cudaFree(d_costs);
+                    cudaFree(d_total_costs);
+                    // set the pointer to nullptr for safety
+                    d_costs = nullptr;
+                    d_total_costs = nullptr;
+                }
             }
+
+            void setValid(bool is_valid) { is_valid_ = is_valid; }
+            bool isValid() const { return is_valid_; }
 
             virtual void filterStates(const std::vector<bool> & filter_map){
 
@@ -55,14 +78,21 @@ namespace CUDAMPLib
                     // if there is no feasible states, clear the memory
                     cudaFree(d_costs);
                     cudaFree(d_total_costs);
+
+                    // set the pointer to nullptr for safety
+                    d_costs = nullptr;
+                    d_total_costs = nullptr;
                 }
                 else{
                     // allocate memory for the feasible states
                     float * d_costs_new;
                     float * d_total_costs_new;
 
-                    cudaMalloc(&d_costs_new, num_left_states * space_info->num_of_constraints * sizeof(float));
-                    cudaMalloc(&d_total_costs_new, num_left_states * sizeof(float));
+                    size_t d_costs_new_bytes = (size_t)num_left_states * space_info->num_of_constraints * sizeof(float);
+                    size_t d_total_costs_new_bytes = (size_t)num_left_states * sizeof(float);
+
+                    cudaMalloc(&d_costs_new, d_costs_new_bytes);
+                    cudaMalloc(&d_total_costs_new, d_total_costs_new_bytes);
 
                     // copy the feasible states to the new memory
                     int j = 0;
@@ -155,6 +185,7 @@ namespace CUDAMPLib
             int num_of_states_;
             float * d_costs; // cost of each state and different constraints. The format should be [state1_constraint1, state2_constraint1, ..., state1_constraint2, state2_constraint2, ...]
             float * d_total_costs; // total cost of each state
+            bool is_valid_;
             SpaceInfoPtr space_info;
     };
     typedef std::shared_ptr<BaseStates> BaseStatesPtr;

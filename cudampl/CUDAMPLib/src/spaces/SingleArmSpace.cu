@@ -176,11 +176,33 @@ namespace CUDAMPLib {
 
     BaseStatesPtr SingleArmSpace::sample(int num_of_config)
     {
+        // first try to allocate d_random_state
+        curandState * d_random_state;
+        size_t d_random_state_bytes = num_of_config * num_of_joints * sizeof(curandState);
+        auto allocate_result = cudaMalloc(&d_random_state, d_random_state_bytes);
+        if (allocate_result != cudaSuccess)
+        {
+            // print in red
+            std::cerr << "\033[31m" << "Failed to allocate device memory for random state. Perhaps, the num_of_config is too large." << "\033[0m" << std::endl;
+            // fail to allocate memory
+            return nullptr;
+        }
+
+        // get space info
         SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
         getSpaceInfo(space_info);
 
         // Create a state
         SingleArmStatesPtr sampled_states = std::make_shared<SingleArmStates>(num_of_config, space_info);
+        if(! sampled_states->isValid())
+        {
+            // free device memory
+            cudaFree(d_random_state);
+
+            sampled_states.reset();
+            // fail to allocate memory
+            return nullptr;
+        }
 
         // get device memory with size of num_of_config * num_of_joints * sizeof(float)
         float * d_sampled_states = sampled_states->getJointStatesCuda();
@@ -194,8 +216,6 @@ namespace CUDAMPLib {
         // std::uniform_int_distribution<unsigned long> dist(0, ULONG_MAX);
 
         unsigned long seed = dist(gen);
-        curandState * d_random_state;
-        cudaMalloc(&d_random_state, num_of_config * num_of_joints * sizeof(curandState));
         initCurand<<<blocksPerGrid, threadsPerBlock>>>(d_random_state, seed, num_of_config * num_of_joints);
 
         // call kernel
@@ -216,12 +236,14 @@ namespace CUDAMPLib {
         // free device memory
         cudaFree(d_random_state);
 
+        CUDA_CHECK(cudaGetLastError());
+
         return sampled_states;
     }
 
     BaseStatesPtr SingleArmSpace::createStatesFromVectorFull(const std::vector<std::vector<float>>& joint_values)
     {
-        int num_of_config = joint_values.size();
+        size_t num_of_config = joint_values.size();
 
         if (num_of_config == 0)
         {
@@ -234,6 +256,12 @@ namespace CUDAMPLib {
 
         // Create a state
         SingleArmStatesPtr generated_states = std::make_shared<SingleArmStates>(num_of_config, space_info);
+        if(! generated_states->isValid())
+        {
+            generated_states.reset();
+            // fail to allocate memory
+            return nullptr;
+        }
 
         // get device memory with size of num_of_config * num_of_joints * sizeof(float)
         float * d_generated_states = generated_states->getJointStatesCuda();
@@ -291,6 +319,12 @@ namespace CUDAMPLib {
 
         // Create a state
         SingleArmStatesPtr generated_states = std::make_shared<SingleArmStates>(num_of_config, space_info);
+        if(! generated_states->isValid())
+        {
+            generated_states.reset();
+            // fail to allocate memory
+            return nullptr;
+        }
 
         // get device memory with size of num_of_config * num_of_joints * sizeof(float)
         float * d_generated_states = generated_states->getJointStatesCuda();
@@ -327,7 +361,7 @@ namespace CUDAMPLib {
         return joint_states_filtered;
     }
 
-    void SingleArmSpace::checkMotions(
+    bool SingleArmSpace::checkMotions(
         const BaseStatesPtr & states1, 
         const BaseStatesPtr & states2, 
         std::vector<bool> & motion_feasibility,
@@ -387,6 +421,19 @@ namespace CUDAMPLib {
 
         // create states from the all_motions
         auto interpolated_states = createStatesFromVectorFull(all_motions);
+        if (interpolated_states == nullptr)
+        {
+            // print in red
+            std::cerr << "\033[31m" << "Failed to allocate memory for interpolated states. " << "\033[0m" << std::endl;
+
+            // set motion_feasibility to false
+            motion_feasibility.assign(num_of_states1, false);
+            // set motion_costs to 0
+            motion_costs.assign(num_of_states1, 0.0f);
+
+            return false;
+        }
+
         interpolated_states->update();
         std::vector<bool> motion_state_feasibility;
         // check the interpolated_states
@@ -409,6 +456,8 @@ namespace CUDAMPLib {
 
         // deallocate interpolated_states
         interpolated_states.reset();
+
+        return true;
     }
 
     void SingleArmSpace::interpolate(
@@ -474,6 +523,14 @@ namespace CUDAMPLib {
 
         // create states from the all_motions
         auto path_in_cuda = createStatesFromVectorFull(path_in_host);
+        if( path_in_cuda == nullptr)
+        {
+            // print in red
+            std::cerr << "\033[31m" << "Failed to allocate memory for path in cuda. " << "\033[0m" << std::endl;
+
+            // return empty pointer
+            return nullptr;
+        }
 
         return path_in_cuda;
     }
@@ -533,11 +590,11 @@ namespace CUDAMPLib {
         // based on all the constraints, check if the states are feasible
         for (size_t i = 0; i < constraints_.size(); i++)
         {
-            auto start_time = std::chrono::high_resolution_clock::now();
+            // auto start_time = std::chrono::high_resolution_clock::now();
             constraints_[i]->computeCost(states);
-            auto end_time = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> elapsed_seconds = end_time - start_time;
-            std::cout << "Constraint " << constraints_[i]->getName() << " took: " << elapsed_seconds.count() << "s" << std::endl;
+            // auto end_time = std::chrono::high_resolution_clock::now();
+            // std::chrono::duration<double> elapsed_seconds = end_time - start_time;
+            // std::cout << "Constraint " << constraints_[i]->getName() << " took: " << elapsed_seconds.count() << "s" << std::endl;
         }
 
         // get the total cost
