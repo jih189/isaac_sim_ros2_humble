@@ -259,7 +259,7 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     CUDAMPLib::SingleArmStatesPtr single_arm_states_3 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
 
     // dumpy update
-    single_arm_states_1->update();
+    single_arm_states_1->oldUpdate();
 
     auto start_time_update = std::chrono::high_resolution_clock::now();
     single_arm_states_2->update();
@@ -276,7 +276,7 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     printf("\033[1;32m" "Time taken by old update: %f seconds" "\033[0m \n", elapsed_time_old_update.count());
 
     // check states
-    single_arm_space->checkStates(single_arm_states_1); // dummy check
+    single_arm_space->oldCheckStates(single_arm_states_1); // dummy check
 
     auto start_time_check_states = std::chrono::high_resolution_clock::now();
     single_arm_space->checkStates(single_arm_states_2);
