@@ -441,6 +441,31 @@ namespace CUDAMPLib {
         }
     }
     
+    __global__ void getFeasibilityByTotalCostKernel(
+        float * d_total_costs,
+        int * d_feasibility,
+        int num_of_motions,
+        int * num_of_steps,
+        int * motion_start_index
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_motions) return;
+
+        // get the number of steps
+        int num_steps = num_of_steps[idx];
+        // get the start index
+        int start_index = motion_start_index[idx];
+
+        float total_cost = 0.0f;
+        for (size_t i = 0; i < num_steps; i++)
+        {
+            total_cost += d_total_costs[start_index + i];
+        }
+
+        d_feasibility[idx] = (total_cost == 0.0f);
+    }
+
     bool SingleArmSpace::checkMotions(
         const BaseStatesPtr & states1, 
         const BaseStatesPtr & states2, 
@@ -562,31 +587,36 @@ namespace CUDAMPLib {
 
         // check the interpolated_states
         interpolated_states->update();
+        checkStates(interpolated_states);
 
-        std::vector<bool> motion_state_feasibility;
-        checkStates(interpolated_states, motion_state_feasibility);
+        // get the total costs from the interpolated states
+        float * d_total_costs = interpolated_states->getTotalCostsCuda();
+        int * d_motion_feasibility;
+        cudaMalloc(&d_motion_feasibility, num_of_states1 * sizeof(int));
 
-        // check the motion feasibility. TODO: This can be done in parallel
-        for (size_t i = 0; i < num_of_states1; i++)
-        {
-            bool feasible = true;
-            for (int j = h_motion_start_index[i]; j < h_motion_start_index[i] + h_num_steps[i]; j++)
-            {
-                if (!motion_state_feasibility[j])
-                {
-                    feasible = false;
-                    break;
-                }
-            }
-            motion_feasibility[i] = feasible;
-        }
+        // call kernel
+        getFeasibilityByTotalCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
+            d_total_costs, 
+            d_motion_feasibility, 
+            num_of_states1,
+            d_num_steps,
+            d_motion_start_index
+        );
 
+        // wait for the kernel to finish with cuda check
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // copy data to host memory
+        std::vector<int> h_motion_feasibility(num_of_states1);
+        cudaMemcpy(h_motion_feasibility.data(), d_motion_feasibility, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
         std::vector<float> h_distance_between_states(num_of_states1);
         cudaMemcpy(h_distance_between_states.data(), d_distance_between_states, num_of_states1 * sizeof(float), cudaMemcpyDeviceToHost);
 
         // calculate the sqrt difference between the two states
         for (size_t i = 0; i < num_of_states1; i++)
         {
+            motion_feasibility[i] = h_motion_feasibility[i] == 0 ? false : true;
             motion_costs[i] = h_distance_between_states[i];
         }
 
@@ -595,6 +625,7 @@ namespace CUDAMPLib {
         cudaFree(d_motion_start_index);
         cudaFree(d_move_direction);
         cudaFree(d_distance_between_states);
+        cudaFree(d_motion_feasibility);
 
         // deallocate interpolated_states
         interpolated_states.reset();

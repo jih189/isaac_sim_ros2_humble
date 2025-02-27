@@ -252,7 +252,7 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
         0.02f
     );
 
-    int num_of_test_states = 100;
+    int num_of_test_states = 1000;
 
     // sample a set of states
     CUDAMPLib::SingleArmStatesPtr single_arm_states_1 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
@@ -1163,11 +1163,11 @@ int main(int argc, char** argv)
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
