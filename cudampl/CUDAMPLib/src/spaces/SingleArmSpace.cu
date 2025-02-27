@@ -361,7 +361,248 @@ namespace CUDAMPLib {
         return joint_states_filtered;
     }
 
+    __global__ void getStepKernel(
+        float * d_from_states,
+        float * d_to_states,
+        int num_of_config,
+        int num_of_joints,
+        float d_step_size,
+        int * d_num_steps,
+        float * move_direction,
+        float * ditance_between_states
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_config) return;
+
+        float * from_state = &d_from_states[idx * num_of_joints];
+        float * to_state = &d_to_states[idx * num_of_joints];
+
+        // calculate the distance between the two states
+        float distance = 0.0f;
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            distance += (from_state[i] - to_state[i]) * (from_state[i] - to_state[i]);
+        }
+        distance = sqrt(distance);
+
+        // set the distance between states
+        ditance_between_states[idx] = distance;
+
+        // calculate the number of steps
+        int num_steps = (int)(distance / d_step_size) + 1;
+
+        d_num_steps[idx] = num_steps;
+
+        // calculate the move direction
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            move_direction[idx * num_of_joints + i] = (to_state[i] - from_state[i]) / num_steps;
+        }
+    }
+
+    __global__ void calculateInterpolatedState(
+        float * d_from_states,
+        float * d_to_states,
+        int num_of_config,
+        int num_of_joints,
+        int * d_motion_start_index,
+        int * d_num_steps,
+        float * d_move_direction,
+        float * d_interpolated_states
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_config) return;
+
+        // get the number of steps
+        int num_steps = d_num_steps[idx];
+
+        // get the start index
+        int start_index = d_motion_start_index[idx];
+
+        // get the from state
+        float * from_state = &d_from_states[idx * num_of_joints];
+        float * to_state = &d_to_states[idx * num_of_joints];
+
+        // calculate the interpolated states
+        for (size_t i = 0; i < num_steps; i++)
+        {
+            for (size_t j = 0; j < num_of_joints; j++)
+            {
+                d_interpolated_states[(start_index + i) * num_of_joints + j] = from_state[j] + d_move_direction[idx * num_of_joints + j] * i;
+            }
+        }
+
+        // set the last state to the to state
+        for (size_t j = 0; j < num_of_joints; j++)
+        {
+            d_interpolated_states[(start_index + num_steps - 1) * num_of_joints + j] = to_state[j];
+        }
+    }
+    
     bool SingleArmSpace::checkMotions(
+        const BaseStatesPtr & states1, 
+        const BaseStatesPtr & states2, 
+        std::vector<bool> & motion_feasibility,
+        std::vector<float> & motion_costs
+    )
+    {
+        size_t num_of_states1 = states1->getNumOfStates();
+        size_t num_of_states2 = states2->getNumOfStates();
+        if (num_of_states1 != num_of_states2)
+        {
+            // throw an exception
+            throw std::runtime_error("Number of states in states1 and states2 are not equal");
+        }
+        if (num_of_states1 == 0)
+        {
+            // throw an exception
+            throw std::runtime_error("No states to check");
+        }
+
+        motion_feasibility.resize(num_of_states1);
+        motion_costs.resize(num_of_states1);
+
+        // get space info
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        getSpaceInfo(space_info);
+
+        // cast to SingleArmStatesPtr
+        SingleArmStatesPtr single_arm_states1 = std::dynamic_pointer_cast<SingleArmStates>(states1);
+        SingleArmStatesPtr single_arm_states2 = std::dynamic_pointer_cast<SingleArmStates>(states2);
+
+        // get the joint states from the states
+        float * d_joint_states1 = single_arm_states1->getJointStatesCuda();
+        float * d_joint_states2 = single_arm_states2->getJointStatesCuda();
+        int num_of_joints = space_info->num_of_joints;
+        int * d_num_steps;
+        int * d_motion_start_index;
+        float * d_move_direction;
+        float * d_distance_between_states;
+        cudaMalloc(&d_num_steps, num_of_states1 * sizeof(int));
+        cudaMalloc(&d_motion_start_index, num_of_states1 * sizeof(int));
+        cudaMalloc(&d_move_direction, num_of_states1 * num_of_joints * sizeof(float));
+        cudaMalloc(&d_distance_between_states, num_of_states1 * sizeof(float));
+
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_states1 + threadsPerBlock - 1) / threadsPerBlock;
+
+        // call kernel
+        getStepKernel<<<blocksPerGrid, threadsPerBlock>>>(
+            d_joint_states1, 
+            d_joint_states2, 
+            num_of_states1, 
+            num_of_joints,
+            resolution_,
+            d_num_steps,
+            d_move_direction,
+            d_distance_between_states
+        );
+
+        // wait for the kernel to finish with cuda check
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // print d_num_steps
+        std::vector<int> h_num_steps(num_of_states1);
+        cudaMemcpy(h_num_steps.data(), d_num_steps, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
+        std::vector<int> h_motion_start_index(num_of_states1);
+        int total_num_steps = 0;
+        for (size_t i = 0; i < h_num_steps.size(); i++)
+        {
+            h_motion_start_index[i] = total_num_steps;
+            total_num_steps += h_num_steps[i];
+        }
+
+        // copy data to device memory
+        cudaMemcpy(d_motion_start_index, h_motion_start_index.data(), num_of_states1 * sizeof(int), cudaMemcpyHostToDevice);
+
+        // create interpolated states
+        SingleArmStatesPtr interpolated_states = std::make_shared<SingleArmStates>(total_num_steps, space_info);
+
+        if(! interpolated_states->isValid())
+        {
+            // print in red
+            std::cerr << "\033[31m" << "Failed to allocate memory for interpolated states. " << "\033[0m" << std::endl;
+
+            // set motion_feasibility to false
+            motion_feasibility.assign(num_of_states1, false);
+            // set motion_costs to 0
+            motion_costs.assign(num_of_states1, 0.0f);
+
+            // deallocate
+            cudaFree(d_num_steps);
+            cudaFree(d_motion_start_index);
+            cudaFree(d_move_direction);
+            cudaFree(d_distance_between_states);
+            // deallocate interpolated_states
+            interpolated_states.reset();
+
+            return false;
+        }
+
+        float * d_interpolated_states = interpolated_states->getJointStatesCuda();
+
+        // call kernel
+        calculateInterpolatedState<<<blocksPerGrid, threadsPerBlock>>>(
+            d_joint_states1, 
+            d_joint_states2, 
+            num_of_states1, 
+            num_of_joints,
+            d_motion_start_index,
+            d_num_steps,
+            d_move_direction,
+            d_interpolated_states
+        );
+
+        // wait for the kernel to finish with cuda check
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // check the interpolated_states
+        interpolated_states->update();
+
+        std::vector<bool> motion_state_feasibility;
+        checkStates(interpolated_states, motion_state_feasibility);
+
+        // check the motion feasibility. TODO: This can be done in parallel
+        for (size_t i = 0; i < num_of_states1; i++)
+        {
+            bool feasible = true;
+            for (int j = h_motion_start_index[i]; j < h_motion_start_index[i] + h_num_steps[i]; j++)
+            {
+                if (!motion_state_feasibility[j])
+                {
+                    feasible = false;
+                    break;
+                }
+            }
+            motion_feasibility[i] = feasible;
+        }
+
+        std::vector<float> h_distance_between_states(num_of_states1);
+        cudaMemcpy(h_distance_between_states.data(), d_distance_between_states, num_of_states1 * sizeof(float), cudaMemcpyDeviceToHost);
+
+        // calculate the sqrt difference between the two states
+        for (size_t i = 0; i < num_of_states1; i++)
+        {
+            motion_costs[i] = h_distance_between_states[i];
+        }
+
+        // deallocate
+        cudaFree(d_num_steps);
+        cudaFree(d_motion_start_index);
+        cudaFree(d_move_direction);
+        cudaFree(d_distance_between_states);
+
+        // deallocate interpolated_states
+        interpolated_states.reset();
+
+        return true;
+    }
+
+    bool SingleArmSpace::oldCheckMotions(
         const BaseStatesPtr & states1, 
         const BaseStatesPtr & states2, 
         std::vector<bool> & motion_feasibility,

@@ -44,6 +44,13 @@ namespace CUDAMPLib
 
             BaseStatesPtr sample(int num_of_config) override;
 
+            bool oldCheckMotions(
+                const BaseStatesPtr & states1, 
+                const BaseStatesPtr & states2, 
+                std::vector<bool>& motion_feasibility,
+                std::vector<float>& motion_costs
+            );
+
             bool checkMotions(
                 const BaseStatesPtr & states1, 
                 const BaseStatesPtr & states2, 
