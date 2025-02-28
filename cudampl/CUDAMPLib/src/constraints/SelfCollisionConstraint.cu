@@ -204,7 +204,7 @@ namespace CUDAMPLib{
     )
     {
         int idx = threadIdx.x + blockIdx.x * blockDim.x;
-        if (idx < num_of_configurations * num_of_self_collision_spheres)
+        if (idx < num_of_configurations * num_of_self_collision_spheres * num_of_self_collision_spheres)
         {
             int config_idx = idx / ( num_of_self_collision_spheres * num_of_self_collision_spheres);
             int sphere_idx = (idx / num_of_self_collision_spheres) % num_of_self_collision_spheres;
@@ -277,25 +277,6 @@ namespace CUDAMPLib{
             d_sum_cost[configIdx] = sdata[0];
         }
     }
-
-    // __global__ void sumSelfCollisionCostFastKernel(
-    //     float* d_cost, // num_of_configurations x num_of_self_collision_spheres x num_of_self_collision_spheres
-    //     int num_of_self_collision_spheres,
-    //     int num_of_configurations,
-    //     float* d_sum_cost // num_of_configurations
-    // )
-    // {
-    //     int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    //     if (idx < num_of_configurations){
-    //         float sum_cost = 0.0f;
-    //         for (int i = 0; i < num_of_self_collision_spheres; i++){
-    //             for (int j = 0; j < num_of_self_collision_spheres; j++){
-    //                 sum_cost += d_cost[idx * num_of_self_collision_spheres * num_of_self_collision_spheres + i * num_of_self_collision_spheres + j];
-    //             }
-    //         }
-    //         d_sum_cost[idx] = sum_cost;
-    //     }
-    // }
 
     __global__ void sumSelfCollisionCostKernel(
         float* d_cost, // num_of_configurations x num_of_self_collision_spheres
@@ -416,6 +397,8 @@ namespace CUDAMPLib{
 
     void SelfCollisionConstraint::computeCostFast(BaseStatesPtr states)
     {
+        // computeCost(states);
+
         // Cast the states and space information for SingleArmSpace
         SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
         SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
@@ -428,22 +411,29 @@ namespace CUDAMPLib{
             return;
         }
 
-        float * d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
-
-        float * d_collision_cost;
         size_t num_of_collision_pairs = (size_t)(single_arm_states->getNumOfStates()) * space_info->num_of_self_collision_spheres * space_info->num_of_self_collision_spheres;
         size_t d_collision_cost_bytes = num_of_collision_pairs * sizeof(float);
-        auto allocate_result = cudaMalloc(&d_collision_cost, d_collision_cost_bytes);
-        if (allocate_result != cudaSuccess){
-            // print in red color
-            printf("\033[1;31m");
-            printf("Failed to allocate memory for collision cost in SelfCollisionConstraint\n");
-            printf("\033[0m");
-            CUDA_CHECK(cudaDeviceSynchronize());
+
+        size_t free_byte, total_byte;
+        cudaMemGetInfo(&free_byte, &total_byte);
+
+        // if memory is not enough, use the original method
+        if (d_collision_cost_bytes > 0.1 * free_byte){
+            // printf("Not enough memory, use the original method\n");
+            computeCost(states);
+            return;
         }
+
+        float * d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
+        float * d_collision_cost;
+        cudaMalloc(&d_collision_cost, d_collision_cost_bytes);
         
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_collision_pairs + threadsPerBlock - 1) / threadsPerBlock;
+
+        // printf("d_collision_cost_bytes: %zu, free_byte: %zu, total_byte: %zu\n", d_collision_cost_bytes, free_byte, total_byte);
+
+        // auto start_first_kernel = std::chrono::high_resolution_clock::now();
 
         computeSelfCollisionCostFastKernel<<<blocksPerGrid, threadsPerBlock>>>(
             single_arm_states->getSelfCollisionSpheresPosInBaseLinkCuda(), 
@@ -458,8 +448,14 @@ namespace CUDAMPLib{
 
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        blocksPerGrid = (single_arm_states->getNumOfStates() + threadsPerBlock - 1) / threadsPerBlock;
+        // auto end_first_kernel = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed_seconds = end_first_kernel - start_first_kernel;
+        // std::cout << "Self constraint Elapsed time for the first kernel: " << elapsed_seconds.count() << "s\n";
+
+        blocksPerGrid = single_arm_states->getNumOfStates();
         size_t sharedMemSize = threadsPerBlock * sizeof(float);
+
+        // auto start_second_kernel = std::chrono::high_resolution_clock::now();
 
         sumSelfCollisionCostFastKernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(
             d_collision_cost, 
@@ -470,6 +466,10 @@ namespace CUDAMPLib{
 
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
+
+        // auto end_second_kernel = std::chrono::high_resolution_clock::now();
+        // elapsed_seconds = end_second_kernel - start_second_kernel;
+        // std::cout << "Self constraint Elapsed time for the second kernel: " << elapsed_seconds.count() << "s\n";
 
         cudaFree(d_collision_cost);
     }

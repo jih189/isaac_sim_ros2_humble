@@ -220,12 +220,12 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
-    // CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
-    //     "obstacle_constraint",
-    //     balls_pos,
-    //     ball_radius
-    // );
-    // constraints.push_back(env_constraint);
+    CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+        "obstacle_constraint",
+        balls_pos,
+        ball_radius
+    );
+    constraints.push_back(env_constraint);
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
@@ -733,6 +733,13 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // create the planner
     CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
 
+    // set parameters
+    planner->setK(1);
+
+    planner->setMaxTravelDistance(5.0);
+
+    planner->setSampleAttemptsInEachIteration(100);
+    
     // set the task
     planner->setMotionTask(task);
 
@@ -1163,11 +1170,11 @@ int main(int argc, char** argv)
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
