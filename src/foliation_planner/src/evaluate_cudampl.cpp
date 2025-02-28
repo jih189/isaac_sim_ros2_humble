@@ -236,7 +236,7 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
         planner->setMaxTravelDistance(5.0);
 
-        planner->setSampleAttemptsInEachIteration(100);
+        planner->setSampleAttemptsInEachIteration(50);
 
         // set the task
         planner->setMotionTask(problem_task, false);
