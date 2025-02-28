@@ -19,6 +19,12 @@ namespace CUDAMPLib
             */
             virtual void computeCostLarge(BaseStatesPtr states) = 0;
 
+            /**
+                @brief This function is fast but it can only handle small number of states. This is optional.
+                       If the number of states is small, then we can use this function to compute the cost.
+             */
+            virtual void computeCostFast(BaseStatesPtr states) = 0;
+
             std::string getName() const { return constraint_name; }
 
             int getConstraintIndex(const SpaceInfoPtr space_info) {

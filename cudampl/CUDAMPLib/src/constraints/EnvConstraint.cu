@@ -269,4 +269,9 @@ namespace CUDAMPLib{
 
         cudaFree(d_collision_cost);
     }
+
+    void EnvConstraint::computeCostFast(BaseStatesPtr state)
+    {
+        computeCost(state); // to do: implement the fast version
+    }
 } // namespace CUDAMPLib

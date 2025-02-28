@@ -862,11 +862,8 @@ namespace CUDAMPLib {
         // based on all the constraints, check if the states are feasible
         for (size_t i = 0; i < constraints_.size(); i++)
         {
-            // auto start_time = std::chrono::high_resolution_clock::now();
-            constraints_[i]->computeCost(states);
-            // auto end_time = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_seconds = end_time - start_time;
-            // std::cout << "Constraint " << constraints_[i]->getName() << " took: " << elapsed_seconds.count() << "s" << std::endl;
+            // constraints_[i]->computeCost(states);
+            constraints_[i]->computeCostFast(states);
         }
 
         // get the total cost

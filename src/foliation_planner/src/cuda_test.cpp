@@ -220,12 +220,12 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
-    CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
-        "obstacle_constraint",
-        balls_pos,
-        ball_radius
-    );
-    constraints.push_back(env_constraint);
+    // CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+    //     "obstacle_constraint",
+    //     balls_pos,
+    //     ball_radius
+    // );
+    // constraints.push_back(env_constraint);
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
@@ -308,26 +308,26 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // print in green color
     printf("\033[1;32m" "Time taken by oldCheckStates: %f seconds" "\033[0m \n", elapsed_time_old_check_states.count());
 
-    // check motions
-    std::vector<bool> motion_feasibility;
-    std::vector<float> motion_costs;
+    // // check motions
+    // std::vector<bool> motion_feasibility;
+    // std::vector<float> motion_costs;
 
-    auto start_time_check_motions = std::chrono::high_resolution_clock::now();
-    single_arm_space->checkMotions(single_arm_states_1, single_arm_states_2, motion_feasibility, motion_costs);
-    auto end_time_check_motions = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
-    // print in green color
-    printf("\033[1;32m" "Time taken by checkMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
+    // auto start_time_check_motions = std::chrono::high_resolution_clock::now();
+    // single_arm_space->checkMotions(single_arm_states_1, single_arm_states_2, motion_feasibility, motion_costs);
+    // auto end_time_check_motions = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double> elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
+    // // print in green color
+    // printf("\033[1;32m" "Time taken by checkMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
 
-    std::vector<bool> motion_feasibility_1;
-    std::vector<float> motion_costs_1;
+    // std::vector<bool> motion_feasibility_1;
+    // std::vector<float> motion_costs_1;
 
-    start_time_check_motions = std::chrono::high_resolution_clock::now();
-    single_arm_space->oldCheckMotions(single_arm_states_1, single_arm_states_2, motion_feasibility_1, motion_costs_1);
-    end_time_check_motions = std::chrono::high_resolution_clock::now();
-    elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
-    // print in green color
-    printf("\033[1;32m" "Time taken by oldCheckMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
+    // start_time_check_motions = std::chrono::high_resolution_clock::now();
+    // single_arm_space->oldCheckMotions(single_arm_states_1, single_arm_states_2, motion_feasibility_1, motion_costs_1);
+    // end_time_check_motions = std::chrono::high_resolution_clock::now();
+    // elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
+    // // print in green color
+    // printf("\033[1;32m" "Time taken by oldCheckMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
 
     // start_time_check_motions = std::chrono::high_resolution_clock::now();
     // single_arm_space->checkMotions(single_arm_states_2, single_arm_states_3, motion_feasibility, motion_costs);
@@ -1163,11 +1163,11 @@ int main(int argc, char** argv)
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

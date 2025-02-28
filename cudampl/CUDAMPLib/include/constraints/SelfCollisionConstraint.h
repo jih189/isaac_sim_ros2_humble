@@ -26,6 +26,8 @@ namespace CUDAMPLib
             void computeCost(BaseStatesPtr states) override;
 
             void computeCostLarge(BaseStatesPtr states) override;
+
+            void computeCostFast(BaseStatesPtr states) override;
         
         private:
             int *d_self_collision_enables_map;
