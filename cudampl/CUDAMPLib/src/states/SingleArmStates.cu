@@ -258,6 +258,124 @@ namespace CUDAMPLib
         }
     }
 
+    __global__ void kin_space_jacobian_per_link_kernel(
+        const int configuration_size,
+        const int num_of_joint,
+        const int num_of_links,
+        const int* __restrict__ joint_types,
+        const float* __restrict__ joint_axes,
+        const float* __restrict__ link_poses_set,
+        float* __restrict__ space_jacobians // [configuration][link][joint][6]
+    )
+    {
+        // Each thread processes one link of one configuration.
+        int global_idx = threadIdx.x + blockIdx.x * blockDim.x;
+        int total_links = configuration_size * num_of_links;
+        if (global_idx >= total_links) {
+            return;
+        }
+        
+        // Determine which configuration and which link.
+        int config = global_idx / num_of_links;
+        int i = global_idx % num_of_links;
+        
+        // Offsets for the configuration data.
+        int config_offset = config * num_of_links * 16;         // 16 floats per link pose.
+        int jac_config_offset = config * num_of_links * 6 * num_of_joint; // 6 floats per joint per link.
+        
+        // For the base link (index 0), the Jacobian is zero.
+        if (i == 0) {
+            for (int j = 0; j < num_of_joint; j++) {
+                int base_jac_offset = jac_config_offset + (i * 6 * num_of_joint) + (j * 6);
+                #pragma unroll
+                for (int r = 0; r < 6; r++) {
+                    space_jacobians[base_jac_offset + r] = 0.f;
+                }
+            }
+            return;
+        }
+        
+        // Get the current link pose and extract its position.
+        const float* current_link_pose = &link_poses_set[config_offset + i * 16];
+        float p_i[3] = { current_link_pose[3], current_link_pose[7], current_link_pose[11] };
+        
+        // Compute the Jacobian for link i for every joint j.
+        for (int j = 0; j < num_of_joint; j++) {
+            int jac_base_index = jac_config_offset + (i * 6 * num_of_joint) + (j * 6);
+            
+            // If the joint index is greater than the link index, it does not affect the link.
+            if (j > i) {
+                #pragma unroll
+                for (int r = 0; r < 6; r++) {
+                    space_jacobians[jac_base_index + r] = 0.f;
+                }
+                continue;
+            }
+            
+            // Joint 0 (assumed fixed base) contributes nothing.
+            if (j == 0) {
+                #pragma unroll
+                for (int r = 0; r < 6; r++) {
+                    space_jacobians[jac_base_index + r] = 0.f;
+                }
+                continue;
+            }
+            
+            // Retrieve the transformation for joint j.
+            const float* T_j = &link_poses_set[config_offset + j * 16];
+            
+            // Extract the 3x3 rotation matrix from T_j (row-major order).
+            float R_j[9];
+            R_j[0] = T_j[0];  R_j[1] = T_j[1];  R_j[2] = T_j[2];
+            R_j[3] = T_j[4];  R_j[4] = T_j[5];  R_j[5] = T_j[6];
+            R_j[6] = T_j[8];  R_j[7] = T_j[9];  R_j[8] = T_j[10];
+            
+            // Transform the joint axis into the space frame.
+            float axis[3] = { joint_axes[j * 3 + 0], joint_axes[j * 3 + 1], joint_axes[j * 3 + 2] };
+            float w[3];
+            w[0] = R_j[0] * axis[0] + R_j[1] * axis[1] + R_j[2] * axis[2];
+            w[1] = R_j[3] * axis[0] + R_j[4] * axis[1] + R_j[5] * axis[2];
+            w[2] = R_j[6] * axis[0] + R_j[7] * axis[1] + R_j[8] * axis[2];
+            
+            // Extract the position of joint j.
+            float p_j[3] = { T_j[3], T_j[7], T_j[11] };
+            
+            float J_col[6];
+            int jt = joint_types[j];
+            
+            if (jt == CUDAMPLib_REVOLUTE) {
+                // For revolute joints: angular part is w, linear part is w x (p_i - p_j).
+                J_col[0] = w[0];
+                J_col[1] = w[1];
+                J_col[2] = w[2];
+                float d[3] = { p_i[0] - p_j[0], p_i[1] - p_j[1], p_i[2] - p_j[2] };
+                J_col[3] = w[1] * d[2] - w[2] * d[1];
+                J_col[4] = w[2] * d[0] - w[0] * d[2];
+                J_col[5] = w[0] * d[1] - w[1] * d[0];
+            }
+            else if (jt == CUDAMPLib_PRISMATIC) {
+                // For prismatic joints: angular part is zero, linear part is the transformed axis.
+                J_col[0] = 0.f;
+                J_col[1] = 0.f;
+                J_col[2] = 0.f;
+                J_col[3] = w[0];
+                J_col[4] = w[1];
+                J_col[5] = w[2];
+            }
+            else {
+                // For fixed or unknown joint types, the column is zero.
+                J_col[0] = 0.f;  J_col[1] = 0.f;  J_col[2] = 0.f;
+                J_col[3] = 0.f;  J_col[4] = 0.f;  J_col[5] = 0.f;
+            }
+            
+            // Write the computed Jacobian column into the global array.
+            #pragma unroll
+            for (int r = 0; r < 6; r++) {
+                space_jacobians[jac_base_index + r] = J_col[r];
+            }
+        }
+    }
+
 
     __global__ void kin_forward_kernel_w_space_jacobian(
         const float* __restrict__ joint_values, 
@@ -406,6 +524,8 @@ namespace CUDAMPLib
             }
         }
     }
+
+
 
 
     // __global__ void update_collision_spheres_kernel(
@@ -892,21 +1012,8 @@ namespace CUDAMPLib
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
 
         
-        // // Update the states
-        // kin_forward_kernel<<<blocksPerGrid, threadsPerBlock>>>(
-        //     d_joint_states,
-        //     num_of_joints,
-        //     num_of_states_,
-        //     space_info_single_arm_space->d_joint_types,
-        //     space_info_single_arm_space->d_joint_poses,
-        //     space_info_single_arm_space->num_of_links,
-        //     space_info_single_arm_space->d_joint_axes,
-        //     space_info_single_arm_space->d_link_parent_link_maps,
-        //     d_link_poses_in_base_link
-        // );
-
         // Update the states
-        kin_forward_kernel_w_space_jacobian<<<blocksPerGrid, threadsPerBlock>>>(
+        kin_forward_kernel<<<blocksPerGrid, threadsPerBlock>>>(
             d_joint_states,
             num_of_joints,
             num_of_states_,
@@ -915,16 +1022,42 @@ namespace CUDAMPLib
             space_info_single_arm_space->num_of_links,
             space_info_single_arm_space->d_joint_axes,
             space_info_single_arm_space->d_link_parent_link_maps,
-            d_link_poses_in_base_link,
-            d_space_jacobian_in_base_link
+            d_link_poses_in_base_link
         );
 
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
 
+        // // Update the states
+        // kin_forward_kernel_w_space_jacobian<<<blocksPerGrid, threadsPerBlock>>>(
+        //     d_joint_states,
+        //     num_of_joints,
+        //     num_of_states_,
+        //     space_info_single_arm_space->d_joint_types,
+        //     space_info_single_arm_space->d_joint_poses,
+        //     space_info_single_arm_space->num_of_links,
+        //     space_info_single_arm_space->d_joint_axes,
+        //     space_info_single_arm_space->d_link_parent_link_maps,
+        //     d_link_poses_in_base_link,
+        //     d_space_jacobian_in_base_link
+        // );
+
+        // calculate space jacobian
+        int blocksPerGrid_1 = (num_of_states_ * space_info_single_arm_space->num_of_links + threadsPerBlock - 1) / threadsPerBlock;
+        int blocksPerGrid_2 = (num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres + threadsPerBlock - 1) / threadsPerBlock;
+
+        kin_space_jacobian_per_link_kernel<<<blocksPerGrid_1, threadsPerBlock>>>(
+            num_of_states_,
+            num_of_joints,
+            space_info_single_arm_space->num_of_links,
+            space_info_single_arm_space->d_joint_types,
+            space_info_single_arm_space->d_joint_axes,
+            d_link_poses_in_base_link,
+            d_space_jacobian_in_base_link
+        );
+
         // update the self collision spheres position in base link frame
-        blocksPerGrid = (num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres + threadsPerBlock - 1) / threadsPerBlock;
-        update_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+        update_collision_spheres_kernel<<<blocksPerGrid_2, threadsPerBlock>>>(
             num_of_states_,
             space_info_single_arm_space->num_of_links,
             space_info_single_arm_space->num_of_self_collision_spheres,
