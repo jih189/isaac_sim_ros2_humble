@@ -141,6 +141,12 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
+    // create moveit robot state
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
@@ -167,6 +173,8 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_info.getLinkNames()
     );
 
+    std::string check_link_name = "wrist_roll_link";
+
     // set a test joint values
     // std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     // std::vector<float> joint_values_2 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5};
@@ -183,7 +191,10 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     // statistic_cast_pointer_cast to SingleArmStates
     CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(states);
 
-    std::vector<Eigen::Isometry3d> end_effector_link_poses_in_base_link = single_arm_states->getLinkPoseInBaseLinkHost("wrist_roll_link");
+    std::vector<Eigen::Isometry3d> end_effector_link_poses_in_base_link = single_arm_states->getLinkPoseInBaseLinkHost(check_link_name);
+
+    // print space jacobian
+    std::vector<Eigen::MatrixXd> space_jacobian_in_base_link = single_arm_states->getSpaceJacobianInBaseLinkHost(check_link_name);
 
     for (size_t i = 0; i < end_effector_link_poses_in_base_link.size(); i++)
     {
@@ -200,6 +211,56 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         // print it as quaternion
         Eigen::Quaterniond q(end_effector_link_poses_in_base_link[i].rotation());
         std::cout << "quaternion: " << q.w() << " " << q.x() << " " << q.y() << " " << q.z() << std::endl;
+
+        // print active mask
+        std::cout << "Active mask: ";
+        for (size_t j = 0; j < robot_info.getActiveJointMap().size(); j++)
+        {
+            std::cout << robot_info.getActiveJointMap()[j] << " ";
+        }
+
+        std::cout << "Space Jacobian: " << std::endl;
+
+        Eigen::MatrixXd space_jacobian_of_check_link = space_jacobian_in_base_link[i].transpose();
+
+        // print space jacobian with only active joints
+        for (size_t j = 0; j < space_jacobian_of_check_link.rows(); j++)
+        {
+            for (size_t k = 0; k < space_jacobian_of_check_link.cols(); k++)
+            {
+                if (robot_info.getActiveJointMap()[k])
+                {
+                    std::cout << space_jacobian_of_check_link(j, k) << " ";
+                }
+            }
+            std::cout << std::endl;
+        }
+
+        std::cout << "===============================================" << std::endl;
+
+        // use moveit to compute the forward kinematics
+        std::vector<double> joint_values_double;
+        for (size_t j = 0; j < joint_values_set[i].size(); j++)
+        {
+            joint_values_double.push_back((double)joint_values_set[i][j]);
+        }
+        robot_state->setJointGroupPositions(joint_model_group, joint_values_double);
+        robot_state->update();
+        // Eigen::Isometry3d end_effector_link_pose = robot_state->getGlobalLinkTransform("wrist_roll_link");
+        Eigen::Isometry3d end_effector_link_pose = robot_state->getGlobalLinkTransform(check_link_name);
+        std::cout << "End effector pose " << i << " using moveit: " << std::endl;
+        std::cout << "position: " << end_effector_link_pose.translation().transpose() << std::endl;
+        // std::cout << end_effector_link_pose.rotation() << std::endl;
+        // print it as quaternion
+        Eigen::Quaterniond q_moveit(end_effector_link_pose.rotation());
+        std::cout << "quaternion: " << q_moveit.w() << " " << q_moveit.x() << " " << q_moveit.y() << " " << q_moveit.z() << std::endl;
+
+        // compute Jacobian
+        Eigen::MatrixXd jacobian;
+        // robot_state->getJacobian(joint_model_group, robot_state->getLinkModel("wrist_roll_link"), Eigen::Vector3d(0, 0, 0), jacobian);
+        robot_state->getJacobian(joint_model_group, robot_state->getLinkModel(check_link_name), Eigen::Vector3d(0, 0, 0), jacobian);
+        std::cout << "Jacobian: " << std::endl;
+        std::cout << jacobian << std::endl;
     }
 }
 void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
@@ -1168,13 +1229,13 @@ int main(int argc, char** argv)
     // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
-    // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

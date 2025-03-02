@@ -68,6 +68,13 @@ namespace CUDAMPLib
             }
 
             /**
+                @brief Get the space jacobian in base link in device memory.
+             */
+            float * getSpaceJacobianInBaseLinkCuda() {
+                return d_space_jacobian_in_base_link;
+            }
+
+            /**
                 @brief Get the self collision spheres in base link in device memory.
              */
             float * getSelfCollisionSpheresPosInBaseLinkCuda() {
@@ -100,6 +107,13 @@ namespace CUDAMPLib
             std::vector<Eigen::Isometry3d> getLinkPoseInBaseLinkHost(std::string link_name) const;
 
             /**
+                @brief Get the space jacobian in base link in host memory.
+                @param link_name The name of the link
+                @return The space jacobian in base link in host memory.
+             */
+            std::vector<Eigen::MatrixXd> getSpaceJacobianInBaseLinkHost(std::string link_name) const;
+
+            /**
                 * Based on the current states, update link poses, joint poses, and joint axes, collision spheres in base link, etc.
              */
             void update() override;
@@ -121,6 +135,7 @@ namespace CUDAMPLib
             int num_of_joints; // number of joints. This includes fixed joints.
             float * d_joint_states; // joint states of each state
             float * d_link_poses_in_base_link; // link poses in base link
+            float * d_space_jacobian_in_base_link; // jacobian in base link
             float * d_self_collision_spheres_pos_in_base_link; // collision spheres in base link
     };
     typedef std::shared_ptr<SingleArmStates> SingleArmStatesPtr;
