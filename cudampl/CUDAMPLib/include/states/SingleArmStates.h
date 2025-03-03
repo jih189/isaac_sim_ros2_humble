@@ -75,6 +75,13 @@ namespace CUDAMPLib
             }
 
             /**
+                @brief Get the gradient of the states in device memory.
+             */
+            float * getGradientCuda() {
+                return d_gradient;
+            }
+
+            /**
                 @brief Get the self collision spheres in base link in device memory.
              */
             float * getSelfCollisionSpheresPosInBaseLinkCuda() {

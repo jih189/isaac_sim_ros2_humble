@@ -213,13 +213,6 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         Eigen::Quaterniond q(end_effector_link_poses_in_base_link[i].rotation());
         std::cout << "quaternion: " << q.w() << " " << q.x() << " " << q.y() << " " << q.z() << std::endl;
 
-        // print active mask
-        std::cout << "Active mask: ";
-        for (size_t j = 0; j < robot_info.getActiveJointMap().size(); j++)
-        {
-            std::cout << robot_info.getActiveJointMap()[j] << " ";
-        }
-
         std::cout << "Space Jacobian: " << std::endl;
 
         Eigen::MatrixXd space_jacobian_of_check_link = space_jacobian_in_base_link[i].transpose();
@@ -495,15 +488,8 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     }
     single_arm_states->update();
 
-    // print the end effector pose
-    std::vector<Eigen::Isometry3d> end_effector_link_poses_in_base_link = single_arm_states->getLinkPoseInBaseLinkHost("wrist_roll_link");
-
-    for (size_t i = 0; i < end_effector_link_poses_in_base_link.size(); i++)
-    {
-        // print matrix
-        std::cout << "End effector pose " << i << ": " << std::endl;
-        std::cout << end_effector_link_poses_in_base_link[i].matrix() << std::endl;
-    }
+    // project the states
+    task_space_constraint->computeGradient(single_arm_states);
 
     // check states
     std::vector<bool> state_feasibility;
