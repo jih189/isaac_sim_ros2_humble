@@ -148,16 +148,22 @@ namespace CUDAMPLib{
         float tol_yaw   = d_tolerance[5];
 
         // --- Compute normalized differences ---
-        float diff_x     = (x - ref_x) / tol_x;
-        float diff_y     = (y - ref_y) / tol_y;
-        float diff_z     = (z - ref_z) / tol_z;
-        float diff_roll  = (roll - ref_roll) / tol_roll;
-        float diff_pitch = (pitch - ref_pitch) / tol_pitch;
-        float diff_yaw   = (yaw - ref_yaw) / tol_yaw;
+        float diff_x     = x - ref_x;
+        float diff_y     = y - ref_y;
+        float diff_z     = z - ref_z;
+        float diff_roll  = roll - ref_roll;
+        float diff_pitch = pitch - ref_pitch;
+        float diff_yaw   = yaw - ref_yaw;
+
+        float cost_x = max(diff_x * diff_x - tol_x * tol_x, 0.f);
+        float cost_y = max(diff_y * diff_y - tol_y * tol_y, 0.f);
+        float cost_z = max(diff_z * diff_z - tol_z * tol_z, 0.f);
+        float cost_roll = max(diff_roll * diff_roll - tol_roll * tol_roll, 0.f);
+        float cost_pitch = max(diff_pitch * diff_pitch - tol_pitch * tol_pitch, 0.f);
+        float cost_yaw = max(diff_yaw * diff_yaw - tol_yaw * tol_yaw, 0.f);
 
         // --- Compute Euclidean distance in 6D task space ---
-        float cost = sqrtf(diff_x * diff_x + diff_y * diff_y + diff_z * diff_z +
-                        diff_roll * diff_roll + diff_pitch * diff_pitch + diff_yaw * diff_yaw);
+        float cost = sqrtf(cost_x + cost_y + cost_z + cost_roll + cost_pitch + cost_yaw);
 
         // Store the computed cost in the output array.
         d_cost_of_current_constraint[idx] = cost;

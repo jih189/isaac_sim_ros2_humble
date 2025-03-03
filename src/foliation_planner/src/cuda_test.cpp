@@ -436,8 +436,8 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
         RCLCPP_ERROR(LOGGER, "Failed to find the task link index");
         return;
     }
-    std::vector<float> reference_frame = {0.6, 0.0, 1.4, 0.0, 0.0, 0.0};
-    std::vector<float> tolerance = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
+    std::vector<float> reference_frame = {0.9, 0.0, 0.786, 0.0, 0.0, 0.0};
+    std::vector<float> tolerance = {0.001, 0.001, 0.001, 0.01, 0.01, 0.01};
     CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
         "task_space_constraint",
         task_link_index,
@@ -475,13 +475,35 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     int num_of_test_states = 1;
 
     // sample a set of states
-    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    // CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+
+    // set a test joint values
+    std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<std::vector<float>> intput_joint_values_set;
+    intput_joint_values_set.push_back(joint_values_1);
+
+    // create states based on the joint values
+    auto states = single_arm_space->createStatesFromVector(intput_joint_values_set);
+
+    // cast to SingleArmStates
+    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(states);
+
     if (single_arm_states == nullptr)
     {
         RCLCPP_ERROR(LOGGER, "Failed to sample states for single arm space");
         return;
     }
     single_arm_states->update();
+
+    // print the end effector pose
+    std::vector<Eigen::Isometry3d> end_effector_link_poses_in_base_link = single_arm_states->getLinkPoseInBaseLinkHost("wrist_roll_link");
+
+    for (size_t i = 0; i < end_effector_link_poses_in_base_link.size(); i++)
+    {
+        // print matrix
+        std::cout << "End effector pose " << i << ": " << std::endl;
+        std::cout << end_effector_link_poses_in_base_link[i].matrix() << std::endl;
+    }
 
     // check states
     std::vector<bool> state_feasibility;
