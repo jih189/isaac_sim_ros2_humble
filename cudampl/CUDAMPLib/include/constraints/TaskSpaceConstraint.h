@@ -37,7 +37,7 @@ namespace CUDAMPLib
 
             void computeCostLarge(BaseStatesPtr states) override;
 
-            void computeGradient(BaseStatesPtr states) override;
+            void computeGradientAndError(BaseStatesPtr states) override;
             
         private:
             int task_link_index_;

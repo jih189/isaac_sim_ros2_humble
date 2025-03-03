@@ -27,14 +27,14 @@ namespace CUDAMPLib
 
             bool isProjectable() { return is_projectable_; }
 
-            virtual void computeGradient(BaseStatesPtr states) 
+            virtual void computeGradientAndError(BaseStatesPtr states) 
             {
                 if (!is_projectable_)
                 {
                     throw std::runtime_error("This constraint is not projectable.");
                 }
                 else{
-                    throw std::runtime_error("The function computeGradient is not implemented.");
+                    throw std::runtime_error("The function computeGradientAndError is not implemented.");
                 }
             }
 

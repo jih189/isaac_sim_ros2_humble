@@ -228,7 +228,8 @@ namespace CUDAMPLib{
         const float * d_offset_pose_in_task_link, // [16] as a 4x4 matrix
         const float * d_reference_frame, // [6] for x, y, z, roll, pitch, yaw
         const float * d_tolerance, // [6]
-        float * d_grad_of_current_constraint // output
+        float * d_grad_of_current_constraint, // gradient output
+        float * d_cost_of_current_constraint // cost output
     )
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -382,9 +383,18 @@ namespace CUDAMPLib{
             grad += J_col[5] * error_yaw;
             d_grad_of_current_constraint[idx * num_of_joint + j] = grad;
         }
+
+        float cost = 0.0f;
+        cost += error_x * error_x;
+        cost += error_y * error_y;
+        cost += error_z * error_z;
+        cost += error_roll * error_roll;
+        cost += error_pitch * error_pitch;
+        cost += error_yaw * error_yaw;
+        d_cost_of_current_constraint[idx] = sqrtf(cost);
     }
 
-    void TaskSpaceConstraint::computeGradient(BaseStatesPtr states)
+    void TaskSpaceConstraint::computeGradientAndError(BaseStatesPtr states)
     {
         // Cast the states and space information for SingleArmSpace
         SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
@@ -399,6 +409,7 @@ namespace CUDAMPLib{
         }
 
         float * d_grad_of_current_constraint = &(single_arm_states->getGradientCuda()[single_arm_states->getNumOfStates() * space_info->num_of_joints * constraint_index]);
+        float * d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
 
         // use kernel function to compute the gradient
         // each thread computes the gradient of a state
@@ -416,15 +427,16 @@ namespace CUDAMPLib{
             d_offset_pose_in_task_link_,
             d_reference_frame_,
             d_tolerance_,
-            d_grad_of_current_constraint
+            d_grad_of_current_constraint,
+            d_cost_of_current_constraint
         );
 
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        // // convert d_grad_of_current_constraint to host
-        // std::vector<float> grad_of_current_constraint(single_arm_states->getNumOfStates() * space_info->num_of_joints);
-        // cudaMemcpy(grad_of_current_constraint.data(), d_grad_of_current_constraint, single_arm_states->getNumOfStates() * space_info->num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
+        // convert d_grad_of_current_constraint to host
+        std::vector<float> grad_of_current_constraint(single_arm_states->getNumOfStates() * space_info->num_of_joints);
+        cudaMemcpy(grad_of_current_constraint.data(), d_grad_of_current_constraint, single_arm_states->getNumOfStates() * space_info->num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
 
         // // print grad_of_current_constraint
         // for (int i = 0; i < single_arm_states->getNumOfStates(); i++)
@@ -436,5 +448,16 @@ namespace CUDAMPLib{
         //     }
         //     printf("\n");
         // }
+
+        // // convert d_cost_of_current_constraint to host
+        // std::vector<float> cost_of_current_constraint(single_arm_states->getNumOfStates());
+        // cudaMemcpy(cost_of_current_constraint.data(), d_cost_of_current_constraint, single_arm_states->getNumOfStates() * sizeof(float), cudaMemcpyDeviceToHost);
+
+        // // print cost_of_current_constraint
+        // for (int i = 0; i < single_arm_states->getNumOfStates(); i++)
+        // {
+        //     printf("State %d: %f\n", i, cost_of_current_constraint[i]);
+        // }
+
     }
 } // namespace CUDAMPLib
