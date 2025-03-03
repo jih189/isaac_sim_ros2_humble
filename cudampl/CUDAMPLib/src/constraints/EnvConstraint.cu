@@ -9,7 +9,7 @@ namespace CUDAMPLib{
         const std::vector<std::vector<float>>& env_collision_spheres_pos,
         const std::vector<float>& env_collision_spheres_radius
     )
-    : BaseConstraint(constraint_name)
+    : BaseConstraint(constraint_name, false) // This constraint is not projectable.
     {
         // Prepare the cuda memory for the collision cost
         num_of_env_collision_spheres = env_collision_spheres_pos.size();

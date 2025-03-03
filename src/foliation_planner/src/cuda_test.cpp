@@ -14,6 +14,7 @@
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
 #include <CUDAMPLib/constraints/EnvConstraint.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
+#include <CUDAMPLib/constraints/TaskSpaceConstraint.h>
 #include <CUDAMPLib/tasks/SingleArmTask.h>
 #include <CUDAMPLib/planners/RRG.h>
 #include <CUDAMPLib/termination/StepTermination.h>
@@ -224,9 +225,9 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         Eigen::MatrixXd space_jacobian_of_check_link = space_jacobian_in_base_link[i].transpose();
 
         // print space jacobian with only active joints
-        for (size_t j = 0; j < space_jacobian_of_check_link.rows(); j++)
+        for (long int j = 0; j < space_jacobian_of_check_link.rows(); j++)
         {
-            for (size_t k = 0; k < space_jacobian_of_check_link.cols(); k++)
+            for (long int k = 0; k < space_jacobian_of_check_link.cols(); k++)
             {
                 if (robot_info.getActiveJointMap()[k])
                 {
@@ -263,6 +264,7 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         std::cout << jacobian << std::endl;
     }
 }
+
 void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
     std::string collision_spheres_file_path;
@@ -398,6 +400,156 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // printf("\033[1;32m" "Time taken by second checkMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
 }
 
+void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    std::vector<std::vector<float>> balls_pos;
+    std::vector<float> ball_radius;
+
+    // create obstacles randomly
+    prepare_obstacles(balls_pos, ball_radius);
+
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
+    // CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+    //     "obstacle_constraint",
+    //     balls_pos,
+    //     ball_radius
+    // );
+    // constraints.push_back(env_constraint);
+
+    int task_link_index = -1;
+    for (size_t i = 0; i < robot_info.getLinkNames().size(); i++)
+    {
+        if (robot_info.getLinkNames()[i] == "wrist_roll_link")
+        {
+            task_link_index = i;
+            break;
+        }
+    }
+
+    if (task_link_index == -1)
+    {
+        RCLCPP_ERROR(LOGGER, "Failed to find the task link index");
+        return;
+    }
+    std::vector<float> reference_frame = {0.6, 0.0, 1.4, 0.0, 0.0, 0.0};
+    std::vector<float> tolerance = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
+    CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
+        "task_space_constraint",
+        task_link_index,
+        Eigen::Matrix4d::Identity(),
+        reference_frame,
+        tolerance
+    );
+    constraints.push_back(task_space_constraint);
+
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames(),
+        0.02f
+    );
+
+    int num_of_test_states = 1;
+
+    // sample a set of states
+    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    if (single_arm_states == nullptr)
+    {
+        RCLCPP_ERROR(LOGGER, "Failed to sample states for single arm space");
+        return;
+    }
+    single_arm_states->update();
+
+    // check states
+    std::vector<bool> state_feasibility;
+    single_arm_space->checkStates(single_arm_states, state_feasibility);
+
+    // visualize the states
+    std::vector<std::string> display_links_names = robot_info.getLinkNames();
+
+    std::vector<std::vector<float>> states_joint_values = single_arm_states->getJointStatesHost();
+
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
+    visualization_msgs::msg::MarkerArray sample_group_state_markers;
+    
+    for (size_t i = 0; i < states_joint_values.size(); i++)
+    {
+        std::vector<double> states_joint_values_i_double;
+        for (size_t j = 0; j < states_joint_values[i].size(); j++)
+        {
+            // print only active joints
+            if (robot_info.getActiveJointMap()[j])
+            {
+                states_joint_values_i_double.push_back((double)states_joint_values[i][j]);
+            }
+        }
+
+        robot_state->setJointGroupPositions(joint_model_group, states_joint_values_i_double);
+        robot_state->update();
+
+        visualization_msgs::msg::MarkerArray robot_marker;
+        // color
+        std_msgs::msg::ColorRGBA color;
+        color.r = 0.0;
+        color.g = 1.0;
+        color.b = 0.0;
+        color.a = 0.4;
+        const std::string sample_group_ns = "sampled_group";
+        robot_state->getRobotMarkers(robot_marker, display_links_names, color, sample_group_ns, rclcpp::Duration::from_seconds(0));
+        sample_group_state_markers.markers.insert(
+            sample_group_state_markers.markers.end(), 
+            robot_marker.markers.begin(), robot_marker.markers.end());
+    }
+
+    // update the id
+    for (size_t i = 0; i < sample_group_state_markers.markers.size(); i++)
+    {
+        sample_group_state_markers.markers[i].id = i;
+    }
+
+    // create marker publisher
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("/ik_solver_markers", 10);
+
+    // publish the markers
+    while (rclcpp::ok())
+    {
+        marker_publisher->publish(sample_group_state_markers);
+        rclcpp::spin_some(node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    robot_state.reset();
+}
+
 /**
     Test filter states
  */
@@ -435,9 +587,7 @@ void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const s
     // sample a set of states
     int num_of_test_states = 100000;
     CUDAMPLib::SingleArmStatesPtr single_arm_states_1 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
-    CUDAMPLib::SingleArmStatesPtr single_arm_states_2 = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
     single_arm_states_1->update();
-    single_arm_states_2->update();
 
     // generate filter mask to filter state anlteratively
     std::vector<bool> filter_mask(num_of_test_states, true);
@@ -457,14 +607,6 @@ void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const s
     std::chrono::duration<double> elapsed_time_filter = end_time_filter - start_time_filter;
     // print in green
     std::cout << "\033[1;32m" << "Time taken by old filter state function: " << elapsed_time_filter.count() << " seconds" << "\033[0m" << std::endl;
-
-    // new filter states
-    auto start_time_new_filter = std::chrono::high_resolution_clock::now();
-    single_arm_states_2->cudaFilterStates(filter_mask);
-    auto end_time_new_filter = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed_time_new_filter = end_time_new_filter - start_time_new_filter;
-    // print in green
-    std::cout << "\033[1;32m" << "Time taken by cuda filter state function: " << elapsed_time_new_filter.count() << " seconds" << "\033[0m" << std::endl;
 }
 
 /**
@@ -1229,7 +1371,9 @@ int main(int argc, char** argv)
     // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
-    TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    TEST_CONSTRAINT_PROJECT(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 

@@ -8,7 +8,7 @@ namespace CUDAMPLib{
         const std::string& constraint_name,
         const std::vector<std::vector<bool>>& self_collision_enables_map
     )
-    : BaseConstraint(constraint_name)
+    : BaseConstraint(constraint_name, false) // This constraint is not projectable.
     {
         int num_of_links = self_collision_enables_map.size();
         size_t self_collision_enables_map_bytes = (size_t)num_of_links * num_of_links * sizeof(int);

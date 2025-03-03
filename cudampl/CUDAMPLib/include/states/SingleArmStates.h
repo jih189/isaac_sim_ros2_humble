@@ -129,14 +129,14 @@ namespace CUDAMPLib
                 return num_of_joints;
             }
 
-            void cudaFilterStates(const std::vector<bool> & filter_map) override;
-
         private:
             int num_of_joints; // number of joints. This includes fixed joints.
             float * d_joint_states; // joint states of each state
             float * d_link_poses_in_base_link; // link poses in base link
             float * d_space_jacobian_in_base_link; // jacobian in base link
             float * d_self_collision_spheres_pos_in_base_link; // collision spheres in base link
+            float * d_gradient; // gradient of the states for each constraint
+            float * d_total_gradient; // total gradient of the states
     };
     typedef std::shared_ptr<SingleArmStates> SingleArmStatesPtr;
 

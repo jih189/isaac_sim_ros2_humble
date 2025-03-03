@@ -6,7 +6,7 @@ namespace CUDAMPLib
 {
     class BaseConstraint {
         public:
-            BaseConstraint(std::string name) : constraint_name(name) {}
+            BaseConstraint(std::string name, bool is_projectable) : constraint_name(name), is_projectable_(is_projectable) {}
             // virtual destructor. We need to define how to clean the cuda memory in the derived class.
             virtual ~BaseConstraint() {}
             
@@ -25,6 +25,19 @@ namespace CUDAMPLib
              */
             virtual void computeCostFast(BaseStatesPtr states) = 0;
 
+            bool isProjectable() { return is_projectable_; }
+
+            virtual void computeGradient(BaseStatesPtr states) 
+            {
+                if (!is_projectable_)
+                {
+                    throw std::runtime_error("This constraint is not projectable.");
+                }
+                else{
+                    throw std::runtime_error("The function computeGradient is not implemented.");
+                }
+            }
+
             std::string getName() const { return constraint_name; }
 
             int getConstraintIndex(const SpaceInfoPtr space_info) {
@@ -36,6 +49,7 @@ namespace CUDAMPLib
 
         protected:
             std::string constraint_name;
+            bool is_projectable_;
     };
 
     typedef std::shared_ptr<BaseConstraint> BaseConstraintPtr;

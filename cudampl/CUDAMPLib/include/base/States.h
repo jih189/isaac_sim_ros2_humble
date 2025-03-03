@@ -131,12 +131,6 @@ namespace CUDAMPLib
                 num_of_states_ = num_left_states;
             }
 
-            /**
-                This new filter states function is implemented by using cuda kernel to filter the states.
-                After evaluating, we do not see any performance improvement. It is even worse than the previous implementation.
-             */
-            virtual void cudaFilterStates(const std::vector<bool> & filter_map);
-
             int getNumOfStates() const { return num_of_states_; }
 
             float * getCostsCuda() {
