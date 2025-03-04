@@ -81,6 +81,10 @@ namespace CUDAMPLib
                 return d_gradient;
             }
 
+            float * getTotalGradientCuda() {
+                return d_total_gradient;
+            }
+
             /**
                 @brief Get the self collision spheres in base link in device memory.
              */
@@ -126,6 +130,13 @@ namespace CUDAMPLib
             void update() override;
 
             void oldUpdate();
+
+            /**
+                @brief Calculate the forward kinematics of the states.
+             */
+            void calculateForwardKinematics();
+
+            void calculateTotalGradientAndError(const std::vector<int> & constraint_indexs) override;
 
             /**
                 @brief Print the joint states. For debugging purposes.

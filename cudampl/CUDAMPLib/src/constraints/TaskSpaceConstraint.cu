@@ -431,12 +431,14 @@ namespace CUDAMPLib{
             d_cost_of_current_constraint
         );
 
-        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
-        CUDA_CHECK(cudaDeviceSynchronize());
+        // Do not need to synchronize here
 
-        // convert d_grad_of_current_constraint to host
-        std::vector<float> grad_of_current_constraint(single_arm_states->getNumOfStates() * space_info->num_of_joints);
-        cudaMemcpy(grad_of_current_constraint.data(), d_grad_of_current_constraint, single_arm_states->getNumOfStates() * space_info->num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
+        // CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+        // CUDA_CHECK(cudaDeviceSynchronize());
+
+        // // convert d_grad_of_current_constraint to host
+        // std::vector<float> grad_of_current_constraint(single_arm_states->getNumOfStates() * space_info->num_of_joints);
+        // cudaMemcpy(grad_of_current_constraint.data(), d_grad_of_current_constraint, single_arm_states->getNumOfStates() * space_info->num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
 
         // // print grad_of_current_constraint
         // for (int i = 0; i < single_arm_states->getNumOfStates(); i++)

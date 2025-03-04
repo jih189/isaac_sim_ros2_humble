@@ -486,14 +486,14 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
         RCLCPP_ERROR(LOGGER, "Failed to sample states for single arm space");
         return;
     }
-    single_arm_states->update();
+    // single_arm_states->update(); // update robot collision spheres and calculate forward kinematics and space jacobian for each link.
 
     // project the states
-    task_space_constraint->computeGradient(single_arm_states);
+    single_arm_space->projectStates(single_arm_states, {"task_space_constraint"});
 
-    // check states
-    std::vector<bool> state_feasibility;
-    single_arm_space->checkStates(single_arm_states, state_feasibility);
+    // // check states
+    // std::vector<bool> state_feasibility;
+    // single_arm_space->checkStates(single_arm_states, state_feasibility);
 
     // visualize the states
     std::vector<std::string> display_links_names = robot_info.getLinkNames();

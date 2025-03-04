@@ -143,6 +143,12 @@ namespace CUDAMPLib
 
             void calculateTotalCosts();
 
+            virtual void calculateTotalGradientAndError(const std::vector<int> & constraint_indexs)
+            {
+                // raise an error
+                throw std::runtime_error("The function calculateTotalGradientAndError is not implemented.");
+            }
+
             std::vector<std::vector<float>> getCostsHost() {
                 std::vector<std::vector<float>> costs_host(num_of_states_, std::vector<float>(space_info->num_of_constraints, 0.0));
                 std::vector<float> costs_host_flatten(num_of_states_ * space_info->num_of_constraints, 0.0);

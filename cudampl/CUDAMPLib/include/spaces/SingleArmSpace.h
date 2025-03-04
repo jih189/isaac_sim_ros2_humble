@@ -72,6 +72,8 @@ namespace CUDAMPLib
 
             void oldCheckStates(const BaseStatesPtr & states);
 
+            void projectStates(BaseStatesPtr states, std::vector<std::string> constraint_names) override;
+
             BaseStatesPtr getPathFromWaypoints(
                 const BaseStatesPtr & waypoints
             ) override;

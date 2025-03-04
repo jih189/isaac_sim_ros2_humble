@@ -870,6 +870,60 @@ namespace CUDAMPLib {
         states->calculateTotalCosts();
     }
 
+    void SingleArmSpace::projectStates(BaseStatesPtr states, std::vector<std::string> constraint_names)
+    {
+        // cast to SingleArmStatesPtr
+        SingleArmStatesPtr single_arm_states = std::dynamic_pointer_cast<SingleArmStates>(states);
+
+        // find the indices of the projected constraints
+        std::vector<int> prjected_constraint_indices;
+        for (size_t i = 0; i < constraints_.size(); i++)
+        {
+            // if constraints_[i]->getName() is in constraint_names, then project
+            if (std::find(constraint_names.begin(), constraint_names.end(), constraints_[i]->getName()) != constraint_names.end())
+            {
+                prjected_constraint_indices.push_back(i);
+            }
+        }
+
+        // forward kinematics
+        single_arm_states->calculateForwardKinematics();
+
+        for (int i : prjected_constraint_indices)
+        {
+            if (constraints_[i]->isProjectable())
+            {
+                std::cout << "Project constraint " << constraints_[i]->getName() << std::endl;
+                constraints_[i]->computeGradientAndError(single_arm_states);
+            }
+            else{
+                // raise an exception
+                throw std::runtime_error("Constraint " + constraints_[i]->getName() + " is not projectable");
+            }
+        }
+
+        single_arm_states->calculateTotalGradientAndError(prjected_constraint_indices);
+
+        // print the total gradient and error
+        float * d_total_costs = single_arm_states->getTotalCostsCuda(); // [num_of_states]
+
+
+        float * d_total_gradient = single_arm_states->getTotalGradientCuda(); // [num_of_states * num_of_joints]
+
+        // // print total gradient
+        // std::vector<float> total_gradient(single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints(), 0.0);
+        // std::cout << "number of state " << single_arm_states->getNumOfStates() << " and number of joints " << single_arm_states->getNumOfJoints() << std::endl;
+        // cudaMemcpy(total_gradient.data(), d_total_gradient, single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToHost);
+        // for (size_t i = 0; i < total_gradient.size(); i++)
+        // {
+        //     std::cout << total_gradient[i] << " ";
+        //     if ((i + 1) % single_arm_states->getNumOfJoints() == 0)
+        //     {
+        //         std::cout << std::endl;
+        //     }
+        // }
+    }
+
     void SingleArmSpace::getSpaceInfo(SingleArmSpaceInfoPtr space_info)
     {
         // call the base class function

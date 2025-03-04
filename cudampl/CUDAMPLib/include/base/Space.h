@@ -84,6 +84,12 @@ namespace CUDAMPLib
                 float max_distance
             ) = 0;
 
+            virtual void projectStates(BaseStatesPtr states, std::vector<std::string> constraint_names)
+            {
+                // raise an exception if the function is not implemented
+                throw std::runtime_error("The function projectStates is not implemented.");
+            }
+
             /**
                 @brief Create a state manager.
              */

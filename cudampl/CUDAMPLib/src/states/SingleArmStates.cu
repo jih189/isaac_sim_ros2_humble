@@ -916,27 +916,11 @@ namespace CUDAMPLib
 
     void SingleArmStates::update()
     {
-        int threadsPerBlock = 256;
-        int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
+        
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
 
+        this->calculateForwardKinematics();
         
-        // Update the states
-        kin_forward_kernel<<<blocksPerGrid, threadsPerBlock>>>(
-            d_joint_states,
-            num_of_joints,
-            num_of_states_,
-            space_info_single_arm_space->d_joint_types,
-            space_info_single_arm_space->d_joint_poses,
-            space_info_single_arm_space->num_of_links,
-            space_info_single_arm_space->d_joint_axes,
-            space_info_single_arm_space->d_link_parent_link_maps,
-            d_link_poses_in_base_link
-        );
-
-        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
-        CUDA_CHECK(cudaDeviceSynchronize());
-
         // // Update the states
         // kin_forward_kernel_w_space_jacobian<<<blocksPerGrid, threadsPerBlock>>>(
         //     d_joint_states,
@@ -951,6 +935,7 @@ namespace CUDAMPLib
         //     d_space_jacobian_in_base_link
         // );
 
+        int threadsPerBlock = 256;
         // calculate space jacobian
         int blocksPerGrid_1 = (num_of_states_ * space_info_single_arm_space->num_of_links + threadsPerBlock - 1) / threadsPerBlock;
         int blocksPerGrid_2 = (num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres + threadsPerBlock - 1) / threadsPerBlock;
@@ -978,6 +963,146 @@ namespace CUDAMPLib
 
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
+    }
+
+    void SingleArmStates::calculateForwardKinematics()
+    {
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+        
+        // Update the states
+        kin_forward_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            d_joint_states,
+            num_of_joints,
+            num_of_states_,
+            space_info_single_arm_space->d_joint_types,
+            space_info_single_arm_space->d_joint_poses,
+            space_info_single_arm_space->num_of_links,
+            space_info_single_arm_space->d_joint_axes,
+            space_info_single_arm_space->d_link_parent_link_maps,
+            d_link_poses_in_base_link
+        );
+
+        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+        CUDA_CHECK(cudaDeviceSynchronize());
+    }
+
+    __global__ void sum_gradients_kernel(
+        int num_of_states, 
+        int num_of_joints,
+        int num_of_constraints,
+        int * d_constraint_indexs, // [num_of_constraint_indexs]
+        int num_of_constraint_indexs,
+        float * d_gradient, // [num_of_states * num_of_joints * num_of_constraints]
+        float * d_total_gradient // onput
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states * num_of_joints)
+            return;
+
+        int state_idx = idx / num_of_joints;
+        int joint_idx = idx % num_of_joints;
+
+        float sum = 0.0f;
+
+        for (int i = 0; i < num_of_constraint_indexs; i++)
+        {
+            int constraint_idx = d_constraint_indexs[i];
+            sum += d_gradient[num_of_states * num_of_joints * constraint_idx + state_idx * num_of_joints + joint_idx];
+        }
+
+        d_total_gradient[state_idx * num_of_joints + joint_idx] = sum;
+    }
+
+    __global__ void sum_error_kernel(
+        int num_of_states, 
+        int num_of_constraints,
+        int * d_constraint_indexs, // [num_of_constraint_indexs]
+        int num_of_constraint_indexs,
+        float * d_costs, // [num_of_states * num_of_constraints]
+        float * d_total_costs // onput
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states)
+            return;
+
+        int state_idx = idx;
+
+        float sum = 0.0f;
+
+        for (int i = 0; i < num_of_constraint_indexs; i++)
+        {
+            int constraint_idx = d_constraint_indexs[i];
+            sum += d_costs[num_of_states * constraint_idx + state_idx];
+        }
+
+        d_total_costs[state_idx] = sum;
+    }
+
+    void SingleArmStates::calculateTotalGradientAndError(const std::vector<int> & constraint_indexs)
+    {
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_states_ * num_of_joints + threadsPerBlock - 1) / threadsPerBlock;
+
+        // allocate memory for constraint indexs
+        int * d_constraint_indexs;
+        size_t d_constraint_indexs_bytes = constraint_indexs.size() * sizeof(int);
+
+        cudaMalloc(&d_constraint_indexs, d_constraint_indexs_bytes);
+        cudaMemcpy(d_constraint_indexs, constraint_indexs.data(), d_constraint_indexs_bytes, cudaMemcpyHostToDevice);
+
+        // Sum the gradients for each constraint
+        sum_gradients_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            num_of_states_,
+            num_of_joints,
+            space_info_single_arm_space->num_of_constraints,
+            d_constraint_indexs,
+            constraint_indexs.size(),
+            d_gradient,
+            d_total_gradient
+        );
+
+        // // print total gradient
+        // std::vector<float> total_gradient(num_of_states_ * num_of_joints, 0.0);
+        // cudaMemcpy(total_gradient.data(), d_total_gradient, num_of_states_ * num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
+        // std::cout << "Total Gradient: " << std::endl;
+        // for (int i = 0; i < num_of_states_; i++)
+        // {
+        //     for (int j = 0; j < num_of_joints; j++)
+        //     {
+        //         std::cout << total_gradient[i * num_of_joints + j] << " ";
+        //     }
+        //     std::cout << std::endl;
+        // }
+
+        sum_error_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            num_of_states_,
+            space_info_single_arm_space->num_of_constraints,
+            d_constraint_indexs,
+            constraint_indexs.size(),
+            d_costs,
+            d_total_costs
+        );
+
+        // // print total error
+        // std::vector<float> total_costs(num_of_states_, 0.0);
+        // cudaMemcpy(total_costs.data(), d_total_costs, num_of_states_ * sizeof(float), cudaMemcpyDeviceToHost);
+        // std::cout << "Total Costs: " << std::endl;
+        // for (int i = 0; i < num_of_states_; i++)
+        // {
+        //     std::cout << total_costs[i] << std::endl;
+        // }
+
+        // synchronize
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // free the memory
+        cudaFree(d_constraint_indexs);
     }
 
     std::vector<std::vector<Eigen::Isometry3d>> SingleArmStates::getLinkPosesInBaseLinkHost() const

@@ -1,0 +1,250 @@
+robot_cfg:
+  kinematics:
+    isaac_usd_path:
+    usd_path: robot/psm/psm.usd
+    use_usd_kinematics: False
+    usd_robot_root: /psm
+    usd_flip_joint_limits: []
+    urdf_path: robot/psm/psm.urdf
+    asset_root_path: robot/psm
+    base_link: psm_base_link
+    ee_link: psm_tool_tip_link    
+    link_names: null
+    lock_joints: null
+    extra_links: null    
+    collision_link_names:
+      [
+        "psm_pitch_end_link",
+        "psm_main_insertion_link_2",
+        "psm_main_insertion_link_3",
+        "psm_tool_roll_link",
+        "psm_tool_pitch_link",
+      ]
+    collision_spheres:
+      psm_pitch_end_link:
+        - center: [0.0, 0.5, -0.05]
+          radius: 0.045
+        - center: [0.0, 0.45, -0.05]
+          radius: 0.045
+        - center: [0.0, 0.4, -0.05]
+          radius: 0.045
+        - center: [0.0, 0.35, -0.05]
+          radius: 0.045
+        - center: [0.0, 0.3, -0.05]
+          radius: 0.045
+        - center: [0.0, 0.25, -0.05]
+          radius: 0.045
+        - center: [0.0, 0.2, -0.05]
+          radius: 0.045
+        - center: [0.0, 0.15, -0.05]
+          radius: 0.045
+        - center: [0.0, 0.1, -0.05]
+          radius: 0.045
+        - center: [0.0, 0.1, 0.0]
+          radius: 0.03
+      psm_main_insertion_link_2:
+        - center: [0.016, 0.0, -0.009]
+          radius: 0.0414
+        - center: [0.013, -0.002, 0.007]
+          radius: 0.0386
+        - center: [0.013, 0.003, -0.031]
+          radius: 0.0359
+        - center: [0.007, -0.014, -0.037]
+          radius: 0.0285
+        - center: [0.003, 0.011, 0.018]
+          radius: 0.0276
+      psm_main_insertion_link_3:
+        - center: [0.001, 0.0, 0.27]
+          radius: 0.0131
+        - center: [-0.0, 0.0, 0.253]
+          radius: 0.0139
+        - center: [0.0, 0.001, 0.231]
+          radius: 0.0131
+        - center: [0.0, 0.0, 0.314]
+          radius: 0.0139
+        - center: [-0.0, 0.0, 0.326]
+          radius: 0.0139
+        - center: [-0.0, -0.0, 0.402]
+          radius: 0.0139
+        - center: [-0.0, -0.0, 0.217]
+          radius: 0.0139
+        - center: [0.0, 0.001, 0.291]
+          radius: 0.0131
+        - center: [-0.0, 0.0, 0.365]
+          radius: 0.0139
+        - center: [-0.0, 0.0, 0.11]
+          radius: 0.0139
+        - center: [-0.001, 0.0, 0.062]
+          radius: 0.0131
+        - center: [0.0, 0.0, 0.142]
+          radius: 0.0139
+        - center: [-0.0, 0.0, 0.155]
+          radius: 0.0139
+        - center: [-0.0, -0.0, 0.076]
+          radius: 0.0139
+        - center: [0.002, 0.001, 0.091]
+          radius: 0.0117
+        - center: [0.001, 0.0, 0.188]
+          radius: 0.0131
+        - center: [0.0, 0.002, 0.201]
+          radius: 0.0124
+        - center: [-0.0, 0.0, 0.383]
+          radius: 0.0139
+        - center: [-0.0, 0.001, 0.171]
+          radius: 0.0131
+        - center: [-0.001, 0.001, 0.046]
+          radius: 0.0131
+        - center: [0.001, 0.001, 0.343]
+          radius: 0.0124
+        - center: [0.001, 0.0, 0.274]
+          radius: 0.0131
+        - center: [-0.0, -0.0, 0.24]
+          radius: 0.0139
+        - center: [0.001, 0.001, 0.353]
+          radius: 0.0124
+        - center: [0.002, 0.001, 0.136]
+          radius: 0.0117
+      psm_tool_roll_link:
+        - center: [-0.0, 0.001, -0.006]
+          radius: 0.0069
+      psm_tool_pitch_link:
+        - center: [0.004, 0.001, 0.001]
+          radius: 0.0069
+    collision_sphere_buffer: 0.0 # 0.0025
+    extra_collision_spheres: {}
+    use_global_cumul: True
+    self_collision_ignore:
+      {
+        "psm_base_link":
+          [
+            "psm_yaw_link",
+            "psm_pitch_end_link",
+            "psm_remote_center_link",
+            "psm_main_insertion_link",
+            "psm_main_insertion_link_2",
+            "psm_main_insertion_link_3",
+            "psm_tool_roll_link",
+            "psm_tool_pitch_link",
+            "psm_tool_yaw_link",
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_yaw_link":
+          [
+            "psm_pitch_end_link",
+            "psm_remote_center_link",
+            "psm_main_insertion_link",
+            "psm_main_insertion_link_2",
+            "psm_main_insertion_link_3",
+            "psm_tool_roll_link",
+            "psm_tool_pitch_link",
+            "psm_tool_yaw_link",
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_pitch_end_link":
+          [
+            "psm_remote_center_link",
+            "psm_main_insertion_link",
+            "psm_main_insertion_link_2",
+            "psm_main_insertion_link_3",
+            "psm_tool_roll_link",
+            "psm_tool_pitch_link",
+            "psm_tool_yaw_link",
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_remote_center_link":
+          [
+            "psm_main_insertion_link",
+            "psm_main_insertion_link_2",
+            "psm_main_insertion_link_3",
+            "psm_tool_roll_link",
+            "psm_tool_pitch_link",
+            "psm_tool_yaw_link",
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_main_insertion_link":
+          [
+            "psm_main_insertion_link_2",
+            "psm_main_insertion_link_3",
+            "psm_tool_roll_link",
+            "psm_tool_pitch_link",
+            "psm_tool_yaw_link",
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_main_insertion_link_2":
+          [
+            "psm_main_insertion_link_3",
+            "psm_tool_roll_link",
+            "psm_tool_pitch_link",
+            "psm_tool_yaw_link",
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_main_insertion_link_3":
+          [
+            "psm_tool_roll_link",
+            "psm_tool_pitch_link",
+            "psm_tool_yaw_link",
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_tool_roll_link":
+          [
+            "psm_tool_pitch_link",
+            "psm_tool_yaw_link",
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_tool_pitch_link":
+          [
+            "psm_tool_yaw_link",
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_tool_yaw_link":
+          [
+            "psm_tool_gripper1_link",
+            "psm_tool_gripper2_link",
+            "psm_tool_tip_link",
+          ],
+        "psm_tool_gripper1_link":
+          ["psm_tool_gripper2_link", "psm_tool_tip_link"],
+        "psm_tool_gripper2_link": ["psm_tool_tip_link"],
+      }
+    self_collision_buffer:
+      {
+        "psm_pitch_end_link": 0.0,
+        "psm_main_insertion_link_2": 0.0,
+        "psm_main_insertion_link_3": 0.0,
+        "psm_tool_roll_link": 0.0,
+        "psm_tool_pitch_link": 0.0,
+      }
+    mesh_link_names: null
+    cspace:
+      joint_names:
+        [
+          "psm_yaw_joint",
+          "psm_pitch_end_joint",
+          "psm_main_insertion_joint",
+          "psm_tool_roll_joint",
+          "psm_tool_pitch_joint",
+          "psm_tool_yaw_joint",
+        ]
+      retract_config: [0.0, 0.0, 0.0565, 0.0, 0.0, 0.0]
+      null_space_weight: [1, 1, 1, 1, 1, 1]
+      cspace_distance_weight: [1, 1, 1, 1, 1, 1]
+      max_acceleration: 10.0
+      max_jerk: 10000.0
