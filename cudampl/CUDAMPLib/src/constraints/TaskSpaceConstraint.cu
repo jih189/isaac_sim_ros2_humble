@@ -228,6 +228,8 @@ namespace CUDAMPLib{
         const float * d_offset_pose_in_task_link, // [16] as a 4x4 matrix
         const float * d_reference_frame, // [6] for x, y, z, roll, pitch, yaw
         const float * d_tolerance, // [6]
+        float * d_real_task_link_space_jacobian, // [num_of_states * num_of_joint * 6]
+        float * d_real_task_link_space_jacobian_inv, // [num_of_states * 6 * num_of_joint]
         float * d_grad_of_current_constraint, // gradient output
         float * d_cost_of_current_constraint // cost output
     )
@@ -302,12 +304,29 @@ namespace CUDAMPLib{
         float diff_yaw   = ref_yaw - yaw;
 
         // Branchless deadband: if |diff| exceeds tol, reduce magnitude by tol; otherwise zero.
-        float error_x     = copysignf(fmaxf(fabsf(diff_x)     - tol_x, 0.0f), diff_x);
-        float error_y     = copysignf(fmaxf(fabsf(diff_y)     - tol_y, 0.0f), diff_y);
-        float error_z     = copysignf(fmaxf(fabsf(diff_z)     - tol_z, 0.0f), diff_z);
-        float error_roll  = copysignf(fmaxf(fabsf(diff_roll)  - tol_roll, 0.0f), diff_roll);
-        float error_pitch = copysignf(fmaxf(fabsf(diff_pitch) - tol_pitch, 0.0f), diff_pitch);
-        float error_yaw   = copysignf(fmaxf(fabsf(diff_yaw)   - tol_yaw, 0.0f), diff_yaw);
+        // float error_x     = copysignf(fmaxf(fabsf(diff_x)     - tol_x, 0.0f), diff_x);
+        // float error_y     = copysignf(fmaxf(fabsf(diff_y)     - tol_y, 0.0f), diff_y);
+        // float error_z     = copysignf(fmaxf(fabsf(diff_z)     - tol_z, 0.0f), diff_z);
+        // float error_roll  = copysignf(fmaxf(fabsf(diff_roll)  - tol_roll, 0.0f), diff_roll);
+        // float error_pitch = copysignf(fmaxf(fabsf(diff_pitch) - tol_pitch, 0.0f), diff_pitch);
+        // float error_yaw   = copysignf(fmaxf(fabsf(diff_yaw)   - tol_yaw, 0.0f), diff_yaw);
+
+        // float error_x     = diff_x;
+        // float error_y     = diff_y;
+        // float error_z     = diff_z;
+        // float error_roll  = diff_roll;
+        // float error_pitch = diff_pitch;
+        // float error_yaw   = diff_yaw;
+
+        float error_x     = diff_x;
+        float error_y     = diff_y;
+        float error_z     = diff_z;
+        float error_roll  = 0.0;
+        float error_pitch = 0.0;
+        float error_yaw   = 0.0;
+
+
+        printf("error_x: %f, error_y: %f, error_z: %f, error_roll: %f, error_pitch: %f, error_yaw: %f\n", error_x, error_y, error_z, error_roll, error_pitch, error_yaw);
 
         // --- Compute the space Jacobian and use it for gradient computation ---
         // p_i: the position of the task link (end-effector).
@@ -317,7 +336,7 @@ namespace CUDAMPLib{
         // We'll compute each joint's contribution on the fly.
         for (int j = 0; j < num_of_joint; j++) {
             int jac_base_index = jac_config_offset + j * 6;
-            float J_col[6];
+            float* J_col = &d_real_task_link_space_jacobian[jac_base_index];
             
             // If joint j is beyond the task link, it has no influence.
             if (j > task_link_index) {
@@ -372,25 +391,111 @@ namespace CUDAMPLib{
                     J_col[3] = 0.f; J_col[4] = 0.f; J_col[5] = 0.f;
                 }
             }
-
-            // Compute the gradient for joint j by taking the dot product of J_col with the error vector.
-            float grad = 0.0f;
-            grad += J_col[0] * error_x;
-            grad += J_col[1] * error_y;
-            grad += J_col[2] * error_z;
-            grad += J_col[3] * error_roll;
-            grad += J_col[4] * error_pitch;
-            grad += J_col[5] * error_yaw;
-            d_grad_of_current_constraint[idx * num_of_joint + j] = grad;
         }
 
+        float * space_jacobian = &d_real_task_link_space_jacobian[jac_config_offset];
+
+        // Compute A = J * J^T, a 6x6 matrix.
+        float A[36] = {0.0f};
+        for (int i = 0; i < 6; i++) {
+            for (int j = 0; j < 6; j++) {
+                float sum = 0.0f;
+                for (int k = 0; k < num_of_joint; k++) {
+                    // Element (i,k) of J is at space_jacobian[k*6 + i].
+                    sum += space_jacobian[k * 6 + i] * space_jacobian[k * 6 + j];
+                }
+                A[i * 6 + j] = sum;
+            }
+        }
+
+        // Invert the 6x6 matrix A using Gauss–Jordan elimination.
+        float A_inv[36];
+        bool invertible = true;
+        float aug[6][12];
+
+        // Build the augmented matrix [A | I].
+        for (int i = 0; i < 6; i++) {
+            for (int j = 0; j < 6; j++) {
+                aug[i][j] = A[i * 6 + j];
+            }
+            for (int j = 6; j < 12; j++) {
+                aug[i][j] = (j - 6 == i) ? 1.0f : 0.0f;
+            }
+        }
+
+        // Perform Gauss–Jordan elimination.
+        for (int i = 0; i < 6; i++) {
+            float pivot = aug[i][i];
+            if (fabsf(pivot) < 1e-8f) {
+                invertible = false;  // nearly singular matrix
+                break;
+            }
+            // Normalize the pivot row.
+            for (int j = 0; j < 12; j++) {
+                aug[i][j] /= pivot;
+            }
+            // Eliminate the pivot column in other rows.
+            for (int k = 0; k < 6; k++) {
+                if (k != i) {
+                    float factor = aug[k][i];
+                    for (int j = 0; j < 12; j++) {
+                        aug[k][j] -= factor * aug[i][j];
+                    }
+                }
+            }
+        }
+
+        if (invertible) {
+            // Extract the inverse matrix A_inv from the augmented matrix.
+            for (int i = 0; i < 6; i++) {
+                for (int j = 0; j < 6; j++) {
+                    A_inv[i * 6 + j] = aug[i][j + 6];
+                }
+            }
+        }
+
+        // Compute the pseudoinverse: J+ = J^T * A_inv.
+        // The result is a num_of_joint x 6 matrix.
+        if (invertible) {
+            for (int k = 0; k < num_of_joint; k++) {
+                for (int i = 0; i < 6; i++) {
+                    float sum = 0.0f;
+                    for (int j = 0; j < 6; j++) {
+                        // (J^T)(k,j) is stored as space_jacobian[k*6 + j].
+                        sum += space_jacobian[k * 6 + j] * A_inv[j * 6 + i];
+                    }
+                    d_real_task_link_space_jacobian_inv[jac_config_offset + k * 6 + i] = sum;
+                }
+            }
+        }
+        else {
+            // If A is singular, set the pseudoinverse to zero.
+            for (int i = 0; i < num_of_joint * 6; i++) {
+                d_real_task_link_space_jacobian_inv[jac_config_offset + i] = 0.0f;
+            }
+        }
+
+        // --- Compute the gradient of the current constraint ---
+        // The gradient is computed as: grad = J+ * error, where error is the 6-d error vector.
+        float error[6] = {error_roll, error_pitch, error_yaw, error_x, error_y, error_z};
+
+        // Compute the gradient for each joint.
+        for (int k = 0; k < num_of_joint; k++) {
+            float grad_val = 0.0f;
+            for (int i = 0; i < 6; i++) {
+                grad_val += d_real_task_link_space_jacobian_inv[jac_config_offset + k * 6 + i] * error[i];
+            }
+            // Here we store one gradient value per joint.
+            d_grad_of_current_constraint[jac_config_offset + k] = grad_val;
+        }
+
+        // --- Compute the cost of the current constraint ---
+        // For instance, using the squared error.
         float cost = 0.0f;
-        cost += error_x * error_x;
-        cost += error_y * error_y;
-        cost += error_z * error_z;
-        cost += error_roll * error_roll;
-        cost += error_pitch * error_pitch;
-        cost += error_yaw * error_yaw;
+        #pragma unroll
+        for (int i = 0; i < 6; i++) {
+            cost += error[i] * error[i];
+        }
         d_cost_of_current_constraint[idx] = sqrtf(cost);
     }
 
@@ -411,6 +516,12 @@ namespace CUDAMPLib{
         float * d_grad_of_current_constraint = &(single_arm_states->getGradientCuda()[single_arm_states->getNumOfStates() * space_info->num_of_joints * constraint_index]);
         float * d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
 
+        float * d_real_task_link_space_jacobian;
+        cudaMalloc(&d_real_task_link_space_jacobian, single_arm_states->getNumOfStates() * 6 * space_info->num_of_joints * sizeof(float));
+
+        float * d_real_task_link_space_jacobian_inv;
+        cudaMalloc(&d_real_task_link_space_jacobian_inv, single_arm_states->getNumOfStates() * space_info->num_of_joints * 6 * sizeof(float));
+
         // use kernel function to compute the gradient
         // each thread computes the gradient of a state
         int threadsPerBlock = 256;
@@ -427,14 +538,57 @@ namespace CUDAMPLib{
             d_offset_pose_in_task_link_,
             d_reference_frame_,
             d_tolerance_,
+            d_real_task_link_space_jacobian,
+            d_real_task_link_space_jacobian_inv,
             d_grad_of_current_constraint,
             d_cost_of_current_constraint
         );
 
-        // Do not need to synchronize here
+        // std::vector<float> d_real_task_link_space_jacobian_host(single_arm_states->getNumOfStates() * 6 * space_info->num_of_joints);
+        // cudaMemcpy(d_real_task_link_space_jacobian_host.data(), d_real_task_link_space_jacobian, single_arm_states->getNumOfStates() * 6 * space_info->num_of_joints * sizeof(float), cudaMemcpyDeviceToHost);
 
-        // CUDA_CHECK(cudaGetLastError()); // Check for launch errors
-        // CUDA_CHECK(cudaDeviceSynchronize());
+        // printf("task link space jacobian\n");
+        // // print d_real_task_link_space_jacobian_host for debugging
+        // for (int i = 0; i < single_arm_states->getNumOfStates(); i++)
+        // {
+        //     printf("=== %d\n", i);
+        //     for (int j = 0; j < space_info->num_of_joints; j++)
+        //     {
+        //         printf("[%f, %f, %f, %f, %f, %f],\n", d_real_task_link_space_jacobian_host[i * 6 * space_info->num_of_joints + j * 6 + 0],
+        //             d_real_task_link_space_jacobian_host[i * 6 * space_info->num_of_joints + j * 6 + 1],
+        //             d_real_task_link_space_jacobian_host[i * 6 * space_info->num_of_joints + j * 6 + 2],
+        //             d_real_task_link_space_jacobian_host[i * 6 * space_info->num_of_joints + j * 6 + 3],
+        //             d_real_task_link_space_jacobian_host[i * 6 * space_info->num_of_joints + j * 6 + 4],
+        //             d_real_task_link_space_jacobian_host[i * 6 * space_info->num_of_joints + j * 6 + 5]);
+        //     }
+        //     printf("\n");
+        // }
+
+        // printf("task link space jacobian inv\n");
+        // std::vector<float> d_real_task_link_space_jacobian_inv_host(single_arm_states->getNumOfStates() * space_info->num_of_joints * 6);
+        // cudaMemcpy(d_real_task_link_space_jacobian_inv_host.data(), d_real_task_link_space_jacobian_inv, single_arm_states->getNumOfStates() * space_info->num_of_joints * 6 * sizeof(float), cudaMemcpyDeviceToHost);
+
+        // // print d_real_task_link_space_jacobian_inv_host for debugging
+        // for (int i = 0; i < single_arm_states->getNumOfStates(); i++)
+        // {
+        //     printf("=== %d\n", i);
+        //     for (int j = 0; j < space_info->num_of_joints; j++)
+        //     {
+        //         printf("[%f, %f, %f, %f, %f, %f],\n", d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 0],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 1],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 2],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 3],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 4],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 5]);
+        //     }
+        //     printf("\n");
+        // }
+
+        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        cudaFree(d_real_task_link_space_jacobian);
+        cudaFree(d_real_task_link_space_jacobian_inv);
 
         // // convert d_grad_of_current_constraint to host
         // std::vector<float> grad_of_current_constraint(single_arm_states->getNumOfStates() * space_info->num_of_joints);

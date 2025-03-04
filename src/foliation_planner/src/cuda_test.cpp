@@ -179,7 +179,7 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     // set a test joint values
     // std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     // std::vector<float> joint_values_2 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5};
-    std::vector<float> joint_values_3 = {1.0, 0.2, 0.4, 0.3, 0.0, 0.0, 0.0};
+    std::vector<float> joint_values_3 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     std::vector<std::vector<float>> joint_values_set;
     // joint_values_set.push_back(joint_values_1);
     // joint_values_set.push_back(joint_values_2);
