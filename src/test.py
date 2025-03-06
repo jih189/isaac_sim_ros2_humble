@@ -43,3 +43,22 @@ print("Original matrix:")
 print(A)
 print("\nPseudoinverse of the matrix:")
 print(A_pinv.T @ error_matrix.T)
+
+# set the precision
+np.set_printoptions(precision=3)
+
+B = np.array([
+ [0.000000, 0.000000, 1.000000, -0.000000, 0.929000, -0.000000],
+ [0.000000, 1.000000, -0.000000, 0.000000, -0.000000, -0.812000],
+ [1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000],
+ [0.000000, 1.000000, -0.000000, 0.000000, -0.000000, -0.460000],
+ [1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000],
+ [0.000000, 1.000000, -0.000000, 0.000000, -0.000000, -0.138500,],
+ [1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000]
+])
+print("Matrix B:")
+print(B.T)
+print("Pseudoinverse of the matrix B:")
+np.set_printoptions(precision=3)
+C = np.linalg.pinv(B.T)
+print(C)

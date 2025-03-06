@@ -429,7 +429,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
         RCLCPP_ERROR(LOGGER, "Failed to find the task link index");
         return;
     }
-    std::vector<float> reference_frame = {0.9, 0.0, 0.786, 0.0, 0.0, 0.0};
+    std::vector<float> reference_frame = {0.9, 0.0, 0.7, 0.0, 0.0, 0.0};
     std::vector<float> tolerance = {0.001, 0.001, 0.001, 0.01, 0.01, 0.01};
     CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
         "task_space_constraint",

@@ -218,69 +218,67 @@ namespace CUDAMPLib{
     }
 
     __global__ void computeGradientKernel(
-        const int num_of_states, // the number of states
+        const int num_of_states,               // number of states
         const float * d_link_poses_in_base_link, // [num_of_states * num_of_links * 16]
-        const int num_of_links, // the number of links
-        const int num_of_joint, // the number of joints
+        const int num_of_links,                // number of links
+        const int num_of_joint,                // total number of joints
         const int* __restrict__ joint_types,
         const float* __restrict__ joint_axes,
-        const int task_link_index, // the index of the task link
+        const int task_link_index,             // index of the task link
         const float * d_offset_pose_in_task_link, // [16] as a 4x4 matrix
-        const float * d_reference_frame, // [6] for x, y, z, roll, pitch, yaw
-        const float * d_tolerance, // [6]
-        float * d_real_task_link_space_jacobian, // [num_of_states * num_of_joint * 6]
-        float * d_real_task_link_space_jacobian_inv, // [num_of_states * 6 * num_of_joint]
-        float * d_grad_of_current_constraint, // gradient output
-        float * d_cost_of_current_constraint // cost output
+        const float * d_reference_frame,       // [6]: x, y, z, roll, pitch, yaw
+        const float * d_tolerance,             // [6]
+        const int * d_active_joint_map,        // [num_of_joint] binary mask: 1 means active, 0 inactive
+        const int num_of_active_joints,        // number of active joints
+        float * d_real_task_link_space_jacobian,     // [num_of_states * num_of_joint * 6]
+        float * d_real_task_link_space_jacobian_inv, // [num_of_states * num_of_active_joints * 6]
+        float * d_grad_of_current_constraint,        // gradient output (one per active joint)
+        float * d_cost_of_current_constraint         // cost output
     )
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx >= num_of_states)
-        {
+        if (idx >= num_of_states) {
             return;
         }
 
         int config_offset = idx * num_of_links * 16;
         int jac_config_offset = idx * num_of_joint * 6;
 
-        // get the link pose of the task link
+        // --- Compute the task link pose and real task link pose --- //
+
         float task_link_pose[16];
         #pragma unroll
-        for (int i = 0; i < 16; i++)
-        {
+        for (int i = 0; i < 16; i++) {
             task_link_pose[i] = d_link_poses_in_base_link[config_offset + task_link_index * 16 + i];
         }
 
-        // compute the end-effector pose times the offset
         float offset_pose_in_task_link[16];
         #pragma unroll
-        for (int i = 0; i < 16; i++)
-        {
+        for (int i = 0; i < 16; i++) {
             offset_pose_in_task_link[i] = d_offset_pose_in_task_link[i];
         }
 
         float real_task_link_pose[16];
-        // multiply the end-effector pose and the offset
         multiply4x4(task_link_pose, offset_pose_in_task_link, real_task_link_pose);
 
-        // --- Extract translation and orientation from real_task_link_pose ---
+        // --- Extract translation and Euler angles (ZYX convention) --- //
+
         float x = real_task_link_pose[3];
         float y = real_task_link_pose[7];
         float z = real_task_link_pose[11];
 
-        // The upper-left 3x3 block represents the rotation.
         float r00 = real_task_link_pose[0];
         float r10 = real_task_link_pose[4];
         float r20 = real_task_link_pose[8];
         float r21 = real_task_link_pose[9];
         float r22 = real_task_link_pose[10];
 
-        // Compute Euler angles (roll, pitch, yaw) using a ZYX convention.
         float pitch = asinf(-r20);
         float roll  = atan2f(r21, r22);
         float yaw   = atan2f(r10, r00);
 
-        // --- Retrieve the reference frame and tolerances ---
+        // --- Retrieve reference and tolerances --- //
+
         float ref_x     = d_reference_frame[0];
         float ref_y     = d_reference_frame[1];
         float ref_z     = d_reference_frame[2];
@@ -295,7 +293,6 @@ namespace CUDAMPLib{
         float tol_pitch = d_tolerance[4];
         float tol_yaw   = d_tolerance[5];
 
-        // --- Compute normalized differences ---
         float diff_x     = ref_x - x;
         float diff_y     = ref_y - y;
         float diff_z     = ref_z - z;
@@ -303,60 +300,39 @@ namespace CUDAMPLib{
         float diff_pitch = ref_pitch - pitch;
         float diff_yaw   = ref_yaw - yaw;
 
-        // Branchless deadband: if |diff| exceeds tol, reduce magnitude by tol; otherwise zero.
-        // float error_x     = copysignf(fmaxf(fabsf(diff_x)     - tol_x, 0.0f), diff_x);
-        // float error_y     = copysignf(fmaxf(fabsf(diff_y)     - tol_y, 0.0f), diff_y);
-        // float error_z     = copysignf(fmaxf(fabsf(diff_z)     - tol_z, 0.0f), diff_z);
-        // float error_roll  = copysignf(fmaxf(fabsf(diff_roll)  - tol_roll, 0.0f), diff_roll);
-        // float error_pitch = copysignf(fmaxf(fabsf(diff_pitch) - tol_pitch, 0.0f), diff_pitch);
-        // float error_yaw   = copysignf(fmaxf(fabsf(diff_yaw)   - tol_yaw, 0.0f), diff_yaw);
-
-        // float error_x     = diff_x;
-        // float error_y     = diff_y;
-        // float error_z     = diff_z;
-        // float error_roll  = diff_roll;
-        // float error_pitch = diff_pitch;
-        // float error_yaw   = diff_yaw;
-
+        // For now we simply use the raw difference.
         float error_x     = diff_x;
         float error_y     = diff_y;
         float error_z     = diff_z;
-        float error_roll  = 0.0;
-        float error_pitch = 0.0;
-        float error_yaw   = 0.0;
+        float error_roll  = diff_roll;
+        float error_pitch = diff_pitch;
+        float error_yaw   = diff_yaw;
 
-
-        printf("error_x: %f, error_y: %f, error_z: %f, error_roll: %f, error_pitch: %f, error_yaw: %f\n", error_x, error_y, error_z, error_roll, error_pitch, error_yaw);
-
-        // --- Compute the space Jacobian and use it for gradient computation ---
-        // p_i: the position of the task link (end-effector).
-        float p_i[3] = { real_task_link_pose[3], real_task_link_pose[7], real_task_link_pose[11] };
-
-        // The gradient output will be computed as a dot product between each joint's Jacobian column and the error vector.
-        // We'll compute each joint's contribution on the fly.
+        // --- Compute the full space Jacobian (6 x num_of_joint) --- //
         for (int j = 0; j < num_of_joint; j++) {
             int jac_base_index = jac_config_offset + j * 6;
             float* J_col = &d_real_task_link_space_jacobian[jac_base_index];
-            
-            // If joint j is beyond the task link, it has no influence.
+
+            // If joint j is beyond the task link, it does not affect the end-effector.
             if (j > task_link_index) {
                 #pragma unroll
                 for (int r = 0; r < 6; r++) {
                     J_col[r] = 0.f;
                 }
-            }
-            else {
-                // Retrieve transformation T_j for joint j.
+            } else {
+                // Retrieve the transformation T_j for joint j.
                 const float* T_j = &d_link_poses_in_base_link[config_offset + j * 16];
 
-                // Extract the 3x3 rotation matrix from T_j (row-major order).
+                // Extract the 3x3 rotation matrix from T_j.
                 float R_j[9];
                 R_j[0] = T_j[0];  R_j[1] = T_j[1];  R_j[2] = T_j[2];
                 R_j[3] = T_j[4];  R_j[4] = T_j[5];  R_j[5] = T_j[6];
                 R_j[6] = T_j[8];  R_j[7] = T_j[9];  R_j[8] = T_j[10];
 
-                // Transform the joint axis into the space frame.
-                float axis[3] = { joint_axes[j * 3 + 0], joint_axes[j * 3 + 1], joint_axes[j * 3 + 2] };
+                // Transform the joint axis from the local frame to the space frame.
+                float axis[3] = { joint_axes[j * 3 + 0],
+                                joint_axes[j * 3 + 1],
+                                joint_axes[j * 3 + 2] };
                 float w[3];
                 w[0] = R_j[0] * axis[0] + R_j[1] * axis[1] + R_j[2] * axis[2];
                 w[1] = R_j[3] * axis[0] + R_j[4] * axis[1] + R_j[5] * axis[2];
@@ -367,17 +343,17 @@ namespace CUDAMPLib{
 
                 int jt = joint_types[j];
                 if (jt == CUDAMPLib_REVOLUTE) {
-                    // For revolute joints: angular part is w; linear part is w x (p_i - p_j).
+                    // For revolute joints: angular part = w; linear part = w x (p_i - p_j).
                     J_col[0] = w[0];
                     J_col[1] = w[1];
                     J_col[2] = w[2];
-                    float d[3] = { p_i[0] - p_j[0], p_i[1] - p_j[1], p_i[2] - p_j[2] };
+                    float d[3] = { x - p_j[0], y - p_j[1], z - p_j[2] };
                     J_col[3] = w[1] * d[2] - w[2] * d[1];
                     J_col[4] = w[2] * d[0] - w[0] * d[2];
                     J_col[5] = w[0] * d[1] - w[1] * d[0];
                 }
                 else if (jt == CUDAMPLib_PRISMATIC) {
-                    // For prismatic joints: angular part is zero; linear part is the transformed axis.
+                    // For prismatic joints: angular part = 0; linear part = transformed axis.
                     J_col[0] = 0.f;
                     J_col[1] = 0.f;
                     J_col[2] = 0.f;
@@ -386,55 +362,61 @@ namespace CUDAMPLib{
                     J_col[5] = w[2];
                 }
                 else {
-                    // For fixed or unknown joint types, set the Jacobian column to zero.
-                    J_col[0] = 0.f; J_col[1] = 0.f; J_col[2] = 0.f;
-                    J_col[3] = 0.f; J_col[4] = 0.f; J_col[5] = 0.f;
+                    // For fixed or unknown joint types.
+                    J_col[0] = J_col[1] = J_col[2] = 0.f;
+                    J_col[3] = J_col[4] = J_col[5] = 0.f;
                 }
             }
         }
 
-        float * space_jacobian = &d_real_task_link_space_jacobian[jac_config_offset];
-
-        // Compute A = J * J^T, a 6x6 matrix.
+        // --- Crop the Jacobian using the binary active joint mask --- //
+        // Build A = J_active * J_active^T, where J_active is 6 x num_of_active_joints.
+        // The full Jacobian is stored at offset 'jac_config_offset' in d_real_task_link_space_jacobian.
         float A[36] = {0.0f};
         for (int i = 0; i < 6; i++) {
             for (int j = 0; j < 6; j++) {
                 float sum = 0.0f;
+                // Iterate over all joints and include only if active.
                 for (int k = 0; k < num_of_joint; k++) {
-                    // Element (i,k) of J is at space_jacobian[k*6 + i].
-                    sum += space_jacobian[k * 6 + i] * space_jacobian[k * 6 + j];
+                    if (d_active_joint_map[k] != 0) {
+                        sum += d_real_task_link_space_jacobian[jac_config_offset + k * 6 + i] *
+                            d_real_task_link_space_jacobian[jac_config_offset + k * 6 + j];
+                    }
                 }
                 A[i * 6 + j] = sum;
             }
         }
 
-        // Invert the 6x6 matrix A using Gauss–Jordan elimination.
+        // --- Invert A using Gauss–Jordan elimination with damping --- //
+        // Damping factor to regularize the inversion.
+        const float lambda = 1e-4f;
         float A_inv[36];
         bool invertible = true;
         float aug[6][12];
-
-        // Build the augmented matrix [A | I].
+        // Build augmented matrix [A_damped | I]
         for (int i = 0; i < 6; i++) {
             for (int j = 0; j < 6; j++) {
-                aug[i][j] = A[i * 6 + j];
+                if (i == j) {
+                    aug[i][j] = A[i * 6 + j] + lambda;
+                }
+                else {
+                    aug[i][j] = A[i * 6 + j];
+                }
             }
             for (int j = 6; j < 12; j++) {
                 aug[i][j] = (j - 6 == i) ? 1.0f : 0.0f;
             }
         }
-
         // Perform Gauss–Jordan elimination.
         for (int i = 0; i < 6; i++) {
             float pivot = aug[i][i];
             if (fabsf(pivot) < 1e-8f) {
-                invertible = false;  // nearly singular matrix
+                invertible = false;
                 break;
             }
-            // Normalize the pivot row.
             for (int j = 0; j < 12; j++) {
                 aug[i][j] /= pivot;
             }
-            // Eliminate the pivot column in other rows.
             for (int k = 0; k < 6; k++) {
                 if (k != i) {
                     float factor = aug[k][i];
@@ -444,9 +426,7 @@ namespace CUDAMPLib{
                 }
             }
         }
-
         if (invertible) {
-            // Extract the inverse matrix A_inv from the augmented matrix.
             for (int i = 0; i < 6; i++) {
                 for (int j = 0; j < 6; j++) {
                     A_inv[i * 6 + j] = aug[i][j + 6];
@@ -454,43 +434,44 @@ namespace CUDAMPLib{
             }
         }
 
-        // Compute the pseudoinverse: J+ = J^T * A_inv.
-        // The result is a num_of_joint x 6 matrix.
-        if (invertible) {
-            for (int k = 0; k < num_of_joint; k++) {
+        // --- Compute the pseudoinverse for the cropped Jacobian --- //
+        // We store the result as a (num_of_active_joints x 6) matrix per state.
+        int cropped_offset = idx * num_of_active_joints * 6;
+        int active_index = 0;
+        for (int j = 0; j < num_of_joint; j++) {
+            if (d_active_joint_map[j] != 0) {
                 for (int i = 0; i < 6; i++) {
                     float sum = 0.0f;
-                    for (int j = 0; j < 6; j++) {
-                        // (J^T)(k,j) is stored as space_jacobian[k*6 + j].
-                        sum += space_jacobian[k * 6 + j] * A_inv[j * 6 + i];
+                    for (int m = 0; m < 6; m++) {
+                        sum += d_real_task_link_space_jacobian[jac_config_offset + j * 6 + m] *
+                            A_inv[m * 6 + i];
                     }
-                    d_real_task_link_space_jacobian_inv[jac_config_offset + k * 6 + i] = sum;
+                    d_real_task_link_space_jacobian_inv[cropped_offset + active_index * 6 + i] = sum;
                 }
+                active_index++;
             }
         }
-        else {
-            // If A is singular, set the pseudoinverse to zero.
-            for (int i = 0; i < num_of_joint * 6; i++) {
-                d_real_task_link_space_jacobian_inv[jac_config_offset + i] = 0.0f;
+        if (!invertible) {
+            for (int i = 0; i < num_of_active_joints * 6; i++) {
+                d_real_task_link_space_jacobian_inv[cropped_offset + i] = 0.0f;
             }
         }
 
-        // --- Compute the gradient of the current constraint ---
-        // The gradient is computed as: grad = J+ * error, where error is the 6-d error vector.
+        // --- Compute the gradient and cost --- //
+        // The error vector is arranged as [roll, pitch, yaw, x, y, z].
         float error[6] = {error_roll, error_pitch, error_yaw, error_x, error_y, error_z};
-
-        // Compute the gradient for each joint.
-        for (int k = 0; k < num_of_joint; k++) {
-            float grad_val = 0.0f;
-            for (int i = 0; i < 6; i++) {
-                grad_val += d_real_task_link_space_jacobian_inv[jac_config_offset + k * 6 + i] * error[i];
+        active_index = 0;
+        for (int j = 0; j < num_of_joint; j++) {
+            if (d_active_joint_map[j] != 0) {
+                float grad_val = 0.0f;
+                for (int i = 0; i < 6; i++) {
+                    grad_val += d_real_task_link_space_jacobian_inv[cropped_offset + active_index * 6 + i] * error[i];
+                }
+                d_grad_of_current_constraint[idx * num_of_joint + j] = grad_val;
+                active_index++;
             }
-            // Here we store one gradient value per joint.
-            d_grad_of_current_constraint[jac_config_offset + k] = grad_val;
         }
 
-        // --- Compute the cost of the current constraint ---
-        // For instance, using the squared error.
         float cost = 0.0f;
         #pragma unroll
         for (int i = 0; i < 6; i++) {
@@ -516,11 +497,11 @@ namespace CUDAMPLib{
         float * d_grad_of_current_constraint = &(single_arm_states->getGradientCuda()[single_arm_states->getNumOfStates() * space_info->num_of_joints * constraint_index]);
         float * d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
 
+        // allocate memory for intermediate results
         float * d_real_task_link_space_jacobian;
         cudaMalloc(&d_real_task_link_space_jacobian, single_arm_states->getNumOfStates() * 6 * space_info->num_of_joints * sizeof(float));
-
         float * d_real_task_link_space_jacobian_inv;
-        cudaMalloc(&d_real_task_link_space_jacobian_inv, single_arm_states->getNumOfStates() * space_info->num_of_joints * 6 * sizeof(float));
+        cudaMalloc(&d_real_task_link_space_jacobian_inv, single_arm_states->getNumOfStates() * space_info->num_of_active_joints * 6 * sizeof(float));
 
         // use kernel function to compute the gradient
         // each thread computes the gradient of a state
@@ -538,6 +519,8 @@ namespace CUDAMPLib{
             d_offset_pose_in_task_link_,
             d_reference_frame_,
             d_tolerance_,
+            space_info->d_active_joint_map,
+            space_info->num_of_active_joints,
             d_real_task_link_space_jacobian,
             d_real_task_link_space_jacobian_inv,
             d_grad_of_current_constraint,
@@ -565,21 +548,21 @@ namespace CUDAMPLib{
         // }
 
         // printf("task link space jacobian inv\n");
-        // std::vector<float> d_real_task_link_space_jacobian_inv_host(single_arm_states->getNumOfStates() * space_info->num_of_joints * 6);
-        // cudaMemcpy(d_real_task_link_space_jacobian_inv_host.data(), d_real_task_link_space_jacobian_inv, single_arm_states->getNumOfStates() * space_info->num_of_joints * 6 * sizeof(float), cudaMemcpyDeviceToHost);
+        // std::vector<float> d_real_task_link_space_jacobian_inv_host(single_arm_states->getNumOfStates() * space_info->num_of_active_joints * 6);
+        // cudaMemcpy(d_real_task_link_space_jacobian_inv_host.data(), d_real_task_link_space_jacobian_inv, single_arm_states->getNumOfStates() * space_info->num_of_active_joints * 6 * sizeof(float), cudaMemcpyDeviceToHost);
 
         // // print d_real_task_link_space_jacobian_inv_host for debugging
         // for (int i = 0; i < single_arm_states->getNumOfStates(); i++)
         // {
         //     printf("=== %d\n", i);
-        //     for (int j = 0; j < space_info->num_of_joints; j++)
+        //     for (int j = 0; j < space_info->num_of_active_joints; j++)
         //     {
-        //         printf("[%f, %f, %f, %f, %f, %f],\n", d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 0],
-        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 1],
-        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 2],
-        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 3],
-        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 4],
-        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_joints * 6 + j * 6 + 5]);
+        //         printf("[%f, %f, %f, %f, %f, %f],\n", d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_active_joints * 6 + j * 6 + 0],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_active_joints * 6 + j * 6 + 1],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_active_joints * 6 + j * 6 + 2],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_active_joints * 6 + j * 6 + 3],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_active_joints * 6 + j * 6 + 4],
+        //             d_real_task_link_space_jacobian_inv_host[i * space_info->num_of_active_joints * 6 + j * 6 + 5]);
         //     }
         //     printf("\n");
         // }
@@ -587,6 +570,7 @@ namespace CUDAMPLib{
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
 
+        // free memory for intermediate results
         cudaFree(d_real_task_link_space_jacobian);
         cudaFree(d_real_task_link_space_jacobian_inv);
 

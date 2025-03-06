@@ -43,6 +43,16 @@ namespace CUDAMPLib {
         lower_bound = lower;
         upper_bound = upper;
 
+        // get the number of active joints
+        num_of_active_joints_ = 0;
+        for (size_t i = 0; i < active_joint_map.size(); i++)
+        {
+            if (active_joint_map[i])
+            {
+                num_of_active_joints_++;
+            }
+        }
+
         // set the link names
         link_names_ = link_names;
 
@@ -911,7 +921,7 @@ namespace CUDAMPLib {
             }
         }
 
-        for (int t = 0; t < 7; t++)
+        for (int t = 0; t < 20; t++)
         {
             // forward kinematics
             single_arm_states->calculateForwardKinematics();
@@ -938,30 +948,30 @@ namespace CUDAMPLib {
 
             std::cout << "Iteration: " << t << std::endl;
 
-            // print joint values
-            std::vector<std::vector<float>> joint_values = single_arm_states->getJointStatesHost();
-            std::cout << "Joint values" << std::endl;
-            for (size_t i = 0; i < joint_values.size(); i++)
-            {
-                for (size_t j = 0; j < joint_values[i].size(); j++)
-                {
-                    std::cout << joint_values[i][j] << " ";
-                }
-                std::cout << std::endl;
-            }
+            // // print joint values
+            // std::vector<std::vector<float>> joint_values = single_arm_states->getJointStatesHost();
+            // std::cout << "Joint values" << std::endl;
+            // for (size_t i = 0; i < joint_values.size(); i++)
+            // {
+            //     for (size_t j = 0; j < joint_values[i].size(); j++)
+            //     {
+            //         std::cout << joint_values[i][j] << " ";
+            //     }
+            //     std::cout << std::endl;
+            // }
 
-            // print total gradient
-            std::vector<float> total_gradient(single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints(), 0.0);
-            cudaMemcpy(total_gradient.data(), d_total_gradient, single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToHost);
-            std::cout << "Total gradient" << std::endl;
-            for (size_t i = 0; i < total_gradient.size(); i++)
-            {
-                std::cout << total_gradient[i] << " ";
-                if ((i + 1) % single_arm_states->getNumOfJoints() == 0)
-                {
-                    std::cout << std::endl;
-                }
-            }
+            // // print total gradient
+            // std::vector<float> total_gradient(single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints(), 0.0);
+            // cudaMemcpy(total_gradient.data(), d_total_gradient, single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToHost);
+            // std::cout << "Total gradient" << std::endl;
+            // for (size_t i = 0; i < total_gradient.size(); i++)
+            // {
+            //     std::cout << total_gradient[i] << " ";
+            //     if ((i + 1) % single_arm_states->getNumOfJoints() == 0)
+            //     {
+            //         std::cout << std::endl;
+            //     }
+            // }
 
             // print total costs
             std::vector<float> total_costs(single_arm_states->getNumOfStates(), 0.0);
@@ -1013,6 +1023,9 @@ namespace CUDAMPLib {
         // set the bounds
         space_info->lower_bound = lower_bound;
         space_info->upper_bound = upper_bound;
+
+        // set number of active joints
+        space_info->num_of_active_joints = num_of_active_joints_;
     }
 
     BaseStateManagerPtr SingleArmSpace::createStateManager()

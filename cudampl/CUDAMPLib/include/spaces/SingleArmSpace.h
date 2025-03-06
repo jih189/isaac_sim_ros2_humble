@@ -112,6 +112,7 @@ namespace CUDAMPLib
             int num_of_joints; // number of joints where joints include fixed joints.
             size_t num_of_links;
             int num_of_self_collision_spheres;
+            int num_of_active_joints_;
             std::vector<float> lower_bound;
             std::vector<float> upper_bound;
             std::vector<bool> active_joint_map_;
