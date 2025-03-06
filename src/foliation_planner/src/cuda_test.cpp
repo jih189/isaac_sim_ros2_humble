@@ -465,21 +465,21 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
         0.02f
     );
 
-    int num_of_test_states = 1;
+    int num_of_test_states = 10;
 
     // sample a set of states
-    // CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
 
-    // set a test joint values
-    std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    std::vector<std::vector<float>> intput_joint_values_set;
-    intput_joint_values_set.push_back(joint_values_1);
+    // // set a test joint values
+    // std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    // std::vector<std::vector<float>> intput_joint_values_set;
+    // intput_joint_values_set.push_back(joint_values_1);
 
-    // create states based on the joint values
-    auto states = single_arm_space->createStatesFromVector(intput_joint_values_set);
+    // // create states based on the joint values
+    // auto states = single_arm_space->createStatesFromVector(intput_joint_values_set);
 
-    // cast to SingleArmStates
-    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(states);
+    // // cast to SingleArmStates
+    // CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(states);
 
     if (single_arm_states == nullptr)
     {
@@ -509,6 +509,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     
     for (size_t i = 0; i < states_joint_values.size(); i++)
     {
+        // For each robot
         std::vector<double> states_joint_values_i_double;
         for (size_t j = 0; j < states_joint_values[i].size(); j++)
         {

@@ -300,13 +300,13 @@ namespace CUDAMPLib{
         float diff_pitch = ref_pitch - pitch;
         float diff_yaw   = ref_yaw - yaw;
 
-        // For now we simply use the raw difference.
-        float error_x     = diff_x;
-        float error_y     = diff_y;
-        float error_z     = diff_z;
-        float error_roll  = diff_roll;
-        float error_pitch = diff_pitch;
-        float error_yaw   = diff_yaw;
+        // --- Compute the error vector --- //
+        float error_x     = copysignf(fmaxf(fabsf(diff_x)     - tol_x, 0.0f), diff_x);
+        float error_y     = copysignf(fmaxf(fabsf(diff_y)     - tol_y, 0.0f), diff_y);
+        float error_z     = copysignf(fmaxf(fabsf(diff_z)     - tol_z, 0.0f), diff_z);
+        float error_roll  = copysignf(fmaxf(fabsf(diff_roll)  - tol_roll, 0.0f), diff_roll);
+        float error_pitch = copysignf(fmaxf(fabsf(diff_pitch) - tol_pitch, 0.0f), diff_pitch);
+        float error_yaw   = copysignf(fmaxf(fabsf(diff_yaw)   - tol_yaw, 0.0f), diff_yaw);
 
         // --- Compute the full space Jacobian (6 x num_of_joint) --- //
         for (int j = 0; j < num_of_joint; j++) {

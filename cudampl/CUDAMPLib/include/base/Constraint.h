@@ -4,6 +4,8 @@
 
 namespace CUDAMPLib
 {
+    #define CUDAMPLib_PROJECT_MAX_ITERATION 10 // maximum iteration for projection. This number should not be too large.
+    
     class BaseConstraint {
         public:
             BaseConstraint(std::string name, bool is_projectable) : constraint_name(name), is_projectable_(is_projectable) {}

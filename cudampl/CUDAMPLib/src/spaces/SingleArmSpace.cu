@@ -921,7 +921,7 @@ namespace CUDAMPLib {
             }
         }
 
-        for (int t = 0; t < 20; t++)
+        for (int t = 0; t < CUDAMPLib_PROJECT_MAX_ITERATION; t++)
         {
             // forward kinematics
             single_arm_states->calculateForwardKinematics();
@@ -930,7 +930,6 @@ namespace CUDAMPLib {
             {
                 if (constraints_[i]->isProjectable())
                 {
-                    std::cout << "Project constraint " << constraints_[i]->getName() << std::endl;
                     constraints_[i]->computeGradientAndError(single_arm_states);
                 }
                 else{
@@ -946,7 +945,7 @@ namespace CUDAMPLib {
 
             float * d_total_gradient = single_arm_states->getTotalGradientCuda(); // [num_of_states * num_of_joints]
 
-            std::cout << "Iteration: " << t << std::endl;
+            // std::cout << "Iteration: " << t << std::endl;
 
             // // print joint values
             // std::vector<std::vector<float>> joint_values = single_arm_states->getJointStatesHost();
@@ -973,15 +972,15 @@ namespace CUDAMPLib {
             //     }
             // }
 
-            // print total costs
-            std::vector<float> total_costs(single_arm_states->getNumOfStates(), 0.0);
-            cudaMemcpy(total_costs.data(), d_total_costs, single_arm_states->getNumOfStates() * sizeof(float), cudaMemcpyDeviceToHost);
-            std::cout << "Total costs" << std::endl;
-            for (size_t i = 0; i < total_costs.size(); i++)
-            {
-                std::cout << total_costs[i] << " ";
-            }
-            std::cout << std::endl;
+            // // print total costs
+            // std::vector<float> total_costs(single_arm_states->getNumOfStates(), 0.0);
+            // cudaMemcpy(total_costs.data(), d_total_costs, single_arm_states->getNumOfStates() * sizeof(float), cudaMemcpyDeviceToHost);
+            // std::cout << "Total costs" << std::endl;
+            // for (size_t i = 0; i < total_costs.size(); i++)
+            // {
+            //     std::cout << total_costs[i] << " ";
+            // }
+            // std::cout << std::endl;
 
             // update the states
             int threadsPerBlock = 256;
@@ -989,7 +988,7 @@ namespace CUDAMPLib {
             update_with_grad<<<blocksPerGrid, threadsPerBlock>>>(
                 single_arm_states->getJointStatesCuda(),
                 d_total_gradient,
-                1.0,
+                0.99,
                 single_arm_states->getNumOfStates(),
                 single_arm_states->getNumOfJoints(),
                 d_active_joint_map
