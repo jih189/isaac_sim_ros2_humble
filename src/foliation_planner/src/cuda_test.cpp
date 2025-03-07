@@ -15,6 +15,7 @@
 #include <CUDAMPLib/constraints/EnvConstraint.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
 #include <CUDAMPLib/constraints/TaskSpaceConstraint.h>
+#include <CUDAMPLib/constraints/BoundaryConstraint.h>
 #include <CUDAMPLib/tasks/SingleArmTask.h>
 #include <CUDAMPLib/planners/RRG.h>
 #include <CUDAMPLib/termination/StepTermination.h>
@@ -429,17 +430,31 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
         RCLCPP_ERROR(LOGGER, "Failed to find the task link index");
         return;
     }
-    std::vector<float> reference_frame = {0.9, 0.0, 0.7, 0.0, 0.0, 0.0};
-    std::vector<float> tolerance = {0.001, 0.001, 0.001, 0.01, 0.01, 0.01};
-    CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
-        "task_space_constraint",
-        task_link_index,
-        Eigen::Matrix4d::Identity(),
-        reference_frame,
-        tolerance
-    );
-    constraints.push_back(task_space_constraint);
 
+    // // create task space constraint
+    // std::vector<float> reference_frame = {0.9, 0.0, 0.7, 0.0, 0.0, 0.0};
+    // std::vector<float> tolerance = {0.001, 0.001, 0.001, 0.01, 0.01, 0.01};
+    // CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
+    //     "task_space_constraint",
+    //     task_link_index,
+    //     Eigen::Matrix4d::Identity(),
+    //     reference_frame,
+    //     tolerance
+    // );
+    // constraints.push_back(task_space_constraint);
+
+    // create boundary constraint
+    std::vector<float> lower_bound = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<float> upper_bound = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    CUDAMPLib::BoundaryConstraintPtr boundary_constraint = std::make_shared<CUDAMPLib::BoundaryConstraint>(
+        "boundary_constraint",
+        lower_bound,
+        upper_bound,
+        robot_info.getActiveJointMap()
+    );
+    constraints.push_back(boundary_constraint);
+
+    // create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
         robot_info.getSelfCollisionEnabledMap()

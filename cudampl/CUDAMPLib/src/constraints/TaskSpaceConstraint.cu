@@ -217,7 +217,7 @@ namespace CUDAMPLib{
         this->computeCost(states);
     }
 
-    __global__ void computeGradientKernel(
+    __global__ void computeGradientErrorKernel(
         const int num_of_states,               // number of states
         const float * d_link_poses_in_base_link, // [num_of_states * num_of_links * 16]
         const int num_of_links,                // number of links
@@ -508,7 +508,7 @@ namespace CUDAMPLib{
         int threadsPerBlock = 256;
         int blocksPerGrid = (single_arm_states->getNumOfStates() + threadsPerBlock - 1) / threadsPerBlock;
 
-        computeGradientKernel<<<blocksPerGrid, threadsPerBlock>>>(
+        computeGradientErrorKernel<<<blocksPerGrid, threadsPerBlock>>>(
             single_arm_states->getNumOfStates(),
             single_arm_states->getLinkPosesInBaseLinkCuda(),
             space_info->num_of_links,

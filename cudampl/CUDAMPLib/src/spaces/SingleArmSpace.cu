@@ -945,42 +945,42 @@ namespace CUDAMPLib {
 
             float * d_total_gradient = single_arm_states->getTotalGradientCuda(); // [num_of_states * num_of_joints]
 
-            // std::cout << "Iteration: " << t << std::endl;
+            std::cout << "Iteration: " << t << std::endl;
 
-            // // print joint values
-            // std::vector<std::vector<float>> joint_values = single_arm_states->getJointStatesHost();
-            // std::cout << "Joint values" << std::endl;
-            // for (size_t i = 0; i < joint_values.size(); i++)
-            // {
-            //     for (size_t j = 0; j < joint_values[i].size(); j++)
-            //     {
-            //         std::cout << joint_values[i][j] << " ";
-            //     }
-            //     std::cout << std::endl;
-            // }
+            // print joint values
+            std::vector<std::vector<float>> joint_values = single_arm_states->getJointStatesHost();
+            std::cout << "Joint values" << std::endl;
+            for (size_t i = 0; i < joint_values.size(); i++)
+            {
+                for (size_t j = 0; j < joint_values[i].size(); j++)
+                {
+                    std::cout << joint_values[i][j] << " ";
+                }
+                std::cout << std::endl;
+            }
 
-            // // print total gradient
-            // std::vector<float> total_gradient(single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints(), 0.0);
-            // cudaMemcpy(total_gradient.data(), d_total_gradient, single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToHost);
-            // std::cout << "Total gradient" << std::endl;
-            // for (size_t i = 0; i < total_gradient.size(); i++)
-            // {
-            //     std::cout << total_gradient[i] << " ";
-            //     if ((i + 1) % single_arm_states->getNumOfJoints() == 0)
-            //     {
-            //         std::cout << std::endl;
-            //     }
-            // }
+            // print total gradient
+            std::vector<float> total_gradient(single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints(), 0.0);
+            cudaMemcpy(total_gradient.data(), d_total_gradient, single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToHost);
+            std::cout << "Total gradient" << std::endl;
+            for (size_t i = 0; i < total_gradient.size(); i++)
+            {
+                std::cout << total_gradient[i] << " ";
+                if ((i + 1) % single_arm_states->getNumOfJoints() == 0)
+                {
+                    std::cout << std::endl;
+                }
+            }
 
-            // // print total costs
-            // std::vector<float> total_costs(single_arm_states->getNumOfStates(), 0.0);
-            // cudaMemcpy(total_costs.data(), d_total_costs, single_arm_states->getNumOfStates() * sizeof(float), cudaMemcpyDeviceToHost);
-            // std::cout << "Total costs" << std::endl;
-            // for (size_t i = 0; i < total_costs.size(); i++)
-            // {
-            //     std::cout << total_costs[i] << " ";
-            // }
-            // std::cout << std::endl;
+            // print total costs
+            std::vector<float> total_costs(single_arm_states->getNumOfStates(), 0.0);
+            cudaMemcpy(total_costs.data(), d_total_costs, single_arm_states->getNumOfStates() * sizeof(float), cudaMemcpyDeviceToHost);
+            std::cout << "Total costs" << std::endl;
+            for (size_t i = 0; i < total_costs.size(); i++)
+            {
+                std::cout << total_costs[i] << " ";
+            }
+            std::cout << std::endl;
 
             // update the states
             int threadsPerBlock = 256;
@@ -988,7 +988,7 @@ namespace CUDAMPLib {
             update_with_grad<<<blocksPerGrid, threadsPerBlock>>>(
                 single_arm_states->getJointStatesCuda(),
                 d_total_gradient,
-                0.99,
+                1.0,
                 single_arm_states->getNumOfStates(),
                 single_arm_states->getNumOfJoints(),
                 d_active_joint_map
