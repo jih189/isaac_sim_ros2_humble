@@ -905,28 +905,17 @@ namespace CUDAMPLib {
         }
     }
 
-    void SingleArmSpace::projectStates(BaseStatesPtr states, std::vector<std::string> constraint_names)
+    void SingleArmSpace::projectStates(BaseStatesPtr states)
     {
         // cast to SingleArmStatesPtr
         SingleArmStatesPtr single_arm_states = std::dynamic_pointer_cast<SingleArmStates>(states);
-
-        // find the indices of the projected constraints
-        std::vector<int> prjected_constraint_indices;
-        for (size_t i = 0; i < constraints_.size(); i++)
-        {
-            // if constraints_[i]->getName() is in constraint_names, then project
-            if (std::find(constraint_names.begin(), constraint_names.end(), constraints_[i]->getName()) != constraint_names.end())
-            {
-                prjected_constraint_indices.push_back(i);
-            }
-        }
 
         for (int t = 0; t < CUDAMPLib_PROJECT_MAX_ITERATION; t++)
         {
             // forward kinematics
             single_arm_states->calculateForwardKinematics();
 
-            for (int i : prjected_constraint_indices)
+            for (int i : projectable_constraint_indices_)
             {
                 if (constraints_[i]->isProjectable())
                 {
@@ -938,49 +927,49 @@ namespace CUDAMPLib {
                 }
             }
 
-            single_arm_states->calculateTotalGradientAndError(prjected_constraint_indices);
+            single_arm_states->calculateTotalGradientAndError(projectable_constraint_indices_);
 
             // print the total gradient and error
             float * d_total_costs = single_arm_states->getTotalCostsCuda(); // [num_of_states]
 
             float * d_total_gradient = single_arm_states->getTotalGradientCuda(); // [num_of_states * num_of_joints]
 
-            std::cout << "Iteration: " << t << std::endl;
+            // std::cout << "Iteration: " << t << std::endl;
 
-            // print joint values
-            std::vector<std::vector<float>> joint_values = single_arm_states->getJointStatesHost();
-            std::cout << "Joint values" << std::endl;
-            for (size_t i = 0; i < joint_values.size(); i++)
-            {
-                for (size_t j = 0; j < joint_values[i].size(); j++)
-                {
-                    std::cout << joint_values[i][j] << " ";
-                }
-                std::cout << std::endl;
-            }
+            // // print joint values
+            // std::vector<std::vector<float>> joint_values = single_arm_states->getJointStatesHost();
+            // std::cout << "Joint values" << std::endl;
+            // for (size_t i = 0; i < joint_values.size(); i++)
+            // {
+            //     for (size_t j = 0; j < joint_values[i].size(); j++)
+            //     {
+            //         std::cout << joint_values[i][j] << " ";
+            //     }
+            //     std::cout << std::endl;
+            // }
 
-            // print total gradient
-            std::vector<float> total_gradient(single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints(), 0.0);
-            cudaMemcpy(total_gradient.data(), d_total_gradient, single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToHost);
-            std::cout << "Total gradient" << std::endl;
-            for (size_t i = 0; i < total_gradient.size(); i++)
-            {
-                std::cout << total_gradient[i] << " ";
-                if ((i + 1) % single_arm_states->getNumOfJoints() == 0)
-                {
-                    std::cout << std::endl;
-                }
-            }
+            // // print total gradient
+            // std::vector<float> total_gradient(single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints(), 0.0);
+            // cudaMemcpy(total_gradient.data(), d_total_gradient, single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() * sizeof(float), cudaMemcpyDeviceToHost);
+            // std::cout << "Total gradient" << std::endl;
+            // for (size_t i = 0; i < total_gradient.size(); i++)
+            // {
+            //     std::cout << total_gradient[i] << " ";
+            //     if ((i + 1) % single_arm_states->getNumOfJoints() == 0)
+            //     {
+            //         std::cout << std::endl;
+            //     }
+            // }
 
-            // print total costs
-            std::vector<float> total_costs(single_arm_states->getNumOfStates(), 0.0);
-            cudaMemcpy(total_costs.data(), d_total_costs, single_arm_states->getNumOfStates() * sizeof(float), cudaMemcpyDeviceToHost);
-            std::cout << "Total costs" << std::endl;
-            for (size_t i = 0; i < total_costs.size(); i++)
-            {
-                std::cout << total_costs[i] << " ";
-            }
-            std::cout << std::endl;
+            // // print total costs
+            // std::vector<float> total_costs(single_arm_states->getNumOfStates(), 0.0);
+            // cudaMemcpy(total_costs.data(), d_total_costs, single_arm_states->getNumOfStates() * sizeof(float), cudaMemcpyDeviceToHost);
+            // std::cout << "Total costs" << std::endl;
+            // for (size_t i = 0; i < total_costs.size(); i++)
+            // {
+            //     std::cout << total_costs[i] << " ";
+            // }
+            // std::cout << std::endl;
 
             // update the states
             int threadsPerBlock = 256;

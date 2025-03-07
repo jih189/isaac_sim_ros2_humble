@@ -504,7 +504,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     // single_arm_states->update(); // update robot collision spheres and calculate forward kinematics and space jacobian for each link.
 
     // project the states
-    single_arm_space->projectStates(single_arm_states, {"task_space_constraint"});
+    single_arm_space->projectStates(single_arm_states);
 
     // // check states
     // std::vector<bool> state_feasibility;

@@ -39,29 +39,6 @@ namespace CUDAMPLib{
             }
         }
 
-        //print the active joint map
-        printf("Active Joint Map: ");
-        for (size_t i = 0; i < active_joint_map_as_int.size(); i++)
-        {
-            printf("%d ", active_joint_map_as_int[i]);
-        }
-        printf("\n");
-
-        // print the lower bound full and upper bound full
-        printf("Lower Bound Full: ");
-        for (size_t i = 0; i < lower_bound_full.size(); i++)
-        {
-            printf("%f ", lower_bound_full[i]);
-        }
-        printf("\n");
-
-        printf("Upper Bound Full: ");
-        for (size_t i = 0; i < upper_bound_full.size(); i++)
-        {
-            printf("%f ", upper_bound_full[i]);
-        }
-        printf("\n");
-
         size_t active_joint_map_as_int_bytes = active_joint_map_as_int.size() * sizeof(int);
         size_t lower_bound_full_bytes = lower_bound_full.size() * sizeof(float);
         size_t upper_bound_full_bytes = upper_bound_full.size() * sizeof(float);

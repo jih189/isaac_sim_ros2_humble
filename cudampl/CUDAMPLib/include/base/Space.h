@@ -15,7 +15,13 @@ namespace CUDAMPLib
                 later, the states will not be aware of the new constraints. Or we have to update all
                 generated states with the new constraints which is not efficient.
              */
-            BaseSpace(size_t dim, std::vector<BaseConstraintPtr> constraints) : dim(dim), constraints_(constraints) {}
+            BaseSpace(size_t dim, std::vector<BaseConstraintPtr> constraints) : dim(dim), constraints_(constraints) {
+                for (size_t i = 0; i < constraints.size(); i++) {
+                    if (constraints[i]->isProjectable()) {
+                        projectable_constraint_indices_.push_back(i);
+                    }
+                }
+            }
 
             virtual ~BaseSpace() {}
 
@@ -84,7 +90,7 @@ namespace CUDAMPLib
                 float max_distance
             ) = 0;
 
-            virtual void projectStates(BaseStatesPtr states, std::vector<std::string> constraint_names)
+            virtual void projectStates(BaseStatesPtr states)
             {
                 // raise an exception if the function is not implemented
                 throw std::runtime_error("The function projectStates is not implemented.");
@@ -110,6 +116,7 @@ namespace CUDAMPLib
         protected:
             size_t dim;
             std::vector<BaseConstraintPtr> constraints_;
+            std::vector<int> projectable_constraint_indices_;
     };
 
     typedef std::shared_ptr<BaseSpace> BaseSpacePtr;
