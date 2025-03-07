@@ -150,6 +150,7 @@ namespace CUDAMPLib
             }
 
             std::vector<std::vector<float>> getCostsHost() {
+
                 std::vector<std::vector<float>> costs_host(num_of_states_, std::vector<float>(space_info->num_of_constraints, 0.0));
                 std::vector<float> costs_host_flatten(num_of_states_ * space_info->num_of_constraints, 0.0);
                 cudaMemcpy(costs_host_flatten.data(), d_costs, num_of_states_ * space_info->num_of_constraints * sizeof(float), cudaMemcpyDeviceToHost);

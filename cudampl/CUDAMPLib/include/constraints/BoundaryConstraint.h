@@ -10,6 +10,7 @@
 
 namespace CUDAMPLib
 {
+    #define CUDAMPLib_BOUNDARY_CONSTRAINT_TOLERANCE 0.0001f
     class BoundaryConstraint : public BaseConstraint
     {
         public:

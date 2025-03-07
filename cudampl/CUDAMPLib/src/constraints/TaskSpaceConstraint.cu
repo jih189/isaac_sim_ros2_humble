@@ -78,6 +78,7 @@ namespace CUDAMPLib{
         const float * d_offset_pose_in_task_link, // [16] as a 4x4 matrix
         const float * d_reference_frame, // [6] for x, y, z, roll, pitch, yaw
         const float * d_tolerance, // [6]
+        const float cost_tolerance, // if the cost is less than this value, set it to 0.0
         float * d_cost_of_current_constraint // output
     )
     {
@@ -165,6 +166,11 @@ namespace CUDAMPLib{
         // --- Compute Euclidean distance in 6D task space ---
         float cost = sqrtf(cost_x + cost_y + cost_z + cost_roll + cost_pitch + cost_yaw);
 
+        if (cost < cost_tolerance)
+        {
+            cost = 0.0f;
+        }
+
         // Store the computed cost in the output array.
         d_cost_of_current_constraint[idx] = cost;
     }
@@ -192,7 +198,7 @@ namespace CUDAMPLib{
         int threadsPerBlock = 256;
         int blocksPerGrid = (single_arm_states->getNumOfStates() + threadsPerBlock - 1) / threadsPerBlock;
 
-        computeTaskSpaceCostKernel<<<blocksPerGrid, blocksPerGrid>>>(
+        computeTaskSpaceCostKernel<<<blocksPerGrid, threadsPerBlock>>>(
             single_arm_states->getNumOfStates(),
             single_arm_states->getLinkPosesInBaseLinkCuda(),
             space_info->num_of_links,
@@ -200,6 +206,7 @@ namespace CUDAMPLib{
             d_offset_pose_in_task_link_,
             d_reference_frame_,
             d_tolerance_,
+            CUDAMPLib_TASK_SPACE_CONSTRAINT_TOLERANCE,
             d_cost_of_current_constraint
         );
 

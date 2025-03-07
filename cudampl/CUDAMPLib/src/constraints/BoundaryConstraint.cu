@@ -19,25 +19,28 @@ namespace CUDAMPLib{
             [](bool b) { return b ? 1 : 0; });
 
         // Construct the boundary for full joints include non-active joints
-        std::vector<float> lower_bound_full(active_joint_map.size());
-        std::vector<float> upper_bound_full(active_joint_map.size());
+        // std::vector<float> lower_bound_full(active_joint_map.size());
+        // std::vector<float> upper_bound_full(active_joint_map.size());
 
-        int active_joint_index = 0;
-        for (size_t i = 0; i < active_joint_map.size(); i++)
-        {
-            if (active_joint_map[i])
-            {
-                lower_bound_full[i] = lower_bound[active_joint_index];
-                upper_bound_full[i] = upper_bound[active_joint_index];
-                active_joint_index++;
-            }
-            else
-            {
-                // Set to 0.0 for non-active joints
-                lower_bound_full[i] = 0.0; 
-                upper_bound_full[i] = 0.0;
-            }
-        }
+        // int active_joint_index = 0;
+        // for (size_t i = 0; i < active_joint_map.size(); i++)
+        // {
+        //     if (active_joint_map[i])
+        //     {
+        //         lower_bound_full[i] = lower_bound[active_joint_index];
+        //         upper_bound_full[i] = upper_bound[active_joint_index];
+        //         active_joint_index++;
+        //     }
+        //     else
+        //     {
+        //         // Set to 0.0 for non-active joints
+        //         lower_bound_full[i] = 0.0; 
+        //         upper_bound_full[i] = 0.0;
+        //     }
+        // }
+
+        std::vector<float> lower_bound_full = lower_bound;
+        std::vector<float> upper_bound_full = upper_bound;
 
         size_t active_joint_map_as_int_bytes = active_joint_map_as_int.size() * sizeof(int);
         size_t lower_bound_full_bytes = lower_bound_full.size() * sizeof(float);
@@ -68,6 +71,7 @@ namespace CUDAMPLib{
         float * d_upper_bound_full,
         int num_of_states,
         int num_of_joints,
+        float cost_tolerance, // If the cost is less than this value, set it to 0.0
         float * d_cost_of_current_constraint
     )
     {
@@ -98,7 +102,15 @@ namespace CUDAMPLib{
             }
         }
 
-        d_cost_of_current_constraint[state_id] = sqrtf(cost);
+        // If the cost is less than the tolerance, set it to 0.0
+        if (cost < cost_tolerance)
+        {
+            d_cost_of_current_constraint[state_id] = 0.0;
+        }
+        else
+        {
+            d_cost_of_current_constraint[state_id] = sqrtf(cost);
+        }
     }
 
     void BoundaryConstraint::computeCost(BaseStatesPtr states)
@@ -131,6 +143,7 @@ namespace CUDAMPLib{
             d_upper_bound_full_,
             num_of_states,
             space_info->num_of_joints,
+            CUDAMPLib_BOUNDARY_CONSTRAINT_TOLERANCE,
             d_cost_of_current_constraint
         );
 

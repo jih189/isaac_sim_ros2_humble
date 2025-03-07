@@ -9,6 +9,28 @@ namespace CUDAMPLib
         goal_states_vector = goal_joint_values;
     }
 
+    SingleArmTask::SingleArmTask(const std::vector<std::vector<float>>& start_joint_values, const BaseSpacePtr& goal_region, int goal_config_sampling_attempts)
+    {
+        // copy the start joint values
+        start_states_vector = start_joint_values;
+
+        // cast the goal region to SingleArmSpace
+        auto single_arm_space = std::static_pointer_cast<SingleArmSpace>(goal_region);
+
+        CUDAMPLib::SingleArmStatesPtr goal_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(goal_config_sampling_attempts));
+        single_arm_space->projectStates(goal_states);
+
+        goal_states->update();
+        std::vector<bool> state_feasibility;
+        single_arm_space->checkStates(goal_states, state_feasibility);
+
+        // filter the goal states
+        goal_states->filterStates(state_feasibility);
+
+        // get the goal joint values
+        goal_states_vector = goal_states->getJointStatesHost();
+    }
+
     SingleArmTask::~SingleArmTask()
     {
         // Do something

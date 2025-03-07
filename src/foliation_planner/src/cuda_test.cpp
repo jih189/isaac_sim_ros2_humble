@@ -431,25 +431,23 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
         return;
     }
 
-    // // create task space constraint
-    // std::vector<float> reference_frame = {0.9, 0.0, 0.7, 0.0, 0.0, 0.0};
-    // std::vector<float> tolerance = {0.001, 0.001, 0.001, 0.01, 0.01, 0.01};
-    // CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
-    //     "task_space_constraint",
-    //     task_link_index,
-    //     Eigen::Matrix4d::Identity(),
-    //     reference_frame,
-    //     tolerance
-    // );
-    // constraints.push_back(task_space_constraint);
+    // create task space constraint
+    std::vector<float> reference_frame = {0.9, 0.0, 0.7, 0.0, 0.0, 0.0};
+    std::vector<float> tolerance = {0.0001, 0.0001, 0.0001, 0.0001, 0.0001, 0.0001};
+    CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
+        "task_space_constraint",
+        task_link_index,
+        Eigen::Matrix4d::Identity(),
+        reference_frame,
+        tolerance
+    );
+    constraints.push_back(task_space_constraint);
 
     // create boundary constraint
-    std::vector<float> lower_bound = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    std::vector<float> upper_bound = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     CUDAMPLib::BoundaryConstraintPtr boundary_constraint = std::make_shared<CUDAMPLib::BoundaryConstraint>(
         "boundary_constraint",
-        lower_bound,
-        upper_bound,
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
         robot_info.getActiveJointMap()
     );
     constraints.push_back(boundary_constraint);
@@ -506,9 +504,10 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     // project the states
     single_arm_space->projectStates(single_arm_states);
 
-    // // check states
-    // std::vector<bool> state_feasibility;
-    // single_arm_space->checkStates(single_arm_states, state_feasibility);
+    // check states
+    single_arm_states->update();
+    std::vector<bool> state_feasibility;
+    single_arm_space->checkStates(single_arm_states, state_feasibility);
 
     // visualize the states
     std::vector<std::string> display_links_names = robot_info.getLinkNames();
@@ -572,6 +571,152 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     }
 
     robot_state.reset();
+}
+
+void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
+    int task_link_index = -1;
+    for (size_t i = 0; i < robot_info.getLinkNames().size(); i++)
+    {
+        if (robot_info.getLinkNames()[i] == "wrist_roll_link")
+        {
+            task_link_index = i;
+            break;
+        }
+    }
+
+    if (task_link_index == -1)
+    {
+        RCLCPP_ERROR(LOGGER, "Failed to find the task link index");
+        return;
+    }
+
+    // create task space constraint
+    std::vector<float> reference_frame = {0.9, 0.0, 0.7, 0.0, 0.0, 0.0};
+    std::vector<float> tolerance = {0.0001, 0.0001, 0.0001, 0.0001, 0.0001, 0.0001};
+    CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
+        "task_space_constraint",
+        task_link_index,
+        Eigen::Matrix4d::Identity(),
+        reference_frame,
+        tolerance
+    );
+    constraints.push_back(task_space_constraint);
+
+    // create boundary constraint
+    CUDAMPLib::BoundaryConstraintPtr boundary_constraint = std::make_shared<CUDAMPLib::BoundaryConstraint>(
+        "boundary_constraint",
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getActiveJointMap()
+    );
+    constraints.push_back(boundary_constraint);
+
+    // create self collision constraint
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create space
+    CUDAMPLib::BaseSpacePtr goal_region = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames(),
+        0.02f
+    );
+
+    // start state
+    std::vector<float> start_joint_values = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    // start state set
+    std::vector<std::vector<float>> start_joint_values_set;
+    start_joint_values_set.push_back(start_joint_values);
+
+    // create task with goal region TODO
+    CUDAMPLib::SingleArmTaskPtr task = std::make_shared<CUDAMPLib::SingleArmTask>(
+        start_joint_values_set,
+        goal_region
+    );
+
+    // visualize the states
+    std::vector<std::string> display_links_names = robot_info.getLinkNames();
+    std::vector<std::vector<float>> states_joint_values = task->getGoalStatesVector();
+
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
+    visualization_msgs::msg::MarkerArray sample_group_state_markers;
+    
+    for (size_t i = 0; i < states_joint_values.size(); i++)
+    {
+        // For each robot
+        std::vector<double> states_joint_values_i_double;
+        for (size_t j = 0; j < states_joint_values[i].size(); j++)
+        {
+            // print only active joints
+            if (robot_info.getActiveJointMap()[j])
+            {
+                states_joint_values_i_double.push_back((double)states_joint_values[i][j]);
+            }
+        }
+
+        robot_state->setJointGroupPositions(joint_model_group, states_joint_values_i_double);
+        robot_state->update();
+
+        visualization_msgs::msg::MarkerArray robot_marker;
+        // color
+        std_msgs::msg::ColorRGBA color;
+        color.r = 0.0;
+        color.g = 1.0;
+        color.b = 0.0;
+        color.a = 0.4;
+        const std::string sample_group_ns = "sampled_group";
+        robot_state->getRobotMarkers(robot_marker, display_links_names, color, sample_group_ns, rclcpp::Duration::from_seconds(0));
+        sample_group_state_markers.markers.insert(
+            sample_group_state_markers.markers.end(), 
+            robot_marker.markers.begin(), robot_marker.markers.end());
+    }
+
+    // update the id
+    for (size_t i = 0; i < sample_group_state_markers.markers.size(); i++)
+    {
+        sample_group_state_markers.markers[i].id = i;
+    }
+
+    // create marker publisher
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("/goal_region_markers", 10);
+
+    // publish the markers
+    while (rclcpp::ok())
+    {
+        marker_publisher->publish(sample_group_state_markers);
+        rclcpp::spin_some(node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    robot_state.reset();    
 }
 
 /**
@@ -1397,7 +1542,9 @@ int main(int argc, char** argv)
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_CONSTRAINT_PROJECT(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_CONSTRAINT_PROJECT(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 

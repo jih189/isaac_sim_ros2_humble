@@ -8,6 +8,7 @@ namespace CUDAMPLib
     {
         public:
             SingleArmTask(const std::vector<std::vector<float>>& start_joint_values, const std::vector<std::vector<float>>& goal_joint_values);
+            SingleArmTask(const std::vector<std::vector<float>>& start_joint_values, const BaseSpacePtr& goal_region, int goal_config_sampling_attempts=50);
             ~SingleArmTask();
             std::vector<std::vector<float>> getStartStatesVector();
             std::vector<std::vector<float>> getGoalStatesVector();

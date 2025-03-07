@@ -10,6 +10,7 @@
 
 namespace CUDAMPLib
 {
+    #define CUDAMPLib_TASK_SPACE_CONSTRAINT_TOLERANCE 0.0001f
     class TaskSpaceConstraint : public BaseConstraint
     {
         public:
