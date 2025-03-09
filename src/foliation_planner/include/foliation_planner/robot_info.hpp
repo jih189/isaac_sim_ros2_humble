@@ -565,6 +565,11 @@ class RobotInfo
         return default_joint_values;
     }
 
+    std::vector<std::string> getJointNames() const
+    {
+        return joint_name_to_parent_link;
+    }
+
     private:
     std::vector<int> joint_types;
     std::vector<Eigen::Isometry3d> joint_poses;

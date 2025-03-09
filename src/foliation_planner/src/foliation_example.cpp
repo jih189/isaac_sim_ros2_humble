@@ -130,11 +130,28 @@ int main(int argc, char** argv)
     robot_state->update();
     moveit::core::robotStateToRobotStateMsg(*robot_state, req.start_state);
 
-    // Goal constraint
+    // Construct goal constraint as joint values
     robot_state->setJointGroupPositions(joint_model_group, goal_joint_vals);
     robot_state->update();
     moveit_msgs::msg::Constraints goal_constraint = 
         kinematic_constraints::constructGoalConstraints(*robot_state, joint_model_group);
+
+    // // Construct goal constraint as pose
+    // geometry_msgs::msg::PoseStamped target_pose;
+    // target_pose.header.frame_id = "base_link";
+    // target_pose.pose.position.x = 0.5;
+    // target_pose.pose.position.y = 0.0;
+    // target_pose.pose.position.z = 0.5;
+
+    // target_pose.pose.orientation.x = 0.0;
+    // target_pose.pose.orientation.y = 0.0;
+    // target_pose.pose.orientation.z = 0.0;
+    // target_pose.pose.orientation.w = 1.0;
+
+    // moveit_msgs::msg::Constraints goal_constraint = kinematic_constraints::constructGoalConstraints(
+    //     "wrist_roll_link", target_pose, 0.01, 0.01);
+
+
     req.goal_constraints.clear();
     req.goal_constraints.push_back(goal_constraint);
 

@@ -16,6 +16,8 @@
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
 #include <CUDAMPLib/constraints/EnvConstraint.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
+#include <CUDAMPLib/constraints/TaskSpaceConstraint.h>
+#include <CUDAMPLib/constraints/BoundaryConstraint.h>
 #include <CUDAMPLib/tasks/SingleArmTask.h>
 #include <CUDAMPLib/planners/RRG.h>
 #include <CUDAMPLib/termination/StepTermination.h>
@@ -100,7 +102,7 @@ private:
     moveit::core::RobotStatePtr& robot_state,
     const moveit::core::JointModelGroup* joint_model_group, 
     const std::vector<Eigen::Vector3d> obstacle_points,
-    const std::vector<double>& start_joint_vals, const std::vector<double>& goal_joint_vals, 
+    const std::vector<double>& start_joint_vals, std::vector<CUDAMPLib::BaseConstraintPtr> goal_constraints,
     robot_trajectory::RobotTrajectoryPtr& joint_trajectory,
     float max_planning_time);
 };

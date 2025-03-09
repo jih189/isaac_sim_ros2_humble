@@ -351,7 +351,7 @@ namespace CUDAMPLib {
         SingleArmStatesPtr single_arm_states = std::dynamic_pointer_cast<SingleArmStates>(states);
 
         // get the joint states from the states
-        std::vector<std::vector<float>> joint_states = single_arm_states->getJointStatesHost();
+        std::vector<std::vector<float>> joint_states = single_arm_states->getJointStatesFullHost();
 
         // filer the joint states with active_joint_map_
         std::vector<std::vector<float>> joint_states_filtered;
@@ -675,8 +675,8 @@ namespace CUDAMPLib {
         getSpaceInfo(space_info);
 
         // get the joint states from the states
-        std::vector<std::vector<float>> joint_states1 = single_arm_states1->getJointStatesHost();
-        std::vector<std::vector<float>> joint_states2 = single_arm_states2->getJointStatesHost();
+        std::vector<std::vector<float>> joint_states1 = single_arm_states1->getJointStatesFullHost();
+        std::vector<std::vector<float>> joint_states2 = single_arm_states2->getJointStatesFullHost();
 
         std::vector<int> motion_start;
         std::vector<int> motion_end;
@@ -793,7 +793,7 @@ namespace CUDAMPLib {
         getSpaceInfo(space_info);
 
         // get the joint states from the states
-        std::vector<std::vector<float>> waypoints_joint_values = single_arm_waypoints->getJointStatesHost();
+        std::vector<std::vector<float>> waypoints_joint_values = single_arm_waypoints->getJointStatesFullHost();
 
         std::vector<std::vector<float>> path_in_host;
         for (int i = 0; i < num_of_waypoints - 1; i++)
@@ -937,7 +937,7 @@ namespace CUDAMPLib {
             // std::cout << "Iteration: " << t << std::endl;
 
             // // print joint values
-            // std::vector<std::vector<float>> joint_values = single_arm_states->getJointStatesHost();
+            // std::vector<std::vector<float>> joint_values = single_arm_states->getJointStatesFullHost();
             // std::cout << "Joint values" << std::endl;
             // for (size_t i = 0; i < joint_values.size(); i++)
             // {
@@ -1014,6 +1014,7 @@ namespace CUDAMPLib {
 
         // set number of active joints
         space_info->num_of_active_joints = num_of_active_joints_;
+        space_info->active_joint_map = active_joint_map_;
     }
 
     BaseStateManagerPtr SingleArmSpace::createStateManager()

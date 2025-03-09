@@ -512,7 +512,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     // visualize the states
     std::vector<std::string> display_links_names = robot_info.getLinkNames();
 
-    std::vector<std::vector<float>> states_joint_values = single_arm_states->getJointStatesHost();
+    std::vector<std::vector<float>> states_joint_values = single_arm_states->getJointStatesFullHost();
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     // set robot state to default state
@@ -847,7 +847,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     std::vector<visualization_msgs::msg::MarkerArray> sample_group_state_markers;
 
-    std::vector<std::vector<float>> states_joint_values = sampled_states->getJointStatesHost();
+    std::vector<std::vector<float>> states_joint_values = sampled_states->getJointStatesFullHost();
     for (size_t i = 0; i < states_joint_values.size(); i++)
     {
         // for (size_t j = 0; j < states_joint_values[i].size(); j++)
@@ -1139,8 +1139,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     CUDAMPLib::SingleArmStatesPtr goal_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(goal_group_states);
 
     // get the joint values
-    std::vector<std::vector<float>> start_group_joint_values = start_group_states_single_arm->getJointStatesHost();
-    std::vector<std::vector<float>> goal_group_joint_values = goal_group_states_single_arm->getJointStatesHost();
+    std::vector<std::vector<float>> start_group_joint_values = start_group_states_single_arm->getJointStatesFullHost();
+    std::vector<std::vector<float>> goal_group_joint_values = goal_group_states_single_arm->getJointStatesFullHost();
 
     std::vector<visualization_msgs::msg::MarkerArray> start_group_state_markers;
     std::vector<visualization_msgs::msg::MarkerArray> goal_group_state_markers;

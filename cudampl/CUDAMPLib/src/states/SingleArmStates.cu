@@ -839,7 +839,7 @@ namespace CUDAMPLib
         CUDA_CHECK(cudaGetLastError());
     }
 
-    std::vector<std::vector<float>> SingleArmStates::getJointStatesHost() const
+    std::vector<std::vector<float>> SingleArmStates::getJointStatesFullHost() const
     {
         // Allocate memory for the joint states
         std::vector<float> joint_states_flatten(num_of_states_ * num_of_joints, 0.0);
@@ -855,6 +855,31 @@ namespace CUDAMPLib
             {
                 joint_states[i][j] = joint_states_flatten[i * num_of_joints + j];
             }
+        }
+
+        return joint_states;
+    }
+
+    std::vector<std::vector<float>> SingleArmStates::getJointStatesHost() const
+    {
+        // get space info
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+        std::vector<std::vector<float>> joint_states_full = this->getJointStatesFullHost();
+
+        // Allocate memory for the joint states
+        std::vector<std::vector<float>> joint_states;
+
+        for (int i = 0; i < num_of_states_; i++)
+        {
+            std::vector<float> joint_state;
+            for (int j = 0; j < num_of_joints; j++)
+            {
+                if (space_info_single_arm_space->active_joint_map[j] == 1)
+                {
+                    joint_state.push_back(joint_states_full[i][j]);
+                }
+            }
+            joint_states.push_back(joint_state);
         }
 
         return joint_states;
@@ -1217,7 +1242,7 @@ namespace CUDAMPLib
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
 
         // Get the joint states
-        std::vector<std::vector<float>> joint_states = getJointStatesHost();
+        std::vector<std::vector<float>> joint_states = getJointStatesFullHost();
 
         // print states name
         printf("SingleArmStates: \n");

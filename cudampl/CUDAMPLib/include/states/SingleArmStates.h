@@ -24,6 +24,7 @@ namespace CUDAMPLib
         std::vector<float> lower_bound;
         std::vector<float> upper_bound;
         std::vector<std::string> link_names;
+        std::vector<bool> active_joint_map;
 
         // address of the device memory about the space information
         int * d_joint_types;
@@ -102,6 +103,11 @@ namespace CUDAMPLib
                 @brief Get the joint states in host memory.
                 @return The joint states in host memory. The joint states are represented as a 
                           list of configurations, each represented as a list of floats.
+             */
+            std::vector<std::vector<float>> getJointStatesFullHost() const;
+
+            /**
+                @brief Get the joint states of active joints in host memory.
              */
             std::vector<std::vector<float>> getJointStatesHost() const;
 

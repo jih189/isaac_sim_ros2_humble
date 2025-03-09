@@ -98,7 +98,7 @@ namespace CUDAMPLib
         std::vector<int> & right_index_of_pair
     )
     {
-        if (start_group_indexs.size() == 0 || goal_group_indexs.size() == 0 || start_group_indexs.size() != goal_group_indexs.size())
+        if (start_group_indexs.size() == 0 || goal_group_indexs.size() == 0)
         {
             // throw error
             throw std::runtime_error("Invalid input for getAllCombinations");

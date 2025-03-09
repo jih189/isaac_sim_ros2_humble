@@ -39,7 +39,55 @@ bool FoliationInterface::solve(
   {
     goal_joint_vals.push_back(joint_constraint.position);
   }
+
+  if (request.goal_constraints.size() != 1)
+  {
+    // print error in red
+    std::cout << "\033[1;31m" << "For now, only one goal constraint is supported" << "\033[0m" << std::endl;
+    return false;
+  }
   
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+  std::vector<CUDAMPLib::BaseConstraintPtr> goal_constraints;
+
+  // Create boundary constraints for goal constraints.
+  // get joint names
+  std::vector<std::string> joint_names = robot_info_ptr_->getJointNames();
+  std::vector<float> goal_constraint_lower_bounds;
+  std::vector<float> goal_constraint_upper_bounds;
+  // print joint names
+  for (size_t i = 0; i < joint_names.size(); i++)
+  {
+    // check if this joint is in the goal constraints
+    bool is_in_goal_constraints = false;
+    for (const auto& joint_constraint : request.goal_constraints[0].joint_constraints)
+    {
+      if (joint_constraint.joint_name == joint_names[i])
+      {
+        is_in_goal_constraints = true;
+        goal_constraint_lower_bounds.push_back(joint_constraint.position - joint_constraint.tolerance_below);
+        goal_constraint_upper_bounds.push_back(joint_constraint.position + joint_constraint.tolerance_above);
+        break;
+      }
+    }
+    if (!is_in_goal_constraints)
+    {
+      goal_constraint_lower_bounds.push_back(0.0);
+      goal_constraint_upper_bounds.push_back(0.0);
+    }
+  }
+
+  CUDAMPLib::BoundaryConstraintPtr goal_boundary_constraint = std::make_shared<CUDAMPLib::BoundaryConstraint>(
+      "goal_boundary_constraint",
+      goal_constraint_lower_bounds,
+      goal_constraint_upper_bounds,
+      robot_info_ptr_->getActiveJointMap()
+  );
+
+  goal_constraints.push_back(goal_boundary_constraint);
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   // Create a robot trajectory
   robot_trajectory::RobotTrajectoryPtr result_traj = std::make_shared<robot_trajectory::RobotTrajectory>(
     planning_scene->getRobotModel(), request.group_name);
@@ -49,7 +97,7 @@ bool FoliationInterface::solve(
   // Solve the problem
   // We need to check if the environment collision obstacles is changed or not. If so, then
   // we need to reinitialize the planner.
-  bool is_solved = solve_motion_task(start_state, joint_model_group, obstacle_points, start_joint_vals, goal_joint_vals, result_traj, request.allowed_planning_time);
+  bool is_solved = solve_motion_task(start_state, joint_model_group, obstacle_points, start_joint_vals, goal_constraints, result_traj, request.allowed_planning_time);
 
   rclcpp::Time end_time = node_->now();
 
@@ -83,7 +131,7 @@ bool FoliationInterface::solve_motion_task(
     const moveit::core::JointModelGroup* joint_model_group, 
     const std::vector<Eigen::Vector3d> obstacle_points,
     const std::vector<double>& start_joint_vals, 
-    const std::vector<double>& goal_joint_vals, 
+    std::vector<CUDAMPLib::BaseConstraintPtr> goal_constraints,
     robot_trajectory::RobotTrajectoryPtr& joint_trajectory,
     float max_planning_time
     )
@@ -143,18 +191,40 @@ bool FoliationInterface::solve_motion_task(
   }
   start_joint_values_set.push_back(start_joint_vals_float);
 
-  std::vector<std::vector<float>> goal_joint_values_set;
-  std::vector<float> goal_joint_vals_float;
-  for (const auto& val : goal_joint_vals)
-  {
-    goal_joint_vals_float.push_back(val);
-  }
-  goal_joint_values_set.push_back(goal_joint_vals_float);
+  // std::vector<std::vector<float>> goal_joint_values_set;
+  // std::vector<float> goal_joint_vals_float;
+  // for (const auto& val : goal_joint_vals)
+  // {
+  //   goal_joint_vals_float.push_back(val);
+  // }
+  // goal_joint_values_set.push_back(goal_joint_vals_float);
+
+  // create space for goal region
+  goal_constraints.push_back(env_constraint);
+  goal_constraints.push_back(self_collision_constraint_);
+
+  CUDAMPLib::SingleArmSpacePtr goal_region = std::make_shared<CUDAMPLib::SingleArmSpace>(
+    robot_info_ptr_->getDimension(),
+    goal_constraints,
+    robot_info_ptr_->getJointTypes(),
+    robot_info_ptr_->getJointPoses(),
+    robot_info_ptr_->getJointAxes(),
+    robot_info_ptr_->getLinkMaps(),
+    robot_info_ptr_->getCollisionSpheresMap(),
+    robot_info_ptr_->getCollisionSpheresPos(),
+    robot_info_ptr_->getCollisionSpheresRadius(),
+    robot_info_ptr_->getActiveJointMap(),
+    robot_info_ptr_->getLowerBounds(),
+    robot_info_ptr_->getUpperBounds(),
+    robot_info_ptr_->getDefaultJointValues(),
+    robot_info_ptr_->getLinkNames(),
+    0.02 // resolution
+  );
 
   // create the task
   CUDAMPLib::SingleArmTaskPtr problem_task = std::make_shared<CUDAMPLib::SingleArmTask>(
       start_joint_values_set,
-      goal_joint_values_set
+      goal_region
   );
 
   // create the planner

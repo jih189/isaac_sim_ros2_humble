@@ -17,6 +17,10 @@ namespace CUDAMPLib
         // cast the goal region to SingleArmSpace
         auto single_arm_space = std::static_pointer_cast<SingleArmSpace>(goal_region);
 
+        // get space information
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        single_arm_space->getSpaceInfo(space_info);
+
         CUDAMPLib::SingleArmStatesPtr goal_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(goal_config_sampling_attempts));
         single_arm_space->projectStates(goal_states);
 
