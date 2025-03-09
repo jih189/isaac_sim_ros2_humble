@@ -137,6 +137,53 @@ void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<
     }
 }
 
+void generate_state_markers(
+    const std::vector<std::vector<float>> & group_joint_values,
+    const moveit::core::JointModelGroup* joint_model_group,
+    moveit::core::RobotStatePtr robot_state,
+    const std::string & group_ns,
+    const std_msgs::msg::ColorRGBA color,
+    visualization_msgs::msg::MarkerArray & robot_marker_array
+)
+{
+    std::vector<visualization_msgs::msg::MarkerArray> group_state_markers;
+
+    std::vector<std::string> display_links_names = joint_model_group->getLinkModelNames();
+    // add end effector link by hard code
+    display_links_names.push_back(std::string("gripper_link"));
+    display_links_names.push_back(std::string("r_gripper_finger_link"));
+    display_links_names.push_back(std::string("l_gripper_finger_link"));
+
+    for (size_t i = 0; i < group_joint_values.size(); i++)
+    {
+        std::vector<double> group_joint_values_i_double;
+        for (size_t j = 0; j < group_joint_values[i].size(); j++)
+        {
+            group_joint_values_i_double.push_back((double)group_joint_values[i][j]);
+        }
+
+        robot_state->setJointGroupPositions(joint_model_group, group_joint_values_i_double);
+        robot_state->update();
+        visualization_msgs::msg::MarkerArray robot_marker;
+        robot_state->getRobotMarkers(robot_marker, display_links_names, color, group_ns, rclcpp::Duration::from_seconds(0));
+        group_state_markers.push_back(robot_marker);
+    }
+
+    robot_marker_array.markers.clear();
+
+    // conbine group state markers
+    for (size_t i = 0; i < group_state_markers.size(); i++)
+    {
+        robot_marker_array.markers.insert(robot_marker_array.markers.end(), group_state_markers[i].markers.begin(), group_state_markers[i].markers.end());
+    }
+
+    // update the id
+    for (size_t i = 0; i < robot_marker_array.markers.size(); i++)
+    {
+        robot_marker_array.markers[i].id = i;
+    }
+}
+
 void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
     std::string collision_spheres_file_path;
@@ -512,51 +559,22 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     // visualize the states
     std::vector<std::string> display_links_names = robot_info.getLinkNames();
 
-    std::vector<std::vector<float>> states_joint_values = single_arm_states->getJointStatesFullHost();
+    std::vector<std::vector<float>> states_joint_values = single_arm_states->getJointStatesHost();
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     // set robot state to default state
     robot_state->setToDefaultValues();
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
 
+    // create color
+    std_msgs::msg::ColorRGBA color_sample;
+    color_sample.r = 0.0;
+    color_sample.g = 1.0;
+    color_sample.b = 0.0;
+    color_sample.a = 0.4;
     visualization_msgs::msg::MarkerArray sample_group_state_markers;
+    generate_state_markers(states_joint_values, joint_model_group, robot_state, "sample_group", color_sample, sample_group_state_markers);
     
-    for (size_t i = 0; i < states_joint_values.size(); i++)
-    {
-        // For each robot
-        std::vector<double> states_joint_values_i_double;
-        for (size_t j = 0; j < states_joint_values[i].size(); j++)
-        {
-            // print only active joints
-            if (robot_info.getActiveJointMap()[j])
-            {
-                states_joint_values_i_double.push_back((double)states_joint_values[i][j]);
-            }
-        }
-
-        robot_state->setJointGroupPositions(joint_model_group, states_joint_values_i_double);
-        robot_state->update();
-
-        visualization_msgs::msg::MarkerArray robot_marker;
-        // color
-        std_msgs::msg::ColorRGBA color;
-        color.r = 0.0;
-        color.g = 1.0;
-        color.b = 0.0;
-        color.a = 0.4;
-        const std::string sample_group_ns = "sampled_group";
-        robot_state->getRobotMarkers(robot_marker, display_links_names, color, sample_group_ns, rclcpp::Duration::from_seconds(0));
-        sample_group_state_markers.markers.insert(
-            sample_group_state_markers.markers.end(), 
-            robot_marker.markers.begin(), robot_marker.markers.end());
-    }
-
-    // update the id
-    for (size_t i = 0; i < sample_group_state_markers.markers.size(); i++)
-    {
-        sample_group_state_markers.markers[i].id = i;
-    }
-
     // create marker publisher
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("/ik_solver_markers", 10);
 
@@ -650,7 +668,7 @@ void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model,
     std::vector<std::vector<float>> start_joint_values_set;
     start_joint_values_set.push_back(start_joint_values);
 
-    // create task with goal region TODO
+    // create task with goal region
     CUDAMPLib::SingleArmTaskPtr task = std::make_shared<CUDAMPLib::SingleArmTask>(
         start_joint_values_set,
         goal_region
@@ -666,38 +684,13 @@ void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model,
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
 
     visualization_msgs::msg::MarkerArray sample_group_state_markers;
-    
-    for (size_t i = 0; i < states_joint_values.size(); i++)
-    {
-        // For each robot
-        std::vector<double> states_joint_values_i_double;
-        for (size_t j = 0; j < states_joint_values[i].size(); j++)
-        {
-            states_joint_values_i_double.push_back((double)states_joint_values[i][j]);
-        }
-
-        robot_state->setJointGroupPositions(joint_model_group, states_joint_values_i_double);
-        robot_state->update();
-
-        visualization_msgs::msg::MarkerArray robot_marker;
-        // color
-        std_msgs::msg::ColorRGBA color;
-        color.r = 0.0;
-        color.g = 1.0;
-        color.b = 0.0;
-        color.a = 0.4;
-        const std::string sample_group_ns = "sampled_group";
-        robot_state->getRobotMarkers(robot_marker, display_links_names, color, sample_group_ns, rclcpp::Duration::from_seconds(0));
-        sample_group_state_markers.markers.insert(
-            sample_group_state_markers.markers.end(), 
-            robot_marker.markers.begin(), robot_marker.markers.end());
-    }
-
-    // update the id
-    for (size_t i = 0; i < sample_group_state_markers.markers.size(); i++)
-    {
-        sample_group_state_markers.markers[i].id = i;
-    }
+    // create color
+    std_msgs::msg::ColorRGBA color_sample;
+    color_sample.r = 0.0;
+    color_sample.g = 1.0;
+    color_sample.b = 0.0;
+    color_sample.a = 0.4;
+    generate_state_markers(states_joint_values, joint_model_group, robot_state, "sample_group", color_sample, sample_group_state_markers);
 
     // create marker publisher
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("/goal_region_markers", 10);
@@ -1134,96 +1127,40 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     CUDAMPLib::SingleArmStatesPtr start_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(start_group_states);
     CUDAMPLib::SingleArmStatesPtr goal_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(goal_group_states);
 
-    // get the joint values
-    std::vector<std::vector<float>> start_group_joint_values = start_group_states_single_arm->getJointStatesFullHost();
-    std::vector<std::vector<float>> goal_group_joint_values = goal_group_states_single_arm->getJointStatesFullHost();
+    // create color
+    std_msgs::msg::ColorRGBA color_start;
+    color_start.r = 0.0;
+    color_start.g = 1.0;
+    color_start.b = 0.0;
+    color_start.a = 0.4;
 
-    std::vector<visualization_msgs::msg::MarkerArray> start_group_state_markers;
-    std::vector<visualization_msgs::msg::MarkerArray> goal_group_state_markers;
-
-    std::vector<std::string> display_links_names = joint_model_group->getLinkModelNames();
-    // add end effector link by hard code
-    display_links_names.push_back(std::string("gripper_link"));
-    display_links_names.push_back(std::string("r_gripper_finger_link"));
-    display_links_names.push_back(std::string("l_gripper_finger_link"));
-
-    // print start and goal group joint values
-    for (size_t i = 0; i < start_group_joint_values.size(); i++)
-    {
-        std::vector<double> start_group_joint_values_i_double;
-        for (size_t j = 0; j < start_group_joint_values[i].size(); j++)
-        {
-            // print only active joints
-            if (robot_info.getActiveJointMap()[j])
-            {
-                start_group_joint_values_i_double.push_back((double)start_group_joint_values[i][j]);
-            }
-        }
-
-        robot_state->setJointGroupPositions(joint_model_group, start_group_joint_values_i_double);
-        robot_state->update();
-        visualization_msgs::msg::MarkerArray robot_marker;
-        // color
-        std_msgs::msg::ColorRGBA color;
-        color.r = 1.0;
-        color.g = 0.0;
-        color.b = 0.0;
-        color.a = 0.4;
-        const std::string start_group_ns = "start_group";
-        robot_state->getRobotMarkers(robot_marker, display_links_names, color, start_group_ns, rclcpp::Duration::from_seconds(0));
-        start_group_state_markers.push_back(robot_marker);
-    }
-
-    for (size_t i = 0; i < goal_group_joint_values.size(); i++)
-    {
-        std::vector<double> goal_group_joint_values_i_double;
-        for (size_t j = 0; j < goal_group_joint_values[i].size(); j++)
-        {
-            if (robot_info.getActiveJointMap()[j])
-            {
-                goal_group_joint_values_i_double.push_back((double)goal_group_joint_values[i][j]);
-            }
-        }
-
-        robot_state->setJointGroupPositions(joint_model_group, goal_group_joint_values_i_double);
-        robot_state->update();
-        visualization_msgs::msg::MarkerArray robot_marker;
-        // color
-        std_msgs::msg::ColorRGBA color;
-        color.r = 0.0;
-        color.g = 1.0;
-        color.b = 0.0;
-        color.a = 0.4;
-        const std::string goal_group_ns = "goal_group";
-        robot_state->getRobotMarkers(robot_marker, display_links_names, color, goal_group_ns, rclcpp::Duration::from_seconds(0));
-
-        goal_group_state_markers.push_back(robot_marker);
-    }
-
-    // conbine  start and goal group state markers
+    // visualize the states
     visualization_msgs::msg::MarkerArray start_group_state_markers_combined;
+    generate_state_markers(
+        start_group_states_single_arm->getJointStatesHost(),
+        joint_model_group,
+        robot_state,
+        "start_group",
+        color_start,
+        start_group_state_markers_combined
+    );
+
+    // create color
+    std_msgs::msg::ColorRGBA color_goal;
+    color_goal.r = 1.0;
+    color_goal.g = 0.0;
+    color_goal.b = 0.0;
+    color_goal.a = 0.4;
+
     visualization_msgs::msg::MarkerArray goal_group_state_markers_combined;
-    for (size_t i = 0; i < start_group_state_markers.size(); i++)
-    {
-        start_group_state_markers_combined.markers.insert(start_group_state_markers_combined.markers.end(), start_group_state_markers[i].markers.begin(), start_group_state_markers[i].markers.end());
-    }
-
-    // update the id
-    for (size_t i = 0; i < start_group_state_markers_combined.markers.size(); i++)
-    {
-        start_group_state_markers_combined.markers[i].id = i;
-    }
-
-    for (size_t i = 0; i < goal_group_state_markers.size(); i++)
-    {
-        goal_group_state_markers_combined.markers.insert(goal_group_state_markers_combined.markers.end(), goal_group_state_markers[i].markers.begin(), goal_group_state_markers[i].markers.end());
-    }
-
-    // update the id
-    for (size_t i = 0; i < goal_group_state_markers_combined.markers.size(); i++)
-    {
-        goal_group_state_markers_combined.markers[i].id = i;
-    }
+    generate_state_markers(
+        goal_group_states_single_arm->getJointStatesHost(),
+        joint_model_group,
+        robot_state,
+        "goal_group",
+        color_goal,
+        goal_group_state_markers_combined
+    );
 
     /************************** Debug **************************************/
 
@@ -1721,7 +1658,7 @@ int main(int argc, char** argv)
 
     // TEST_CONSTRAINT_PROJECT(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
@@ -1731,7 +1668,7 @@ int main(int argc, char** argv)
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
 
