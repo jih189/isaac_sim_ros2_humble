@@ -248,6 +248,12 @@ namespace CUDAMPLib {
 
         CUDA_CHECK(cudaGetLastError());
 
+        if (projectable_constraint_indices_.size() > 0)
+        {
+            // This space has projectable constraints, so we need to project the sampled states first.
+            this->projectStates(sampled_states);
+        }
+
         return sampled_states;
     }
 
@@ -721,7 +727,7 @@ namespace CUDAMPLib {
         // check the interpolated_states
         checkStates(interpolated_states, motion_state_feasibility);
 
-        // check the motion feasibility. TODO: This can be done in parallel
+        // check the motion feasibility.
         for (int i = 0; i < num_of_states1; i++)
         {
             bool feasible = true;

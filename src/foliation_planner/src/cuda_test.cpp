@@ -548,9 +548,6 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     }
     // single_arm_states->update(); // update robot collision spheres and calculate forward kinematics and space jacobian for each link.
 
-    // project the states
-    single_arm_space->projectStates(single_arm_states);
-
     // check states
     single_arm_states->update();
     std::vector<bool> state_feasibility;
@@ -1529,9 +1526,6 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
     CUDAMPLib::SingleArmStatesPtr sample_single_arm_states = 
         std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(10));
 
-    // project the sampled states to the task space constraint
-    single_arm_space->projectStates(sample_single_arm_states);
-
     // check states
     sample_single_arm_states->update();
     std::vector<bool> state_feasibility;
@@ -1658,7 +1652,7 @@ int main(int argc, char** argv)
 
     // TEST_CONSTRAINT_PROJECT(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
@@ -1668,7 +1662,7 @@ int main(int argc, char** argv)
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
 
