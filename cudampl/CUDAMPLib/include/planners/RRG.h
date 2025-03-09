@@ -97,8 +97,9 @@ namespace CUDAMPLib
                 @param goal_group_indexs The indexs of the goal group.
                 @param left_index_of_pair The left index of the pair.
                 @param right_index_of_pair The right index of the pair.
+                @return True if the function is successful, otherwise false.
              */
-            void getAllCombinations(
+            bool getAllCombinations(
                 const std::vector<int> & start_group_indexs,
                 const std::vector<int> & goal_group_indexs,
                 std::vector<int> & left_index_of_pair,

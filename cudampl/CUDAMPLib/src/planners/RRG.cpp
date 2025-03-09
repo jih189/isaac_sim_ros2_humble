@@ -91,7 +91,7 @@ namespace CUDAMPLib
         goal_states.reset();
     }
 
-    void RRG::getAllCombinations(
+    bool RRG::getAllCombinations(
         const std::vector<int> & start_group_indexs,
         const std::vector<int> & goal_group_indexs,
         std::vector<int> & left_index_of_pair,
@@ -100,8 +100,9 @@ namespace CUDAMPLib
     {
         if (start_group_indexs.size() == 0 || goal_group_indexs.size() == 0)
         {
-            // throw error
-            throw std::runtime_error("Invalid input for getAllCombinations");
+            // print in red color
+            printf("\033[1;31m start_group_indexs or goal_group_indexs is empty \033[0m \n");
+            return false;
         }
 
         // initialize the left and right index of the pair with size. The size of the left and right 
@@ -117,6 +118,7 @@ namespace CUDAMPLib
                 right_index_of_pair.push_back(goal_group_indexs[j]);
             }
         }
+        return true;
     }
 
     void RRG::getStartAndGoalGroupIndexs(
@@ -181,7 +183,12 @@ namespace CUDAMPLib
         // check if any pair of start and goal states is connected.
         std::vector<int> left_index_of_pair;
         std::vector<int> right_index_of_pair;
-        getAllCombinations(start_state_indexs_in_manager, goal_state_indexs_in_manager, left_index_of_pair, right_index_of_pair);
+        if(! getAllCombinations(start_state_indexs_in_manager, goal_state_indexs_in_manager, left_index_of_pair, right_index_of_pair))
+        {
+            task_->setFailureReason("InvalidInput");
+            return;
+        }
+        
         auto states_1_in_cuda = state_manager->get_states(left_index_of_pair);
         auto states_2_in_cuda = state_manager->get_states(right_index_of_pair);
 
