@@ -246,3 +246,22 @@ std::vector<std::vector<float>> CUDAMPLib::interpolateVectors(const std::vector<
     
     return interpolated;
 }
+
+std::vector<std::vector<float>> CUDAMPLib::removeRedundantVectors(const std::vector<std::vector<float>>& vec, const float tol) {
+    std::vector<std::vector<float>> unique;
+    for (const auto& v : vec) {
+        bool duplicate = false;
+        for (const auto& u : unique) {
+            if (std::equal(v.begin(), v.end(), u.begin(), [tol](float a, float b) {
+                return std::fabs(a - b) <= tol;
+            })) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            unique.push_back(v);
+        }
+    }
+    return unique;
+}

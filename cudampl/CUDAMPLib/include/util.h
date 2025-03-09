@@ -5,6 +5,8 @@
 #include <queue>
 #include <utility>  // For std::pair
 #include <iostream>
+#include <cmath>
+#include <algorithm>
 
 // This is a macro to check CUDA errors.
 #define CUDA_CHECK(call) { \
@@ -27,4 +29,5 @@ namespace CUDAMPLib
     std::vector<int> kLeastIndices(const std::vector<float>& nums, int k);
     std::vector<int> kLeastIndices(const std::vector<float>& nums, int k, const std::vector<int>& group_indices);
     std::vector<std::vector<float>> interpolateVectors(const std::vector<float>& v1, const std::vector<float>& v2, float resolution);
+    std::vector<std::vector<float>> removeRedundantVectors(const std::vector<std::vector<float>>& vec, const float tol);
 }

@@ -33,6 +33,9 @@ namespace CUDAMPLib
 
         // get the goal joint values
         goal_states_vector = goal_states->getJointStatesHost();
+
+        // remove redundant vectors
+        goal_states_vector = removeRedundantVectors(goal_states_vector, 1e-5f);
     }
 
     SingleArmTask::~SingleArmTask()
