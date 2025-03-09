@@ -130,38 +130,32 @@ int main(int argc, char** argv)
     robot_state->update();
     moveit::core::robotStateToRobotStateMsg(*robot_state, req.start_state);
 
-    // Construct goal constraint as joint values
-    robot_state->setJointGroupPositions(joint_model_group, goal_joint_vals);
-    robot_state->update();
-    moveit_msgs::msg::Constraints goal_constraint = 
-        kinematic_constraints::constructGoalConstraints(*robot_state, joint_model_group);
+    // // Construct goal constraint as joint values
+    // robot_state->setJointGroupPositions(joint_model_group, goal_joint_vals);
+    // robot_state->update();
+    // moveit_msgs::msg::Constraints goal_constraint = 
+    //     kinematic_constraints::constructGoalConstraints(*robot_state, joint_model_group);
 
-    // // Construct goal constraint as pose
-    // geometry_msgs::msg::PoseStamped target_pose;
-    // target_pose.header.frame_id = "base_link";
-    // target_pose.pose.position.x = 0.5;
-    // target_pose.pose.position.y = 0.0;
-    // target_pose.pose.position.z = 0.5;
+    // Construct goal constraint as pose
+    geometry_msgs::msg::PoseStamped target_pose;
+    target_pose.header.frame_id = "base_link";
+    target_pose.pose.position.x = 0.9;
+    target_pose.pose.position.y = 0.0;
+    target_pose.pose.position.z = 0.7;
 
-    // target_pose.pose.orientation.x = 0.0;
-    // target_pose.pose.orientation.y = 0.0;
-    // target_pose.pose.orientation.z = 0.0;
-    // target_pose.pose.orientation.w = 1.0;
+    target_pose.pose.orientation.x = 0.0;
+    target_pose.pose.orientation.y = 0.0;
+    target_pose.pose.orientation.z = 0.0;
+    target_pose.pose.orientation.w = 1.0;
 
-    // moveit_msgs::msg::Constraints goal_constraint = kinematic_constraints::constructGoalConstraints(
-    //     "wrist_roll_link", target_pose, 0.01, 0.01);
+    std::vector<double> position_tolerance = {1000, 1000, 1000};
+    std::vector<double> orientation_tolerance = {0.01, 0.01, 0.01};
 
+    moveit_msgs::msg::Constraints goal_constraint = kinematic_constraints::constructGoalConstraints(
+        "wrist_roll_link", target_pose, position_tolerance, orientation_tolerance);
 
     req.goal_constraints.clear();
     req.goal_constraints.push_back(goal_constraint);
-
-    // Set joint tolerance
-    std::vector<moveit_msgs::msg::JointConstraint> joint_constraints = req.goal_constraints[0].joint_constraints;
-    for (auto& joint_constraint : joint_constraints)
-    {
-        joint_constraint.tolerance_above = 0.001;
-        joint_constraint.tolerance_below = 0.001;
-    }
 
     planning_interface::PlannerManagerPtr planner_manager = planning_pipeline->getPlannerManager();
 

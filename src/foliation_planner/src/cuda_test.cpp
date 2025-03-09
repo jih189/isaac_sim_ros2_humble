@@ -599,7 +599,7 @@ void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model,
 
     // create task space constraint
     std::vector<float> reference_frame = {0.9, 0.0, 0.7, 0.0, 0.0, 0.0};
-    std::vector<float> tolerance = {0.0001, 0.0001, 0.0001, 0.0001, 0.0001, 0.0001};
+    std::vector<float> tolerance = {1000, 1000, 1000, 0.0001, 0.0001, 0.0001};
     CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
         "task_space_constraint",
         task_link_index,
@@ -673,11 +673,7 @@ void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model,
         std::vector<double> states_joint_values_i_double;
         for (size_t j = 0; j < states_joint_values[i].size(); j++)
         {
-            // print only active joints
-            if (robot_info.getActiveJointMap()[j])
-            {
-                states_joint_values_i_double.push_back((double)states_joint_values[i][j]);
-            }
+            states_joint_values_i_double.push_back((double)states_joint_values[i][j]);
         }
 
         robot_state->setJointGroupPositions(joint_model_group, states_joint_values_i_double);
@@ -1544,13 +1540,13 @@ int main(int argc, char** argv)
 
     // TEST_CONSTRAINT_PROJECT(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

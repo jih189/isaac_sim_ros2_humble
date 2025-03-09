@@ -47,15 +47,17 @@ bool FoliationInterface::solve(
     return false;
   }
   
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////// Convert moveit goal constraints to CUDAMPLib goal constraints ////////////////////////////////////////
   std::vector<CUDAMPLib::BaseConstraintPtr> goal_constraints;
 
   // Create boundary constraints for goal constraints.
-  // get joint names
   std::vector<std::string> joint_names = robot_info_ptr_->getJointNames();
+  std::vector<bool> active_joint_map = robot_info_ptr_->getActiveJointMap();
   std::vector<float> goal_constraint_lower_bounds;
   std::vector<float> goal_constraint_upper_bounds;
-  // print joint names
+  std::vector<float> default_lower_bounds = robot_info_ptr_->getLowerBounds();
+  std::vector<float> default_upper_bounds = robot_info_ptr_->getUpperBounds();
+
   for (size_t i = 0; i < joint_names.size(); i++)
   {
     // check if this joint is in the goal constraints
@@ -64,16 +66,20 @@ bool FoliationInterface::solve(
     {
       if (joint_constraint.joint_name == joint_names[i])
       {
+        // if current joint is in the goal constraints, set bounds from goal constraints
         is_in_goal_constraints = true;
+        // set bounds from goal constraints
         goal_constraint_lower_bounds.push_back(joint_constraint.position - joint_constraint.tolerance_below);
         goal_constraint_upper_bounds.push_back(joint_constraint.position + joint_constraint.tolerance_above);
         break;
       }
     }
+
     if (!is_in_goal_constraints)
     {
-      goal_constraint_lower_bounds.push_back(0.0);
-      goal_constraint_upper_bounds.push_back(0.0);
+      // set bounds from default bounds
+      goal_constraint_lower_bounds.push_back(default_lower_bounds[i]);
+      goal_constraint_upper_bounds.push_back(default_upper_bounds[i]);
     }
   }
 
@@ -85,6 +91,142 @@ bool FoliationInterface::solve(
   );
 
   goal_constraints.push_back(goal_boundary_constraint);
+
+  if (request.goal_constraints[0].position_constraints.size() > 0 || request.goal_constraints[0].orientation_constraints.size() > 0)
+  {
+    if (request.goal_constraints[0].position_constraints.size() > 1 || request.goal_constraints[0].orientation_constraints.size() > 1)
+    {
+      // print error in red
+      std::cout << "\033[1;31m" << "For now, only one position constraint and one orientation constraint are supported" << "\033[0m" << std::endl;
+      return false;
+    }
+
+    if (
+      request.goal_constraints[0].position_constraints.size() == 1 && 
+      request.goal_constraints[0].orientation_constraints.size() == 1 &&
+      request.goal_constraints[0].position_constraints[0].link_name != request.goal_constraints[0].orientation_constraints[0].link_name
+    )
+    {
+      // print error in red
+      std::cout << "\033[1;31m" << "The link name of position constraint and orientation constraint should be the same" << "\033[0m" << std::endl;
+      return false;
+    }
+
+    std::string task_link_name = "";
+
+    if (request.goal_constraints[0].position_constraints.size() == 1)
+    {
+      task_link_name = request.goal_constraints[0].position_constraints[0].link_name;
+    }
+    
+    if (request.goal_constraints[0].orientation_constraints.size() == 1)
+    {
+      task_link_name = request.goal_constraints[0].orientation_constraints[0].link_name;
+    }
+
+    if (task_link_name == "")
+    {
+      // print error in red
+      std::cout << "\033[1;31m" << "link name of constraints is empty" << "\033[0m" << std::endl;
+      return false;
+    }
+
+    int task_link_index = -1;
+    std::vector<std::string> robot_link_names = robot_info_ptr_->getLinkNames();
+    for (size_t i = 0; i < robot_link_names.size(); i++)
+    {
+        if (robot_link_names[i] == task_link_name)
+        {
+            task_link_index = i;
+            break;
+        }
+    }
+
+    if (task_link_index == -1)
+    {
+        // print error in red
+        std::cout << "\033[1;31m" << "Link name is not found in the joint names" << "\033[0m" << std::endl;
+        // print task link name
+        std::cout << "Task link name: " << task_link_name << std::endl;
+
+        // print link names
+        std::cout << "Link names: ";
+        for (size_t i = 0; i < robot_link_names.size(); i++)
+        {
+          std::cout << robot_link_names[i] << " ";
+        }
+        std::cout << std::endl;
+
+        return false;
+    }
+
+    // set position and orientation constraints for default value.
+    std::vector<float> reference_frame = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<float> tolerance = {1000, 1000, 1000, 10, 10, 10};
+
+    if (request.goal_constraints[0].position_constraints.size() == 1)
+    {
+      float pos_x = request.goal_constraints[0].position_constraints[0].constraint_region.primitive_poses[0].position.x;
+      float pos_y = request.goal_constraints[0].position_constraints[0].constraint_region.primitive_poses[0].position.y;
+      float pos_z = request.goal_constraints[0].position_constraints[0].constraint_region.primitive_poses[0].position.z;
+
+      reference_frame[0] = pos_x;
+      reference_frame[1] = pos_y;
+      reference_frame[2] = pos_z;
+
+      float pos_x_tol = request.goal_constraints[0].position_constraints[0].constraint_region.primitives[0].dimensions[0];
+      float pos_y_tol = request.goal_constraints[0].position_constraints[0].constraint_region.primitives[0].dimensions[1];
+      float pos_z_tol = request.goal_constraints[0].position_constraints[0].constraint_region.primitives[0].dimensions[2];
+
+      tolerance[0] = pos_x_tol;
+      tolerance[1] = pos_y_tol;
+      tolerance[2] = pos_z_tol;
+    }
+
+    if (request.goal_constraints[0].orientation_constraints.size() == 1)
+    {
+      // convert quaternion to rpy with Eigen
+      Eigen::Quaterniond q(
+        request.goal_constraints[0].orientation_constraints[0].orientation.w,
+        request.goal_constraints[0].orientation_constraints[0].orientation.x,
+        request.goal_constraints[0].orientation_constraints[0].orientation.y,
+        request.goal_constraints[0].orientation_constraints[0].orientation.z
+      );
+
+      Eigen::Matrix3d rotation_matrix = q.toRotationMatrix();
+      Eigen::Vector3d rpy = rotation_matrix.eulerAngles(0, 1, 2);
+
+      reference_frame[3] = rpy[0];
+      reference_frame[4] = rpy[1];
+      reference_frame[5] = rpy[2];
+
+      float roll_tol = request.goal_constraints[0].orientation_constraints[0].absolute_x_axis_tolerance;
+      float pitch_tol = request.goal_constraints[0].orientation_constraints[0].absolute_y_axis_tolerance;
+      float yaw_tol = request.goal_constraints[0].orientation_constraints[0].absolute_z_axis_tolerance;
+
+      tolerance[3] = roll_tol;
+      tolerance[4] = pitch_tol;
+      tolerance[5] = yaw_tol;
+    }
+
+    // create offset matrix
+    Eigen::Matrix4d offset_matrix = Eigen::Matrix4d::Identity();
+    
+    offset_matrix(0, 3) = request.goal_constraints[0].position_constraints[0].target_point_offset.x;
+    offset_matrix(1, 3) = request.goal_constraints[0].position_constraints[0].target_point_offset.y;
+    offset_matrix(2, 3) = request.goal_constraints[0].position_constraints[0].target_point_offset.z;
+
+    // Convert moveit end effector pose constraints to CUDAMPLib task space constraints.
+    CUDAMPLib::TaskSpaceConstraintPtr goal_task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
+        "goal_task_space_constraint",
+        task_link_index,
+        offset_matrix,
+        reference_frame,
+        tolerance
+    );
+
+    goal_constraints.push_back(goal_task_space_constraint);
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
