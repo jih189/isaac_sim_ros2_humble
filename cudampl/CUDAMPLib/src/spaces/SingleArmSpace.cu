@@ -529,7 +529,7 @@ namespace CUDAMPLib {
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_states1 + threadsPerBlock - 1) / threadsPerBlock;
 
-        // call kernel
+        // Calculate the number of steps and the move direction.
         getStepKernel<<<blocksPerGrid, threadsPerBlock>>>(
             d_joint_states1, 
             d_joint_states2, 
@@ -545,7 +545,6 @@ namespace CUDAMPLib {
         CUDA_CHECK(cudaGetLastError());
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        // print d_num_steps
         std::vector<int> h_num_steps(num_of_states1);
         cudaMemcpy(h_num_steps.data(), d_num_steps, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
         std::vector<int> h_motion_start_index(num_of_states1);
@@ -585,7 +584,7 @@ namespace CUDAMPLib {
 
         float * d_interpolated_states = interpolated_states->getJointStatesCuda();
 
-        // call kernel
+        // Calculate the interpolated states
         calculateInterpolatedState<<<blocksPerGrid, threadsPerBlock>>>(
             d_joint_states1, 
             d_joint_states2, 
@@ -746,6 +745,58 @@ namespace CUDAMPLib {
         interpolated_states.reset();
 
         return true;
+    }
+
+    bool SingleArmSpace::checkConstrainedMotions(
+        const BaseStatesPtr & states1, 
+        const BaseStatesPtr & states2
+    )
+    {
+        size_t num_of_states1 = states1->getNumOfStates();
+        size_t num_of_states2 = states2->getNumOfStates();
+        if (num_of_states1 != num_of_states2)
+        {
+            // throw an exception
+            throw std::runtime_error("Number of states in states1 and states2 are not equal");
+        }
+        if (num_of_states1 == 0)
+        {
+            // throw an exception
+            throw std::runtime_error("No states to check");
+        }
+
+        // get space info
+        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
+        getSpaceInfo(space_info);
+
+        // cast to SingleArmStatesPtr
+        SingleArmStatesPtr single_arm_states1 = std::dynamic_pointer_cast<SingleArmStates>(states1);
+        SingleArmStatesPtr single_arm_states2 = std::dynamic_pointer_cast<SingleArmStates>(states2);
+
+        /**
+        Psuedo code:
+            create a device memory for int to tell the current step moving to the next state. If it is -1, then it means this motion is impossible.
+            int [] motion_step = 0 * [num_of_states1]
+            float [] distance_to_states2 = floatMax * [num_of_states1]
+
+            copy states1 to a intermediate_states
+
+            call approachKernel on intermediate_states[i] to get closer to states2[i] if motion_step[i] != -1
+
+            for loop: 0 to 5
+                call forwardKinematicsKernel on intermediate_states[i] to get the forward kinematics if motion_step[i] != -1
+
+                call computeGradAndErrorKernel on intermediate_states[i] to get the gradient and error if motion_step[i] != -1
+
+                call update_with_grad on intermediate_states[i] to update the intermediate_states if motion_step[i] != -1
+
+            check 
+
+
+
+
+        
+         */
     }
 
     void SingleArmSpace::interpolate(
@@ -936,9 +987,9 @@ namespace CUDAMPLib {
             single_arm_states->calculateTotalGradientAndError(projectable_constraint_indices_);
 
             // print the total gradient and error
-            float * d_total_costs = single_arm_states->getTotalCostsCuda(); // [num_of_states]
+            // float * d_total_costs = single_arm_states->getTotalCostsCuda(); // [num_of_states]
 
-            float * d_total_gradient = single_arm_states->getTotalGradientCuda(); // [num_of_states * num_of_joints]
+            // float * d_total_gradient = single_arm_states->getTotalGradientCuda(); // [num_of_states * num_of_joints]
 
             // std::cout << "Iteration: " << t << std::endl;
 
@@ -982,12 +1033,15 @@ namespace CUDAMPLib {
             int blocksPerGrid = (single_arm_states->getNumOfStates() * single_arm_states->getNumOfJoints() + threadsPerBlock - 1) / threadsPerBlock;
             update_with_grad<<<blocksPerGrid, threadsPerBlock>>>(
                 single_arm_states->getJointStatesCuda(),
-                d_total_gradient,
+                single_arm_states->getTotalGradientCuda(),
                 1.0,
                 single_arm_states->getNumOfStates(),
                 single_arm_states->getNumOfJoints(),
                 d_active_joint_map
             );
+
+            // wait for the kernel to finish
+            CUDA_CHECK(cudaDeviceSynchronize());
         }
     }
 

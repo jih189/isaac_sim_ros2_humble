@@ -1577,6 +1577,12 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
     // create the planner
     CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
 
+    planner->setK(1);
+
+    planner->setMaxTravelDistance(5.0);
+
+    planner->setSampleAttemptsInEachIteration(1);
+
     // set the task
     planner->setMotionTask(task);
 
@@ -1617,6 +1623,140 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
     }
 
     robot_state.reset();
+}
+
+void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    
+    // Prepare constraints
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+    
+    // Create self collision constraint
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create task space constraint
+    int task_link_index = -1;
+    for (size_t i = 0; i < robot_info.getLinkNames().size(); i++)
+    {
+        if (robot_info.getLinkNames()[i] == "wrist_roll_link")
+        {
+            task_link_index = i;
+            break;
+        }
+    }
+    if (task_link_index == -1)
+    {
+        RCLCPP_ERROR(LOGGER, "Failed to find the task link index");
+        return;
+    }
+
+    std::vector<float> reference_frame = {0.9, 0.0, 0.7, 0.0, 0.0, 0.0};
+    std::vector<float> tolerance = {1000, 1000, 1000, 0.0001, 0.0001, 10};
+    CUDAMPLib::TaskSpaceConstraintPtr task_space_constraint = std::make_shared<CUDAMPLib::TaskSpaceConstraint>(
+        "task_space_constraint",
+        task_link_index,
+        Eigen::Matrix4d::Identity(),
+        reference_frame,
+        tolerance
+    );
+    constraints.push_back(task_space_constraint);
+
+    // Create boundary constraint
+    CUDAMPLib::BoundaryConstraintPtr boundary_constraint = std::make_shared<CUDAMPLib::BoundaryConstraint>(
+        "boundary_constraint",
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getActiveJointMap()
+    );
+    constraints.push_back(boundary_constraint);
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames(),
+        0.02 // resolution
+    );
+
+    // generate start and goal states under the task space constraint by sampling
+    CUDAMPLib::SingleArmStatesPtr start_single_arm_states = 
+        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(50));
+    CUDAMPLib::SingleArmStatesPtr goal_single_arm_states =
+        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(50));
+
+    // check states
+    start_single_arm_states->update();
+    goal_single_arm_states->update();
+
+    std::vector<bool> start_state_feasibility;
+    std::vector<bool> goal_state_feasibility;
+    single_arm_space->checkStates(start_single_arm_states, start_state_feasibility);
+    single_arm_space->checkStates(goal_single_arm_states, goal_state_feasibility);
+
+    // filter out the infeasible states
+    start_single_arm_states->filterStates(start_state_feasibility);
+    goal_single_arm_states->filterStates(goal_state_feasibility);
+
+    if (start_single_arm_states->getJointStatesHost().size() == 0 || goal_single_arm_states->getJointStatesHost().size() == 0)
+    {
+        // print in red
+        std::cout << "\033[1;31m" << "Failed to generate start or goal states satisfying the task space constraint" << "\033[0m" << std::endl;
+        return;
+    }
+    // create a vector of bool with size 5
+    std::vector<bool> start_state_filter(start_single_arm_states->getNumOfStates(), false);
+    std::vector<bool> goal_state_filter(goal_single_arm_states->getNumOfStates(), false);
+    // only keep the first one
+    start_state_filter[0] = true;
+    goal_state_filter[0] = true;
+
+    // filter out the states
+    start_single_arm_states->filterStates(start_state_filter);
+    goal_single_arm_states->filterStates(goal_state_filter);
+
+    // print number of start and goal states
+    std::cout << "Number of start states: " << start_single_arm_states->getNumOfStates() << std::endl;
+    std::cout << "Number of goal states: " << goal_single_arm_states->getNumOfStates() << std::endl;
+
+    std::cout << "Start state: " << std::endl;
+    for (size_t i = 0; i < start_single_arm_states->getJointStatesHost()[0].size(); i++)
+    {
+        std::cout << start_single_arm_states->getJointStatesHost()[0][i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Goal state: " << std::endl;
+    for (size_t i = 0; i < goal_single_arm_states->getJointStatesHost()[0].size(); i++)
+    {
+        std::cout << goal_single_arm_states->getJointStatesHost()[0][i] << " ";
+    }
+    std::cout << std::endl;
+
+    // check constrained motions
+    single_arm_space->checkConstrainedMotions(start_single_arm_states, goal_single_arm_states);
+
 }
 
 int main(int argc, char** argv)
@@ -1662,7 +1802,9 @@ int main(int argc, char** argv)
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    TEST_CHECK_CONSTRAINED_MOTION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
 

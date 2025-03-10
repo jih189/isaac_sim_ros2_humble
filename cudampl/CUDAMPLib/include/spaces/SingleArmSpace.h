@@ -58,6 +58,11 @@ namespace CUDAMPLib
                 std::vector<float>& motion_costs
             ) override;
 
+            bool checkConstrainedMotions(
+                const BaseStatesPtr & states1, 
+                const BaseStatesPtr & states2
+            );
+
             void checkStates(
                 const BaseStatesPtr & states, 
                 std::vector<bool>& state_feasibility
