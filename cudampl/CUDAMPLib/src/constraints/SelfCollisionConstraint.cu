@@ -45,7 +45,7 @@ namespace CUDAMPLib{
                     int link_j = d_self_collision_spheres_map[j];
                     if ( link_i != link_j){
                         // check if two links are enabled for collision
-                        if (d_self_collision_enables_map[link_i * num_of_robot_links + link_j] == 1)
+                        if (d_self_collision_enables_map[link_i * num_of_robot_links + link_j] != 0)
                         {
                             float diff_in_x = d_self_collision_spheres_pos_in_base_link[idx * num_of_self_collision_spheres * 3 + i * 3 + 0] - d_self_collision_spheres_pos_in_base_link[idx * num_of_self_collision_spheres * 3 + j * 3 + 0];
                             float diff_in_y = d_self_collision_spheres_pos_in_base_link[idx * num_of_self_collision_spheres * 3 + i * 3 + 1] - d_self_collision_spheres_pos_in_base_link[idx * num_of_self_collision_spheres * 3 + j * 3 + 1];
@@ -109,7 +109,7 @@ namespace CUDAMPLib{
                 int other_link = d_self_collision_spheres_map[i];
                 // Only check if spheres are on different links and collisions are enabled.
                 if (current_link != other_link &&
-                    d_self_collision_enables_map[current_link * num_robot_links + other_link] == 1)
+                    d_self_collision_enables_map[current_link * num_robot_links + other_link] != 0)
                 {
                     int pos_index2 = i * 3;
                     float other_radius = d_self_collision_spheres_radius[i];
@@ -162,7 +162,7 @@ namespace CUDAMPLib{
     //                 int link_j = d_self_collision_spheres_map[i];
     //                 if ( link_i != link_j){
     //                     // check if two links are enabled for collision
-    //                     if (d_self_collision_enables_map[link_i * num_of_robot_links + link_j] == 1)
+    //                     if (d_self_collision_enables_map[link_i * num_of_robot_links + link_j] != 0)
     //                     {
     //                         float diff_in_x = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 0] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + i * 3 + 0];
     //                         float diff_in_y = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 1] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + i * 3 + 1];
@@ -218,7 +218,7 @@ namespace CUDAMPLib{
 
             if ( link_i != link_j){
                 // check if two links are enabled for collision
-                if (d_self_collision_enables_map[link_i * num_of_robot_links + link_j] == 1)
+                if (d_self_collision_enables_map[link_i * num_of_robot_links + link_j] != 0)
                 {
                     float diff_in_x = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 0] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + other_sphere_idx * 3 + 0];
                     float diff_in_y = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 1] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + other_sphere_idx * 3 + 1];

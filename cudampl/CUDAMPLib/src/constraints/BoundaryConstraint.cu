@@ -85,7 +85,7 @@ namespace CUDAMPLib{
         // Check if the joint is active
         for (int joint_id = 0; joint_id < num_of_joints; joint_id++)
         {
-            if (d_active_joint_map_as_int[joint_id] == 1) // Active joint
+            if (d_active_joint_map_as_int[joint_id] != 0) // Active joint
             {
                 float joint_value = d_states[state_id * num_of_joints + joint_id];
                 float lower_bound = d_lower_bound_full[joint_id];
@@ -184,7 +184,7 @@ namespace CUDAMPLib{
         // Check if the joint is active
         for (int joint_id = 0; joint_id < num_of_joints; joint_id++)
         {
-            if (d_active_joint_map_as_int[joint_id] == 1) // Active joint
+            if (d_active_joint_map_as_int[joint_id] != 0) // Active joint
             {
                 float joint_value = d_states[state_id * num_of_joints + joint_id];
                 float lower_bound = d_lower_bound_full[joint_id];

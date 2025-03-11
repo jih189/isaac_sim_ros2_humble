@@ -747,6 +747,205 @@ namespace CUDAMPLib {
         return true;
     }
 
+    __global__ void CalculateDiff(
+        float * __restrict__ d_joint_states1,
+        float * __restrict__ d_joint_states2,
+        int num_of_states,
+        int num_of_joints,
+        float * d_diff
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states) return;
+
+        float * joint_states1 = &d_joint_states1[idx * num_of_joints];
+        float * joint_states2 = &d_joint_states2[idx * num_of_joints];
+
+        float diff = 0.0f;
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            diff += (joint_states1[i] - joint_states2[i]) * (joint_states1[i] - joint_states2[i]);
+        }
+
+        d_diff[idx] = sqrt(diff);
+    }
+
+    __global__ void updateFlagWithCost(
+        float * state_costs,
+        int num_of_states,
+        int * is_approaching
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states) return;
+
+        if (is_approaching[idx] == 0) return;
+
+        if (state_costs[idx] > 0.0f)
+        {
+            is_approaching[idx] = 0;
+        }
+    }
+
+    __global__ void approachKernel(
+        int * d_is_approaching,
+        float * d_joint_states1,
+        float * d_joint_states2,
+        float * d_approach_directions,
+        int num_of_states,
+        int num_of_joints,
+        float approach_step_size
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states) return;
+
+        if (d_is_approaching[idx] == 0) return;
+
+        float * joint_states1 = &d_joint_states1[idx * num_of_joints];
+        float * joint_states2 = &d_joint_states2[idx * num_of_joints];
+        float * approach_directions = &d_approach_directions[idx * num_of_joints];
+
+        // Compute differences and accumulate squared norm in one loop.
+        float norm = 0.0f;
+        for (int i = 0; i < num_of_joints; i++) {
+            float diff = joint_states2[i] - joint_states1[i];
+            approach_directions[i] = diff;
+            norm += diff * diff;
+        }
+
+        norm = sqrtf(norm);
+
+        // Only normalize and update if the norm is significant.
+        if (norm > 1e-6f) {
+            for (int i = 0; i < num_of_joints; i++) {
+                float normalized = approach_directions[i] / norm;
+                approach_directions[i] = normalized;
+                joint_states1[i] += normalized * approach_step_size;
+            }
+        }
+    }
+
+    __global__ void isCloseEnough(
+        float * d_joint_states1,
+        float * d_joint_states2,
+        int num_of_states,
+        int num_of_joints,
+        float dist_threshold,
+        int * result
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states) return;
+
+        if (result[idx] == 0) return; // if the result is already 0, then return
+
+        float * joint_states1 = &d_joint_states1[idx * num_of_joints];
+        float * joint_states2 = &d_joint_states2[idx * num_of_joints];
+
+        float diff = 0.0f;
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            diff += (joint_states1[i] - joint_states2[i]) * (joint_states1[i] - joint_states2[i]);
+        }
+
+        diff = sqrt(diff);
+
+        if (diff > dist_threshold)
+        {
+            result[idx] = 0;
+        }
+    }
+
+    /**
+        Check if the approaching is valid. 
+        It is valid is only
+        1. the new intermediate state is closer to the goal state.
+        2. the new intermediate state is not too far from previous intermediate state. It is less than max_step_size.
+     */
+    __global__ void checkValidOfApproaching(
+        float * d_previous_intermediate_joint_states,
+        float * d_current_intermediate_joint_states,
+        float * d_goal_joint_states2,
+        int num_of_states,
+        int num_of_joints,
+        float max_step_size,
+        int * result
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states) return;
+
+        if (result[idx] == 0) return; // if the result is already 0, then return
+
+        float * previous_intermediate_joint_states = &d_previous_intermediate_joint_states[idx * num_of_joints];
+        float * current_intermediate_joint_states = &d_current_intermediate_joint_states[idx * num_of_joints];
+        float * goal_joint_states2 = &d_goal_joint_states2[idx * num_of_joints];
+
+        float distance_from_previous_to_goal = 0.0f;
+        float distance_from_current_to_goal = 0.0f;
+        float distance_from_previous_to_current = 0.0f;
+
+        // calculate the distance from previous to goal
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            distance_from_previous_to_goal += (previous_intermediate_joint_states[i] - goal_joint_states2[i]) * (previous_intermediate_joint_states[i] - goal_joint_states2[i]);
+        }
+        distance_from_previous_to_goal = sqrt(distance_from_previous_to_goal);
+
+        // calculate the distance from current to goal
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            distance_from_current_to_goal += (current_intermediate_joint_states[i] - goal_joint_states2[i]) * (current_intermediate_joint_states[i] - goal_joint_states2[i]);
+        }
+        distance_from_current_to_goal = sqrt(distance_from_current_to_goal);
+
+        // calculate the distance from previous to current
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            distance_from_previous_to_current += (previous_intermediate_joint_states[i] - current_intermediate_joint_states[i]) * (previous_intermediate_joint_states[i] - current_intermediate_joint_states[i]);
+        }
+        distance_from_previous_to_current = sqrt(distance_from_previous_to_current);
+
+        if (distance_from_current_to_goal > distance_from_previous_to_goal)
+        {
+            result[idx] = 0;
+        }
+
+        if (distance_from_previous_to_current > max_step_size)
+        {
+            result[idx] = 0;
+        }
+    }
+
+    __global__ void update_with_grad_and_flag(
+        int * d_is_approaching,
+        float * d_states,
+        float * d_grad,
+        float step_size,
+        int num_of_states,
+        int num_of_joints,
+        int * d_active_joint_map
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states * num_of_joints) return;
+
+        if (d_is_approaching[idx / num_of_joints] == 0) return;
+
+        int joint_idx = idx % num_of_joints;
+
+        // if joint is not active, then set the value to 0
+        if (d_active_joint_map[joint_idx] == 0)
+        {
+            d_states[idx] = d_states[idx];
+        }
+        else
+        {
+            d_states[idx] = d_states[idx] + step_size * d_grad[idx];
+        }
+    }
+
     bool SingleArmSpace::checkConstrainedMotions(
         const BaseStatesPtr & states1, 
         const BaseStatesPtr & states2
@@ -773,30 +972,121 @@ namespace CUDAMPLib {
         SingleArmStatesPtr single_arm_states1 = std::dynamic_pointer_cast<SingleArmStates>(states1);
         SingleArmStatesPtr single_arm_states2 = std::dynamic_pointer_cast<SingleArmStates>(states2);
 
-        /**
-        Psuedo code:
-            create a device memory for int to tell the current step moving to the next state. If it is -1, then it means this motion is impossible.
-            int [] motion_step = 0 * [num_of_states1]
-            float [] distance_to_states2 = floatMax * [num_of_states1]
+        // Create motion steps
+        int * d_motion_step;
+        cudaMalloc(&d_motion_step, num_of_states1 * sizeof(int));
+        cudaMemset(d_motion_step, 0, num_of_states1 * sizeof(int));
 
-            copy states1 to a intermediate_states
+        // Create is_approaching
+        int * d_is_approaching; // the flag indicates if the state is approaching the goal state
+        cudaMalloc(&d_is_approaching, num_of_states1 * sizeof(int));
+        cudaMemset(d_is_approaching, 1, num_of_states1 * sizeof(int));
 
-            call approachKernel on intermediate_states[i] to get closer to states2[i] if motion_step[i] != -1
+        // Create distance_to_states2
+        float * d_distance_to_states2;
+        cudaMalloc(&d_distance_to_states2, num_of_states1 * sizeof(float));
+        float * d_new_distance_to_states2;
+        cudaMalloc(&d_new_distance_to_states2, num_of_states1 * sizeof(float));
 
-            for loop: 0 to 5
-                call forwardKinematicsKernel on intermediate_states[i] to get the forward kinematics if motion_step[i] != -1
+        // Create approach_directions
+        float * d_approach_directions;
+        cudaMalloc(&d_approach_directions, num_of_states1 * num_of_joints * sizeof(float));
 
-                call computeGradAndErrorKernel on intermediate_states[i] to get the gradient and error if motion_step[i] != -1
+        float * d_joint_states1 = single_arm_states1->getJointStatesCuda();
+        float * d_joint_states2 = single_arm_states2->getJointStatesCuda();
 
-                call update_with_grad on intermediate_states[i] to update the intermediate_states if motion_step[i] != -1
+        // Create intermediate_states
+        SingleArmStatesPtr intermediate_states = std::make_shared<SingleArmStates>(num_of_states1, space_info);
+        float * d_joint_intermediate_states = intermediate_states->getJointStatesCuda();
 
-            check 
+        // Create device memory to hold the previous intermediate states
+        float * d_joint_previous_intermediate_states;
+        cudaMalloc(&d_joint_previous_intermediate_states, num_of_states1 * num_of_joints * sizeof(float));
 
+        // copy the joint_states1 to d_joint_intermediate_states
+        cudaMemcpy(d_joint_intermediate_states, d_joint_states1, num_of_states1 * num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
 
+        // calculate the distance to states2
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_states1 + threadsPerBlock - 1) / threadsPerBlock;
+        int blocksPerGrid2 = (num_of_states1 * num_of_joints + threadsPerBlock - 1) / threadsPerBlock;
 
+        bool still_approaching = true;
+        while(still_approaching)
+        {
+            // store the previous intermediate states
+            cudaMemcpy(d_joint_previous_intermediate_states, d_joint_intermediate_states, num_of_states1 * num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
 
-        
-         */
+            // call approachKernel on intermediate_states[i] to get closer to states2[i] if is_approaching[i] == 1
+            approachKernel<<<blocksPerGrid, threadsPerBlock>>>(
+                d_is_approaching, // If is_approaching[i] == 0, then do not update the intermediate_states[i]
+                d_joint_intermediate_states,
+                d_joint_states2,
+                d_approach_directions,
+                num_of_states1,
+                num_of_joints,
+                resolution_
+            );
+
+            // project the intermediate_states
+            for (size_t t = 0; t < CUDAMPLib_PROJECT_MAX_ITERATION; t++)
+            {
+                // forward kinematics
+                intermediate_states->calculateForwardKinematics();
+
+                for (int i : projectable_constraint_indices_)
+                {
+                    if (constraints_[i]->isProjectable())
+                    {
+                        constraints_[i]->computeGradientAndError(intermediate_states);
+                    }
+                    else{
+                        // raise an exception
+                        throw std::runtime_error("Constraint " + constraints_[i]->getName() + " is not projectable");
+                    }
+                }
+
+                // calculate the total gradient
+                intermediate_states->calculateTotalGradientAndError(projectable_constraint_indices_);
+
+                // update with gradient
+                update_with_grad_and_flag<<<blocksPerGrid2, threadsPerBlock>>>(
+                    d_is_approaching,
+                    d_joint_intermediate_states,
+                    intermediate_states->getTotalGradientCuda(),
+                    1.0,
+                    num_of_states1,
+                    num_of_joints,
+                    d_active_joint_map
+                );
+
+                CUDA_CHECK(cudaDeviceSynchronize());
+            }
+
+            // check if the projected states is closer to states2
+            checkValidOfApproaching<<<blocksPerGrid, threadsPerBlock>>>(
+                d_joint_previous_intermediate_states,
+                d_joint_intermediate_states,
+                d_joint_states2,
+                num_of_states1,
+                num_of_joints,
+                resolution_,
+                d_is_approaching
+            );
+
+            CUDA_CHECK(cudaDeviceSynchronize());
+
+            break; // debug for now.
+        }
+
+        cudaFree(d_motion_step);
+        cudaFree(d_is_approaching);
+        cudaFree(d_new_distance_to_states2);
+        cudaFree(d_approach_directions);
+        cudaFree(d_joint_previous_intermediate_states);
+        intermediate_states.reset();
+
+        return true;
     }
 
     void SingleArmSpace::interpolate(
@@ -961,6 +1251,8 @@ namespace CUDAMPLib {
             d_states[idx] = d_states[idx] + step_size * d_grad[idx];
         }
     }
+
+
 
     void SingleArmSpace::projectStates(BaseStatesPtr states)
     {

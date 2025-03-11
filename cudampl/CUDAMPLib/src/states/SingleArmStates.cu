@@ -628,7 +628,7 @@ namespace CUDAMPLib
         float sum = 0.0f;
 
         for (int i = 0; i < num_of_joints; i++) {
-            if (d_active_joint_map[i] == 1) {
+            if (d_active_joint_map[i] != 0) {
                 float diff = d_states_1[state_1_idx * num_of_joints + i] - d_states_2[state_2_idx * num_of_joints + i];
                 sum += diff * diff;
             }
@@ -874,7 +874,7 @@ namespace CUDAMPLib
             std::vector<float> joint_state;
             for (int j = 0; j < num_of_joints; j++)
             {
-                if (space_info_single_arm_space->active_joint_map[j] == 1)
+                if (space_info_single_arm_space->active_joint_map[j] != 0)
                 {
                     joint_state.push_back(joint_states_full[i][j]);
                 }
