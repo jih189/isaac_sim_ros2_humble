@@ -1122,19 +1122,26 @@ namespace CUDAMPLib {
             }
         }
 
-        // for debug, print achieve goal
-        std::vector<int> h_achieve_goal(num_of_states1);
-        cudaMemcpy(h_achieve_goal.data(), d_achieve_goal, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
+        std::vector<int> h_achieve_goal_int(num_of_states1);
+        std::vector<bool> h_achieve_goal(num_of_states1);
+        cudaMemcpy(h_achieve_goal_int.data(), d_achieve_goal, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
 
-        std::cout << "achieve_goal: ";
-        for (size_t i = 0; i < h_achieve_goal.size(); i++)
-        {
-            std::cout << h_achieve_goal[i] << " ";
-        }
-        std::cout << std::endl;
-        
         std::vector<int> h_motion_step(num_of_states1);
         cudaMemcpy(h_motion_step.data(), d_motion_step, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
+
+        // std::cout << "achieve_goal: ";
+        for (size_t i = 0; i < h_achieve_goal_int.size(); i++)
+        {
+            h_achieve_goal[i] = h_achieve_goal_int[i] != 0;
+            // std::cout << h_achieve_goal[i] << " ";
+            if (! h_achieve_goal[i])
+            {
+                h_motion_step[i] = 0;
+            }
+        }
+        // std::cout << std::endl;
+        
+        
         std::cout << "motion_step: ";
         for (size_t i = 0; i < h_motion_step.size(); i++)
         {
