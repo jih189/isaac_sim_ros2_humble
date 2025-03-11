@@ -525,33 +525,22 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
         0.02f
     );
 
-    int num_of_test_states = 10;
+    int num_of_test_states = 1000;
 
-    // sample a set of states
+    // sample a set of states and run ik solver with collision free check
+    auto start_time = std::chrono::high_resolution_clock::now();
     CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time = end_time - start_time;
+    std::cout << "\033[1;32m" << "Time taken by sample and ik solve: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
 
-    // // set a test joint values
-    // std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    // std::vector<std::vector<float>> intput_joint_values_set;
-    // intput_joint_values_set.push_back(joint_values_1);
-
-    // // create states based on the joint values
-    // auto states = single_arm_space->createStatesFromVector(intput_joint_values_set);
-
-    // // cast to SingleArmStates
-    // CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(states);
-
-    if (single_arm_states == nullptr)
-    {
-        RCLCPP_ERROR(LOGGER, "Failed to sample states for single arm space");
-        return;
-    }
-    // single_arm_states->update(); // update robot collision spheres and calculate forward kinematics and space jacobian for each link.
-
-    // check states
+    start_time = std::chrono::high_resolution_clock::now();
     single_arm_states->update();
     std::vector<bool> state_feasibility;
     single_arm_space->checkStates(single_arm_states, state_feasibility);
+    end_time = std::chrono::high_resolution_clock::now();
+    elapsed_time = end_time - start_time;
+    std::cout << "\033[1;32m" << "Time taken by update and checkStates: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
 
     // visualize the states
     std::vector<std::string> display_links_names = robot_info.getLinkNames();
@@ -1702,11 +1691,11 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
 
     // generate start and goal states under the task space constraint by sampling
     CUDAMPLib::SingleArmStatesPtr start_single_arm_states = 
-        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(2000));
+        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(1000));
     CUDAMPLib::SingleArmStatesPtr goal_single_arm_states =
-        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(2000));
+        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(1000));
 
-    size_t num_of_test_motions = 1000;
+    size_t num_of_test_motions = 100;
 
     // check states
     start_single_arm_states->update();
@@ -1747,12 +1736,16 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     std::cout << "Number of goal states: " << goal_single_arm_states->getNumOfStates() << std::endl;
 
     // check constrained motions
+    std::vector<bool> motion_feasibility;
+    std::vector<float> motion_costs;
     auto start_time = std::chrono::high_resolution_clock::now();
-    single_arm_space->checkConstrainedMotions(start_single_arm_states, goal_single_arm_states);
+    single_arm_space->checkConstrainedMotions(start_single_arm_states, goal_single_arm_states, motion_feasibility, motion_costs);
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_time = end_time - start_time;
     // print in green
     std::cout << "\033[1;32m" << "Time taken by function: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
+
+    
 }
 
 int main(int argc, char** argv)

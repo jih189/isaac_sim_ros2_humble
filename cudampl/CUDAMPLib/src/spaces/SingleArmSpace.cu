@@ -948,7 +948,9 @@ namespace CUDAMPLib {
 
     bool SingleArmSpace::checkConstrainedMotions(
         const BaseStatesPtr & states1, 
-        const BaseStatesPtr & states2
+        const BaseStatesPtr & states2,
+        std::vector<bool> & motion_feasibility,
+        std::vector<float> & motion_costs
     )
     {
         size_t num_of_states1 = states1->getNumOfStates();
@@ -963,6 +965,9 @@ namespace CUDAMPLib {
             // throw an exception
             throw std::runtime_error("No states to check");
         }
+
+        motion_feasibility.resize(num_of_states1, false);
+        motion_costs.resize(num_of_states1, 0.0f);
 
         // get space info
         SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
@@ -1006,6 +1011,12 @@ namespace CUDAMPLib {
         // copy the joint_states1 to d_joint_intermediate_states
         cudaMemcpy(d_joint_intermediate_states, d_joint_states1, num_of_states1 * num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
 
+        // constrained motions
+        std::vector<std::vector<std::vector<float>>> constrained_motions(num_of_states1, std::vector<std::vector<float>>());
+        std::vector<float> approaching_joint_states_flatten(num_of_states1 * num_of_joints, 0.0);
+        std::vector<int> h_is_approaching(num_of_states1);
+        std::vector<std::vector<float>> intermediate_states_joint_values(num_of_states1, std::vector<float>(num_of_joints, 0.0));
+
         // calculate the distance to states2
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_states1 + threadsPerBlock - 1) / threadsPerBlock;
@@ -1013,7 +1024,7 @@ namespace CUDAMPLib {
 
         bool still_approaching = true;
         // while(still_approaching)
-        for (size_t ii = 0; ii < 10000; ii++)
+        for (size_t ii = 0; ii < 1000; ii++)
         {
             // store the previous intermediate states
             cudaMemcpy(d_joint_previous_intermediate_states, d_joint_intermediate_states, num_of_states1 * num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
@@ -1030,7 +1041,7 @@ namespace CUDAMPLib {
             );
 
             // project the intermediate_states
-            for (size_t t = 0; t < 3; t++)
+            for (size_t t = 0; t < 2; t++)
             {
                 // forward kinematics
                 intermediate_states->calculateForwardKinematics();
@@ -1103,10 +1114,19 @@ namespace CUDAMPLib {
 
             CUDA_CHECK(cudaDeviceSynchronize());
 
+            // copy data to host memory  
+            cudaMemcpyAsync(h_is_approaching.data(), d_is_approaching, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
+            cudaMemcpyAsync(
+                approaching_joint_states_flatten.data(), 
+                d_joint_intermediate_states, 
+                num_of_states1 * num_of_joints * sizeof(float), 
+                cudaMemcpyDeviceToHost
+            );
+            
             bool no_states_to_approach = true;
-            // for debug, print the is_approaching
-            std::vector<int> h_is_approaching(num_of_states1);
-            cudaMemcpy(h_is_approaching.data(), d_is_approaching, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
+
+            CUDA_CHECK(cudaDeviceSynchronize());
+
             for (size_t i = 0; i < h_is_approaching.size(); i++)
             {
                 if (h_is_approaching[i] != 0)
@@ -1116,6 +1136,22 @@ namespace CUDAMPLib {
                 }
             }
 
+            // Reshape the joint states
+            for (int i = 0; i < num_of_states1; i++)
+            {
+                // std::cout << "intermediate_states[" << i << "]: ";
+                std::vector<float> current_joint_values(num_of_joints, 0.0);
+                for (int j = 0; j < num_of_joints; j++)
+                {
+                    current_joint_values[j] = approaching_joint_states_flatten[i * num_of_joints + j];
+                    // std::cout << current_joint_values[j] << " ";
+                }
+                // std::cout << std::endl;
+
+                // append to the constrained_motions
+                constrained_motions[i].push_back(current_joint_values);
+            }
+
             if (no_states_to_approach)
             {
                 break;
@@ -1123,31 +1159,10 @@ namespace CUDAMPLib {
         }
 
         std::vector<int> h_achieve_goal_int(num_of_states1);
-        std::vector<bool> h_achieve_goal(num_of_states1);
         cudaMemcpy(h_achieve_goal_int.data(), d_achieve_goal, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
 
         std::vector<int> h_motion_step(num_of_states1);
         cudaMemcpy(h_motion_step.data(), d_motion_step, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
-
-        // std::cout << "achieve_goal: ";
-        for (size_t i = 0; i < h_achieve_goal_int.size(); i++)
-        {
-            h_achieve_goal[i] = h_achieve_goal_int[i] != 0;
-            // std::cout << h_achieve_goal[i] << " ";
-            if (! h_achieve_goal[i])
-            {
-                h_motion_step[i] = 0;
-            }
-        }
-        // std::cout << std::endl;
-        
-        
-        std::cout << "motion_step: ";
-        for (size_t i = 0; i < h_motion_step.size(); i++)
-        {
-            std::cout << h_motion_step[i] << " ";
-        }
-        std::cout << std::endl;
 
         cudaFree(d_motion_step);
         cudaFree(d_is_approaching);
@@ -1155,8 +1170,85 @@ namespace CUDAMPLib {
         cudaFree(d_approach_directions);
         cudaFree(d_joint_previous_intermediate_states);
         cudaFree(d_achieve_goal);
+        // deallocate intermediate_states
         intermediate_states.reset();
 
+        ////////////////////////////////////////// Check the feasibility of the constrained motions //////////////////////////////////////////
+
+        // allocate memory based on the total number of step from h_motion_step
+        int total_steps = 0;
+        std::vector<int> motion_start_index(num_of_states1);
+        for (size_t i = 0; i < h_motion_step.size(); i++)
+        {
+            motion_start_index[i] = total_steps;
+            total_steps += h_motion_step[i];
+        }
+
+        // allocate memory for the interpolated states
+        SingleArmStatesPtr interpolated_states = std::make_shared<SingleArmStates>(total_steps, space_info);
+        float * d_joint_values_interpolated_states = interpolated_states->getJointStatesCuda();
+
+        for (int i = 0; i < num_of_states1; i++)
+        {
+            if (h_achieve_goal_int[i] != 0){
+                // for motion i
+                for (int j = 0; j < h_motion_step[i]; j++)
+                {
+                    // get the joint values
+                    std::vector<float> joint_values = constrained_motions[i][j];
+                    // copy the joint values to the d_joint_values_interpolated_states
+                    cudaMemcpyAsync(d_joint_values_interpolated_states + (motion_start_index[i] + j) * num_of_joints, joint_values.data(), num_of_joints * sizeof(float), cudaMemcpyHostToDevice);
+                }
+            }
+        }
+        // wait copy to finish
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // check the interpolated_states
+        interpolated_states->update();
+        std::vector<bool> motion_state_feasibility;
+        checkStates(interpolated_states, motion_state_feasibility);
+
+        for (int i = 0; i < num_of_states1; i++)
+        {
+            if (h_achieve_goal_int[i] != 0)
+            {
+                // get the motion start index
+                int start_index = motion_start_index[i];
+                bool is_feasible_motion = true;
+                for (int j = 0; j < h_motion_step[i]; j++)
+                {
+                    // std::cout << motion_state_feasibility[start_index + j] << " ";
+                    if (!motion_state_feasibility[start_index + j])
+                    {
+                        is_feasible_motion = false;
+                    }
+                }
+                // std::cout << std::endl;
+                motion_feasibility[i] = is_feasible_motion;
+
+                if (is_feasible_motion)
+                {
+                    // print the feasible motion
+                    float total_cost = 0.0;
+                    for (int j = 1; j < h_motion_step[i]; j++)
+                    {
+                        float cost = 0.0;
+                        for (int k = 0; k < num_of_joints; k++)
+                        {
+                            cost += (constrained_motions[i][j][k] - constrained_motions[i][j-1][k]) * (constrained_motions[i][j][k] - constrained_motions[i][j-1][k]);
+                        }
+                        total_cost += sqrt(cost);;
+                    }
+
+                    motion_costs[i] = total_cost;
+                }
+            }
+        }
+
+        // free the memory
+        interpolated_states.reset();
+    
         return true;
     }
 

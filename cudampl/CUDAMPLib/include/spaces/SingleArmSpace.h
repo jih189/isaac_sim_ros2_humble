@@ -60,7 +60,9 @@ namespace CUDAMPLib
 
             bool checkConstrainedMotions(
                 const BaseStatesPtr & states1, 
-                const BaseStatesPtr & states2
+                const BaseStatesPtr & states2,
+                std::vector<bool>& motion_feasibility,
+                std::vector<float>& motion_costs
             );
 
             void checkStates(

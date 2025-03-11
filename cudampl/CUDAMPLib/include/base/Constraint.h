@@ -4,7 +4,7 @@
 
 namespace CUDAMPLib
 {
-    #define CUDAMPLib_PROJECT_MAX_ITERATION 100 // maximum iteration for projection. This number should not be too large.
+    #define CUDAMPLib_PROJECT_MAX_ITERATION 10 // maximum iteration for projection. This number should not be too large.
     
     class BaseConstraint {
         public:
