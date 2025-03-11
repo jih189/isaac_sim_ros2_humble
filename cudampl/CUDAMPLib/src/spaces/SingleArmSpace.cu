@@ -747,46 +747,6 @@ namespace CUDAMPLib {
         return true;
     }
 
-    __global__ void CalculateDiff(
-        float * __restrict__ d_joint_states1,
-        float * __restrict__ d_joint_states2,
-        int num_of_states,
-        int num_of_joints,
-        float * d_diff
-    )
-    {
-        int idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx >= num_of_states) return;
-
-        float * joint_states1 = &d_joint_states1[idx * num_of_joints];
-        float * joint_states2 = &d_joint_states2[idx * num_of_joints];
-
-        float diff = 0.0f;
-        for (size_t i = 0; i < num_of_joints; i++)
-        {
-            diff += (joint_states1[i] - joint_states2[i]) * (joint_states1[i] - joint_states2[i]);
-        }
-
-        d_diff[idx] = sqrt(diff);
-    }
-
-    __global__ void updateFlagWithCost(
-        float * state_costs,
-        int num_of_states,
-        int * is_approaching
-    )
-    {
-        int idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx >= num_of_states) return;
-
-        if (is_approaching[idx] == 0) return;
-
-        if (state_costs[idx] > 0.0f)
-        {
-            is_approaching[idx] = 0;
-        }
-    }
-
     __global__ void approachKernel(
         int * d_is_approaching,
         float * d_joint_states1,
@@ -823,37 +783,6 @@ namespace CUDAMPLib {
                 approach_directions[i] = normalized;
                 joint_states1[i] += normalized * approach_step_size;
             }
-        }
-    }
-
-    __global__ void isCloseEnough(
-        float * d_joint_states1,
-        float * d_joint_states2,
-        int num_of_states,
-        int num_of_joints,
-        float dist_threshold,
-        int * result
-    )
-    {
-        int idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx >= num_of_states) return;
-
-        if (result[idx] == 0) return; // if the result is already 0, then return
-
-        float * joint_states1 = &d_joint_states1[idx * num_of_joints];
-        float * joint_states2 = &d_joint_states2[idx * num_of_joints];
-
-        float diff = 0.0f;
-        for (size_t i = 0; i < num_of_joints; i++)
-        {
-            diff += (joint_states1[i] - joint_states2[i]) * (joint_states1[i] - joint_states2[i]);
-        }
-
-        diff = sqrt(diff);
-
-        if (diff > dist_threshold)
-        {
-            result[idx] = 0;
         }
     }
 
@@ -946,6 +875,77 @@ namespace CUDAMPLib {
         }
     }
 
+    /**
+        If the state is approaching the goal state, then update the motion step.
+     */
+    __global__ void updateMotionStep(
+        int * d_is_approaching,
+        int * d_motion_step,
+        int num_of_states
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (idx >= num_of_states) return;
+
+        if (d_is_approaching[idx] == 0) return; // if the state is not approaching, then return
+
+        int motion_step = d_motion_step[idx];
+
+        d_motion_step[idx] = motion_step + 1;
+    }
+
+    /**
+        Check if the state has achieved the goal state.
+     */
+    __global__ void checkAchieveGoal(
+        int * d_is_approaching,
+        float * d_joint_intermediate_states,
+        float * d_joint_goal_states,
+        int num_of_states,
+        int num_of_joints,
+        float distance_threshold,
+        int * d_achieve_goal
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states) return;
+
+        if (d_is_approaching[idx] == 0) return; // if the state is not approaching, then return
+
+        float distance = 0.0f;
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            distance += (d_joint_intermediate_states[idx * num_of_joints + i] - d_joint_goal_states[idx * num_of_joints + i]) * (d_joint_intermediate_states[idx * num_of_joints + i] - d_joint_goal_states[idx * num_of_joints + i]);
+        }
+        distance = sqrt(distance);
+
+        if (distance < distance_threshold)
+        {
+            // set the achieve flag to 1
+            d_achieve_goal[idx] = 1;
+            // set the is_approaching to 0
+            d_is_approaching[idx] = 0;
+        }
+    }
+
+    __global__ void checkIfCostIsZero(
+        float * d_total_costs,
+        int num_of_states,
+        float cost_threshold,
+        int * result
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_states) return;
+        if (result[idx] == 0) return;
+
+        if (d_total_costs[idx] > cost_threshold)
+        {
+            result[idx] = 0;
+        }
+    }
+
     bool SingleArmSpace::checkConstrainedMotions(
         const BaseStatesPtr & states1, 
         const BaseStatesPtr & states2
@@ -972,25 +972,25 @@ namespace CUDAMPLib {
         SingleArmStatesPtr single_arm_states1 = std::dynamic_pointer_cast<SingleArmStates>(states1);
         SingleArmStatesPtr single_arm_states2 = std::dynamic_pointer_cast<SingleArmStates>(states2);
 
-        // Create motion steps
-        int * d_motion_step;
+        int * d_motion_step; // Store the number of steps the state has moved
         cudaMalloc(&d_motion_step, num_of_states1 * sizeof(int));
         cudaMemset(d_motion_step, 0, num_of_states1 * sizeof(int));
 
-        // Create is_approaching
         int * d_is_approaching; // the flag indicates if the state is approaching the goal state
         cudaMalloc(&d_is_approaching, num_of_states1 * sizeof(int));
         cudaMemset(d_is_approaching, 1, num_of_states1 * sizeof(int));
 
-        // Create distance_to_states2
-        float * d_distance_to_states2;
+        float * d_distance_to_states2; // Store the distance to the goal states
         cudaMalloc(&d_distance_to_states2, num_of_states1 * sizeof(float));
-        float * d_new_distance_to_states2;
+        float * d_new_distance_to_states2; // Store the new distance to the goal states
         cudaMalloc(&d_new_distance_to_states2, num_of_states1 * sizeof(float));
 
-        // Create approach_directions
-        float * d_approach_directions;
+        float * d_approach_directions; // Store the approach directions
         cudaMalloc(&d_approach_directions, num_of_states1 * num_of_joints * sizeof(float));
+
+        int * d_achieve_goal; // Store the flag if the state has achieved the goal
+        cudaMalloc(&d_achieve_goal, num_of_states1 * sizeof(int));
+        cudaMemset(d_achieve_goal, 0, num_of_states1 * sizeof(int));
 
         float * d_joint_states1 = single_arm_states1->getJointStatesCuda();
         float * d_joint_states2 = single_arm_states2->getJointStatesCuda();
@@ -1012,7 +1012,8 @@ namespace CUDAMPLib {
         int blocksPerGrid2 = (num_of_states1 * num_of_joints + threadsPerBlock - 1) / threadsPerBlock;
 
         bool still_approaching = true;
-        while(still_approaching)
+        // while(still_approaching)
+        for (size_t ii = 0; ii < 10000; ii++)
         {
             // store the previous intermediate states
             cudaMemcpy(d_joint_previous_intermediate_states, d_joint_intermediate_states, num_of_states1 * num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
@@ -1029,7 +1030,7 @@ namespace CUDAMPLib {
             );
 
             // project the intermediate_states
-            for (size_t t = 0; t < CUDAMPLib_PROJECT_MAX_ITERATION; t++)
+            for (size_t t = 0; t < 3; t++)
             {
                 // forward kinematics
                 intermediate_states->calculateForwardKinematics();
@@ -1063,6 +1064,14 @@ namespace CUDAMPLib {
                 CUDA_CHECK(cudaDeviceSynchronize());
             }
 
+            // check if the projected states still satisfy the constraints
+            checkIfCostIsZero<<<blocksPerGrid, threadsPerBlock>>>(
+                intermediate_states->getTotalCostsCuda(),
+                num_of_states1,
+                1e-3,
+                d_is_approaching
+            );
+
             // check if the projected states is closer to states2
             checkValidOfApproaching<<<blocksPerGrid, threadsPerBlock>>>(
                 d_joint_previous_intermediate_states,
@@ -1070,20 +1079,75 @@ namespace CUDAMPLib {
                 d_joint_states2,
                 num_of_states1,
                 num_of_joints,
-                resolution_,
+                resolution_ * 5.0,
                 d_is_approaching
             );
 
             CUDA_CHECK(cudaDeviceSynchronize());
 
-            break; // debug for now.
+            // increase the motion step if the states are still approaching
+            updateMotionStep<<<blocksPerGrid, threadsPerBlock>>>(d_is_approaching, d_motion_step, num_of_states1);
+
+            CUDA_CHECK(cudaDeviceSynchronize());
+
+            // check if ths new intermediate states is close enough to the goal states.
+            checkAchieveGoal<<<blocksPerGrid, threadsPerBlock>>>(
+                d_is_approaching,
+                d_joint_intermediate_states,
+                d_joint_states2,
+                num_of_states1,
+                num_of_joints,
+                resolution_,
+                d_achieve_goal
+            );
+
+            CUDA_CHECK(cudaDeviceSynchronize());
+
+            bool no_states_to_approach = true;
+            // for debug, print the is_approaching
+            std::vector<int> h_is_approaching(num_of_states1);
+            cudaMemcpy(h_is_approaching.data(), d_is_approaching, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
+            for (size_t i = 0; i < h_is_approaching.size(); i++)
+            {
+                if (h_is_approaching[i] != 0)
+                {
+                    no_states_to_approach = false;
+                    break;
+                }
+            }
+
+            if (no_states_to_approach)
+            {
+                break;
+            }
         }
+
+        // for debug, print achieve goal
+        std::vector<int> h_achieve_goal(num_of_states1);
+        cudaMemcpy(h_achieve_goal.data(), d_achieve_goal, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
+
+        std::cout << "achieve_goal: ";
+        for (size_t i = 0; i < h_achieve_goal.size(); i++)
+        {
+            std::cout << h_achieve_goal[i] << " ";
+        }
+        std::cout << std::endl;
+        
+        std::vector<int> h_motion_step(num_of_states1);
+        cudaMemcpy(h_motion_step.data(), d_motion_step, num_of_states1 * sizeof(int), cudaMemcpyDeviceToHost);
+        std::cout << "motion_step: ";
+        for (size_t i = 0; i < h_motion_step.size(); i++)
+        {
+            std::cout << h_motion_step[i] << " ";
+        }
+        std::cout << std::endl;
 
         cudaFree(d_motion_step);
         cudaFree(d_is_approaching);
         cudaFree(d_new_distance_to_states2);
         cudaFree(d_approach_directions);
         cudaFree(d_joint_previous_intermediate_states);
+        cudaFree(d_achieve_goal);
         intermediate_states.reset();
 
         return true;

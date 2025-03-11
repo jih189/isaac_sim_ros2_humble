@@ -1702,9 +1702,11 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
 
     // generate start and goal states under the task space constraint by sampling
     CUDAMPLib::SingleArmStatesPtr start_single_arm_states = 
-        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(50));
+        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(2000));
     CUDAMPLib::SingleArmStatesPtr goal_single_arm_states =
-        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(50));
+        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(2000));
+
+    size_t num_of_test_motions = 1000;
 
     // check states
     start_single_arm_states->update();
@@ -1719,18 +1721,22 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     start_single_arm_states->filterStates(start_state_feasibility);
     goal_single_arm_states->filterStates(goal_state_feasibility);
 
-    if (start_single_arm_states->getJointStatesHost().size() == 0 || goal_single_arm_states->getJointStatesHost().size() == 0)
+    if (start_single_arm_states->getJointStatesHost().size() < num_of_test_motions || goal_single_arm_states->getJointStatesHost().size() < num_of_test_motions)
     {
         // print in red
-        std::cout << "\033[1;31m" << "Failed to generate start or goal states satisfying the task space constraint" << "\033[0m" << std::endl;
+        std::cout << "\033[1;31m" << "Failed to generate enough start or goal states satisfying the task space constraint" << "\033[0m" << std::endl;
         return;
     }
     // create a vector of bool with size 5
     std::vector<bool> start_state_filter(start_single_arm_states->getNumOfStates(), false);
     std::vector<bool> goal_state_filter(goal_single_arm_states->getNumOfStates(), false);
-    // only keep the first one
-    start_state_filter[0] = true;
-    goal_state_filter[0] = true;
+
+    // only keep the first num_of_test_motions states
+    for (size_t i = 0; i < num_of_test_motions; i++)
+    {
+        start_state_filter[i] = true;
+        goal_state_filter[i] = true;
+    }
 
     // filter out the states
     start_single_arm_states->filterStates(start_state_filter);
@@ -1740,23 +1746,13 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     std::cout << "Number of start states: " << start_single_arm_states->getNumOfStates() << std::endl;
     std::cout << "Number of goal states: " << goal_single_arm_states->getNumOfStates() << std::endl;
 
-    std::cout << "Start state: " << std::endl;
-    for (size_t i = 0; i < start_single_arm_states->getJointStatesHost()[0].size(); i++)
-    {
-        std::cout << start_single_arm_states->getJointStatesHost()[0][i] << " ";
-    }
-    std::cout << std::endl;
-
-    std::cout << "Goal state: " << std::endl;
-    for (size_t i = 0; i < goal_single_arm_states->getJointStatesHost()[0].size(); i++)
-    {
-        std::cout << goal_single_arm_states->getJointStatesHost()[0][i] << " ";
-    }
-    std::cout << std::endl;
-
     // check constrained motions
+    auto start_time = std::chrono::high_resolution_clock::now();
     single_arm_space->checkConstrainedMotions(start_single_arm_states, goal_single_arm_states);
-
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time = end_time - start_time;
+    // print in green
+    std::cout << "\033[1;32m" << "Time taken by function: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
 }
 
 int main(int argc, char** argv)
