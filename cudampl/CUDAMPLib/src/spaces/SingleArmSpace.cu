@@ -946,7 +946,7 @@ namespace CUDAMPLib {
         }
     }
 
-    bool SingleArmSpace::checkConstrainedMotions(
+    std::vector<std::vector<std::vector<float>>> SingleArmSpace::computeConstrainedMotions(
         const BaseStatesPtr & states1, 
         const BaseStatesPtr & states2,
         std::vector<bool> & motion_feasibility,
@@ -1209,6 +1209,8 @@ namespace CUDAMPLib {
         std::vector<bool> motion_state_feasibility;
         checkStates(interpolated_states, motion_state_feasibility);
 
+        std::vector<std::vector<std::vector<float>>> cropped_constrained_motions(num_of_states1, std::vector<std::vector<float>>());
+
         for (int i = 0; i < num_of_states1; i++)
         {
             if (h_achieve_goal_int[i] != 0)
@@ -1229,6 +1231,8 @@ namespace CUDAMPLib {
 
                 if (is_feasible_motion)
                 {
+                    cropped_constrained_motions[i].push_back(constrained_motions[i][0]);
+
                     // print the feasible motion
                     float total_cost = 0.0;
                     for (int j = 1; j < h_motion_step[i]; j++)
@@ -1239,6 +1243,8 @@ namespace CUDAMPLib {
                             cost += (constrained_motions[i][j][k] - constrained_motions[i][j-1][k]) * (constrained_motions[i][j][k] - constrained_motions[i][j-1][k]);
                         }
                         total_cost += sqrt(cost);;
+
+                        cropped_constrained_motions[i].push_back(constrained_motions[i][j]);
                     }
 
                     motion_costs[i] = total_cost;
@@ -1249,7 +1255,7 @@ namespace CUDAMPLib {
         // free the memory
         interpolated_states.reset();
     
-        return true;
+        return cropped_constrained_motions;
     }
 
     void SingleArmSpace::interpolate(
@@ -1284,6 +1290,12 @@ namespace CUDAMPLib {
 
         // wait for the kernel to finish
         cudaDeviceSynchronize();
+
+        if (projectable_constraint_indices_.size() > 0)
+        {
+            // This space has projectable constraints, so we need to project the sampled states first.
+            this->projectStates(to_states);
+        }
 
         // deallocate d_max_distance
         cudaFree(d_max_distance);
@@ -1325,6 +1337,112 @@ namespace CUDAMPLib {
         }
 
         return path_in_cuda;
+    }
+
+    bool SingleArmSpace::checkConstrainedMotions(
+        const BaseStatesPtr & states1, 
+        const BaseStatesPtr & states2,
+        std::vector<bool>& motion_feasibility,
+        std::vector<float>& motion_costs
+    )
+    {
+        // call computeConstrainedMotions. Ignore the return value
+        computeConstrainedMotions(states1, states2, motion_feasibility, motion_costs);
+
+        return true;
+    }
+
+    BaseStatesPtr SingleArmSpace::getConstrainedPathFromWaypoints(
+        const BaseStatesPtr & waypoints
+    )
+    {
+        // static cast to SingleArmStatesPtr
+        SingleArmStatesPtr single_arm_waypoints = std::dynamic_pointer_cast<SingleArmStates>(waypoints);
+
+        // Due to constrained motion is not necessary valid in both directions, we need to check the feasibility of the motion
+        // in two directions. 
+
+        size_t num_of_waypoints = single_arm_waypoints->getNumOfStates();
+
+        std::vector<std::vector<float>> waypoints_joint_values = single_arm_waypoints->getJointStatesHost();
+
+        std::vector<std::vector<float>> states1_joint_values;
+        std::vector<std::vector<float>> states2_joint_values;
+
+        for (int i = 0 ; i < num_of_waypoints - 1; i++)
+        {
+            // forward motion
+            states1_joint_values.push_back(waypoints_joint_values[i]);
+            states2_joint_values.push_back(waypoints_joint_values[i+1]);
+
+            // backward motion
+            states1_joint_values.push_back(waypoints_joint_values[i+1]);
+            states2_joint_values.push_back(waypoints_joint_values[i]);
+        }
+
+        // create states from the states1_joint_values and states2_joint_values
+        auto states1 = createStatesFromVector(states1_joint_values);
+        auto states2 = createStatesFromVector(states2_joint_values);
+        std::vector<bool> motion_feasibility;
+        std::vector<float> motion_costs;
+
+        // check the constrained motions
+        std::vector<std::vector<std::vector<float>>> motion_joint_values = computeConstrainedMotions(states1, states2, motion_feasibility, motion_costs);
+
+        // // print motion joint values
+        // for (size_t i = 0; i < motion_joint_values.size(); i++)
+        // {
+        //     std::cout << "Motion " << i << " feasibility: " << motion_feasibility[i] << std::endl;
+        //     for (size_t j = 0; j < motion_joint_values[i].size(); j++)
+        //     {
+        //         for (size_t k = 0; k < motion_joint_values[i][j].size(); k++)
+        //         {
+        //             std::cout << motion_joint_values[i][j][k] << " ";
+        //         }
+        //         std::cout << std::endl;
+        //     }
+        // }
+
+        std::vector<std::vector<float>> path_joint_values;
+
+        for (size_t i = 0; i < motion_joint_values.size(); i += 2)
+        {
+            if (motion_feasibility[i])
+            {
+                for (size_t j = 0; j < motion_joint_values[i].size(); j++)
+                {
+                    path_joint_values.push_back(motion_joint_values[i][j]);
+                }
+                continue;
+            }
+            if (motion_feasibility[i+1])
+            {
+                // add joint values in reverse order
+                for (int j = motion_joint_values[i+1].size() - 1; j >= 0; j--)
+                {
+                    path_joint_values.push_back(motion_joint_values[i+1][j]);
+                }
+                continue;
+            }
+        }
+
+        // // print path_joint_values
+        // for (size_t i = 0; i < path_joint_values.size(); i++)
+        // {
+        //     for (size_t j = 0; j < path_joint_values[i].size(); j++)
+        //     {
+        //         std::cout << path_joint_values[i][j] << " ";
+        //     }
+        //     std::cout << std::endl;
+        // }
+
+        auto path_states = createStatesFromVectorFull(path_joint_values);
+
+        // deallocate states1 and states2
+        states1.reset();
+        states2.reset();
+        
+        return path_states;
     }
 
     void SingleArmSpace::oldCheckStates(

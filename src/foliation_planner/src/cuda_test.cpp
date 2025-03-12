@@ -1623,6 +1623,8 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     // set robot state to default state
     robot_state->setToDefaultValues();
+
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
     
     // Prepare constraints
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
@@ -1745,7 +1747,114 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     // print in green
     std::cout << "\033[1;32m" << "Time taken by function: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
 
-    
+    // print the number of feasible motions
+    int num_of_feasible_motions = 0;
+    int first_valid_motion_index = -1;
+    for (size_t i = 0; i < motion_feasibility.size(); i++)
+    {
+        if (motion_feasibility[i])
+        {
+            std::cout << "Motion " << i << " is feasible" << std::endl;
+            num_of_feasible_motions++;
+            if (first_valid_motion_index == -1)
+            {
+                first_valid_motion_index = i;
+            }
+        }
+    }
+    std::cout << "Number of feasible motions: " << num_of_feasible_motions << std::endl;
+
+    if (num_of_feasible_motions == 0)
+    {
+        // print in red
+        std::cout << "\033[1;31m" << "No feasible motions found" << "\033[0m" << std::endl;
+        return;
+    }
+
+    // print the states of the first feasible motion
+    std::vector<std::vector<float>> start_joint_values = start_single_arm_states->getJointStatesHost();
+
+    std::vector<std::vector<float>> goal_joint_values = goal_single_arm_states->getJointStatesHost();
+
+    // print the start and goal joint values
+    std::cout << "Start joint values: ";
+    for (size_t i = 0; i < start_joint_values[first_valid_motion_index].size(); i++)
+    {
+        std::cout << start_joint_values[first_valid_motion_index][i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Goal joint values: ";
+    for (size_t i = 0; i < goal_joint_values[first_valid_motion_index].size(); i++)
+    {
+        std::cout << goal_joint_values[first_valid_motion_index][i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::vector<std::vector<float>> waypoints_joint_values = {start_joint_values[first_valid_motion_index], goal_joint_values[first_valid_motion_index]};
+
+    // print the waypoints joint values
+    std::cout << "Waypoints joint values: " << std::endl;
+    for (size_t i = 0; i < waypoints_joint_values.size(); i++)
+    {
+        for (size_t j = 0; j < waypoints_joint_values[i].size(); j++)
+        {
+            std::cout << waypoints_joint_values[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    auto waypoints_states = single_arm_space->createStatesFromVector(waypoints_joint_values);
+    auto fullpath = single_arm_space->getConstrainedPathFromWaypoints(waypoints_states);
+
+    // cast the fullpath to SingleArmStates
+    auto fullpath_single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(fullpath);
+
+    ///////////////////////////// Visualize the path /////////////////////////////
+
+    // create start state msg
+    moveit_msgs::msg::RobotState start_state_msg;
+
+    moveit_msgs::msg::DisplayTrajectory display_trajectory;
+    moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
+    auto solution_robot_trajectory = robot_trajectory::RobotTrajectory(robot_model, joint_model_group);
+
+    std::vector<std::vector<float>> solution_path = fullpath_single_arm_states->getJointStatesHost();
+
+    // generate robot trajectory msg
+    for (size_t i = 0; i < solution_path.size(); i++)
+    {
+        // convert solution_path[i] to double vector
+        std::vector<double> solution_path_i_double = std::vector<double>(solution_path[i].begin(), solution_path[i].end());
+        robot_state->setJointGroupPositions(joint_model_group, solution_path_i_double);
+        solution_robot_trajectory.addSuffixWayPoint(*robot_state, 1.0);
+
+        if (i == 0)
+        {
+            // Create start msg
+            moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
+        }
+    }
+    // Create a DisplayTrajectory message
+    solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
+
+    display_trajectory.trajectory_start = start_state_msg;
+    display_trajectory.trajectory.push_back(robot_trajectory_msg);
+
+    // Create a path publisher
+    auto display_publisher = node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
+
+    // Publish the message in a loop
+    while (rclcpp::ok())
+    {
+        // Publish the message
+        display_publisher->publish(display_trajectory);
+
+        rclcpp::spin_some(node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 int main(int argc, char** argv)
