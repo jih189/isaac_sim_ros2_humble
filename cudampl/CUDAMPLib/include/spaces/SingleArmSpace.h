@@ -58,6 +58,13 @@ namespace CUDAMPLib
                 std::vector<float>& motion_costs
             ) override;
 
+            bool checkUnconstrainedMotions(
+                const BaseStatesPtr & states1, 
+                const BaseStatesPtr & states2,
+                std::vector<bool>& motion_feasibility,
+                std::vector<float>& motion_costs
+            );
+
             bool checkConstrainedMotions(
                 const BaseStatesPtr & states1, 
                 const BaseStatesPtr & states2,
@@ -91,6 +98,10 @@ namespace CUDAMPLib
             BaseStatesPtr getPathFromWaypoints(
                 const BaseStatesPtr & waypoints
             ) override;
+
+            BaseStatesPtr getUnconstrainedPathFromWaypoints(
+                const BaseStatesPtr & waypoints
+            );
 
             BaseStatesPtr getConstrainedPathFromWaypoints(
                 const BaseStatesPtr & waypoints

@@ -489,6 +489,24 @@ namespace CUDAMPLib {
         std::vector<float> & motion_costs
     )
     {
+        // check if space contains projectable constraints
+        if (projectable_constraint_indices_.size() > 0)
+        {
+            return checkConstrainedMotions(states1, states2, motion_feasibility, motion_costs);
+        }
+        else
+        {
+            return checkUnconstrainedMotions(states1, states2, motion_feasibility, motion_costs);
+        }
+    }
+
+    bool SingleArmSpace::checkUnconstrainedMotions(
+        const BaseStatesPtr & states1, 
+        const BaseStatesPtr & states2, 
+        std::vector<bool> & motion_feasibility,
+        std::vector<float> & motion_costs
+    )
+    {
         size_t num_of_states1 = states1->getNumOfStates();
         size_t num_of_states2 = states2->getNumOfStates();
         if (num_of_states1 != num_of_states2)
@@ -1024,7 +1042,7 @@ namespace CUDAMPLib {
 
         bool still_approaching = true;
         // while(still_approaching)
-        for (size_t ii = 0; ii < 1000; ii++)
+        for (size_t ii = 0; ii < 10000; ii++)
         {
             // store the previous intermediate states
             cudaMemcpy(d_joint_previous_intermediate_states, d_joint_intermediate_states, num_of_states1 * num_of_joints * sizeof(float), cudaMemcpyDeviceToDevice);
@@ -1184,6 +1202,15 @@ namespace CUDAMPLib {
             total_steps += h_motion_step[i];
         }
 
+        if (total_steps == 0)
+        {
+            // set motion_feasibility to false
+            motion_feasibility.assign(num_of_states1, false);
+            
+            // return empty std::vector<std::vector<std::vector<float>>>
+            return std::vector<std::vector<std::vector<float>>>();
+        }
+
         // allocate memory for the interpolated states
         SingleArmStatesPtr interpolated_states = std::make_shared<SingleArmStates>(total_steps, space_info);
         float * d_joint_values_interpolated_states = interpolated_states->getJointStatesCuda();
@@ -1302,6 +1329,23 @@ namespace CUDAMPLib {
     }
 
     BaseStatesPtr SingleArmSpace::getPathFromWaypoints(
+        const BaseStatesPtr & waypoints
+    )
+    {
+        // check if space contains projectable constraints
+        if (projectable_constraint_indices_.size() > 0)
+        {
+            // This space has projectable constraints, so we need to project the sampled states first.
+            return getConstrainedPathFromWaypoints(waypoints);
+        }
+        else{
+            return getUnconstrainedPathFromWaypoints(waypoints);
+        }
+
+
+    }
+
+    BaseStatesPtr SingleArmSpace::getUnconstrainedPathFromWaypoints(
         const BaseStatesPtr & waypoints
     )
     {

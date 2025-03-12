@@ -1513,7 +1513,7 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
 
     // generate start and goal states under the task space constraint by sampling
     CUDAMPLib::SingleArmStatesPtr sample_single_arm_states = 
-        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(10));
+        std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(100));
 
     // check states
     sample_single_arm_states->update();
@@ -1570,21 +1570,62 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
 
     planner->setMaxTravelDistance(5.0);
 
-    planner->setSampleAttemptsInEachIteration(1);
+    planner->setSampleAttemptsInEachIteration(100);
 
     // set the task
     planner->setMotionTask(task);
 
-    // CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
-    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(2);
+    CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(20.0);
+    // CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(100);
 
     planner->solve(termination_condition);
 
-    ////////////////////////////////////////////////////////////////////////////////////////
+    /************************** Debug **************************************/
+    // extract the start and goal group states
+    CUDAMPLib::BaseStatesPtr start_group_states;
+    CUDAMPLib::BaseStatesPtr goal_group_states;
+    planner->getStartAndGoalGroupStates(start_group_states, goal_group_states);
 
-    // Create start/goal robot state publisher
-    auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
-    auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+    // static_pointer_cast to SingleArmStates
+    CUDAMPLib::SingleArmStatesPtr start_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(start_group_states);
+    CUDAMPLib::SingleArmStatesPtr goal_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(goal_group_states);
+
+    // create color
+    std_msgs::msg::ColorRGBA color_start;
+    color_start.r = 0.0;
+    color_start.g = 1.0;
+    color_start.b = 0.0;
+    color_start.a = 0.4;
+
+    // visualize the states
+    visualization_msgs::msg::MarkerArray start_group_state_markers_combined;
+    generate_state_markers(
+        start_group_states_single_arm->getJointStatesHost(),
+        joint_model_group,
+        robot_state,
+        "start_group",
+        color_start,
+        start_group_state_markers_combined
+    );
+
+    // create color
+    std_msgs::msg::ColorRGBA color_goal;
+    color_goal.r = 1.0;
+    color_goal.g = 0.0;
+    color_goal.b = 0.0;
+    color_goal.a = 0.4;
+
+    visualization_msgs::msg::MarkerArray goal_group_state_markers_combined;
+    generate_state_markers(
+        goal_group_states_single_arm->getJointStatesHost(),
+        joint_model_group,
+        robot_state,
+        "goal_group",
+        color_goal,
+        goal_group_state_markers_combined
+    );
+
+    /************************** Debug **************************************/
 
     // Create a DisplayRobotState message
     moveit_msgs::msg::RobotState start_state_msg;
@@ -1599,11 +1640,66 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
     moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
     goal_display_robot_state.state = goal_state_msg;
 
+    moveit_msgs::msg::DisplayTrajectory display_trajectory;
+    moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
+    auto solution_robot_trajectory = robot_trajectory::RobotTrajectory(robot_model, joint_model_group);
+
+    if (task->hasSolution())
+    {
+        // print "Task solved" in green color
+        std::cout << "\033[1;32m" << "Task solved" << "\033[0m" << std::endl;
+
+        std::vector<std::vector<float>> solution_path = task->getSolution();
+
+        // generate robot trajectory msg
+        for (size_t i = 0; i < solution_path.size(); i++)
+        {
+            // convert solution_path[i] to double vector
+            std::vector<double> solution_path_i_double = std::vector<double>(solution_path[i].begin(), solution_path[i].end());
+            robot_state->setJointGroupPositions(joint_model_group, solution_path_i_double);
+            solution_robot_trajectory.addSuffixWayPoint(*robot_state, 1.0);
+
+            if (i == 0)
+            {
+                moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
+            }
+
+        }
+        // Create a DisplayTrajectory message
+        solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
+
+        display_trajectory.trajectory_start = start_state_msg;
+        display_trajectory.trajectory.push_back(robot_trajectory_msg);
+    }
+    else
+    {
+        // print "Task not solved" in red color
+        std::cout << "\033[1;31m" << "Task not solved" << "\033[0m" << std::endl;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////
+
+    // Create start/goal robot state publisher
+    auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
+    auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+    auto start_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("start_group_states", 1);
+    auto goal_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("goal_group_states", 1);
+
+    std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>> display_publisher =
+        node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
+
     while (rclcpp::ok())
     {
         // Publish the message
         start_robot_state_publisher->publish(start_display_robot_state);
         goal_robot_state_publisher->publish(goal_display_robot_state);
+        start_group_states_publisher->publish(start_group_state_markers_combined);
+        goal_group_states_publisher->publish(goal_group_state_markers_combined);
+
+        if (task->hasSolution())
+        {
+            display_publisher->publish(display_trajectory);
+        }
 
         rclcpp::spin_some(node);
 
@@ -1900,9 +1996,9 @@ int main(int argc, char** argv)
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_CHECK_CONSTRAINED_MOTION(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_CHECK_CONSTRAINED_MOTION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
 
