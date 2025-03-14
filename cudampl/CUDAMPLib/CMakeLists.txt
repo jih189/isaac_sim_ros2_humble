@@ -12,6 +12,15 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED)
+find_package(CUDA REQUIRED)
+find_library(NVRTC_LIB nvrtc
+    PATHS ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+    NO_DEFAULT_PATH
+)
+
+if(NOT NVRTC_LIB)
+    message(FATAL_ERROR "NVRTC library not found in ${CUDA_TOOLKIT_ROOT_DIR}/lib64")
+endif()
 
 #Executable
 if(${MY_BUILD_SHARED_LIBS})
@@ -25,10 +34,12 @@ target_include_directories(${lib_name}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include/${lib_name}>
+        ${CUDA_INCLUDE_DIRS}  # Propagate CUDA include directories
 )
 
 #Pass the flags to the library
 target_link_libraries( ${lib_name}
+    PUBLIC ${NVRTC_LIB} ${CUDA_CUDA_LIBRARY}
 	PUBLIC $<BUILD_INTERFACE:developer_flags>	
 )
 

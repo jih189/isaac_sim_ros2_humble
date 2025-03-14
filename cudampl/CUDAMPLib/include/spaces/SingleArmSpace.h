@@ -6,6 +6,7 @@
 #include <states/SingleArmStates.h>
 #include <vector>
 #include <util.h>
+#include <NvrtcUtil.h>
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 
@@ -161,6 +162,9 @@ namespace CUDAMPLib
             float * d_lower_bound;
             float * d_upper_bound;
             float * d_default_joint_values;
+
+            // kernel function of the space
+            KernelFunctionPtr kernelFuncPtr_;
 
             // random number generator
             // std::random_device rd;  // Non-deterministic seed (preferred)

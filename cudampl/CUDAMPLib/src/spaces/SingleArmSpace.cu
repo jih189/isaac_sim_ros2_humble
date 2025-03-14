@@ -99,6 +99,26 @@ namespace CUDAMPLib {
         cudaMemcpy(d_lower_bound, lower.data(), lower_bound_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_upper_bound, upper.data(), upper_bound_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_default_joint_values, default_joint_values.data(), default_joint_values_bytes, cudaMemcpyHostToDevice);
+
+        // try to generate kernel code.
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        // Define the kernel code.
+        const char *kernel_code = R"(
+        extern "C" __global__
+        void add(const int* a, const int* b, int* c) {
+            int idx = threadIdx.x;
+            c[idx] = a[idx] + b[idx];
+        }
+        )";
+
+        // Create the kernel function using the class's static factory method.
+        kernelFuncPtr_ = KernelFunction::create(kernel_code, "add");
+
+        if (! kernelFuncPtr_ || ! kernelFuncPtr_->function) {
+            std::cerr << "\033[31m" << "Kernel function 'add' compilation failed." << "\033[0m" << std::endl;
+        }
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     }
 
     SingleArmSpace::~SingleArmSpace()
@@ -115,6 +135,9 @@ namespace CUDAMPLib {
         cudaFree(d_lower_bound);
         cudaFree(d_upper_bound);
         cudaFree(d_default_joint_values);
+
+        // free kernel function
+        kernelFuncPtr_.reset();
     }
 
     __global__ void initCurand(curandState * state, unsigned long seed, int state_size)
@@ -1690,6 +1713,9 @@ namespace CUDAMPLib {
         // set number of active joints
         space_info->num_of_active_joints = num_of_active_joints_;
         space_info->active_joint_map = active_joint_map_;
+
+        // set kernel functions of the space
+        space_info->kernelFuncPtr = kernelFuncPtr_;
     }
 
     BaseStateManagerPtr SingleArmSpace::createStateManager()

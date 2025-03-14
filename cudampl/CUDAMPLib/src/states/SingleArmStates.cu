@@ -26,10 +26,6 @@ namespace CUDAMPLib
         C[11] = A[8] * B[3] + A[9] * B[7] + A[10] * B[11] + A[11] * B[15];
 
         // Due to the fact that the last row of the transformation matrix is always [0, 0, 0, 1], we can skip the multiplication for the last row.
-        // C[12] = A[12] * B[0] + A[13] * B[4] + A[14] * B[8] + A[15] * B[12];
-        // C[13] = A[12] * B[1] + A[13] * B[5] + A[14] * B[9] + A[15] * B[13];
-        // C[14] = A[12] * B[2] + A[13] * B[6] + A[14] * B[10] + A[15] * B[14];
-        // C[15] = A[12] * B[3] + A[13] * B[7] + A[14] * B[11] + A[15] * B[15];
         C[12] = 0.f; C[13] = 0.f; C[14] = 0.f; C[15] = 1.f;
     }
 
@@ -56,33 +52,60 @@ namespace CUDAMPLib
         multiply4x4(parent_link_pose, joint_pose, link_pose);
     }
 
-    /**
-        * @brief Get the rotation matrix from axis-angle representation
-     */
-    __device__ __forceinline__ void make_rotation_axis_angle(float angle, float x, float y, float z, float* R)
+    __device__ __forceinline__ void make_rotation_axis_angle(
+        float angle, float x, float y, float z, float* R)
     {
-        // Normalize the axis
-        float length = sqrtf(x*x + y*y + z*z);
-        if (length < 1e-12f)
-        {
-            // If axis is nearly zero-length, return identity
-            set_identity(R);
-            return;
-        }
+        // Compute the length and define a threshold.
+        float length = sqrtf(x * x + y * y + z * z);
+        const float thresh = 1e-12f;
 
-        x /= length;
-        y /= length;
-        z /= length;
+        // Compute a valid flag: 1 if length is sufficient, 0 otherwise.
+        // Using the ternary operator here; NVCC will typically optimize this well.
+        float valid = (length >= thresh) ? 1.f : 0.f;
 
-        float c     = cosf(angle);
-        float s     = sinf(angle);
+        // Avoid division by zero by using fmaxf. If length is too small, we use thresh.
+        float inv_length = 1.f / fmaxf(length, thresh);
+
+        // Normalize the axis. If invalid (valid==0), the result will be zero.
+        float nx = x * inv_length * valid;
+        float ny = y * inv_length * valid;
+        float nz = z * inv_length * valid;
+
+        // Compute trigonometric functions.
+        float c = cosf(angle);
+        float s = sinf(angle);
         float one_c = 1.f - c;
 
-        // Row-major rotation matrix
-        R[0]  = c + x*x*one_c;     R[1]  = x*y*one_c - z*s;   R[2]  = x*z*one_c + y*s;    R[3]  = 0.f;
-        R[4]  = y*x*one_c + z*s;   R[5]  = c + y*y*one_c;     R[6]  = y*z*one_c - x*s;    R[7]  = 0.f;
-        R[8]  = z*x*one_c - y*s;   R[9]  = z*y*one_c + x*s;   R[10] = c + z*z*one_c;       R[11] = 0.f;
-        R[12] = 0.f;               R[13] = 0.f;               R[14] = 0.f;                R[15] = 1.f;
+        // Compute the rotation matrix components from the axis–angle formula.
+        // These values are valid only if valid==1; otherwise, they should be ignored.
+        float r0  = c + nx * nx * one_c;
+        float r1  = nx * ny * one_c - nz * s;
+        float r2  = nx * nz * one_c + ny * s;
+        float r4  = ny * nx * one_c + nz * s;
+        float r5  = c + ny * ny * one_c;
+        float r6  = ny * nz * one_c - nx * s;
+        float r8  = nz * nx * one_c - ny * s;
+        float r9  = nz * ny * one_c + nx * s;
+        float r10 = c + nz * nz * one_c;
+
+        // Blend the computed matrix with the identity matrix.
+        // If valid==0, we output the identity matrix.
+        R[0]  = r0 * valid + (1.f - valid) * 1.f;
+        R[1]  = r1 * valid;
+        R[2]  = r2 * valid;
+        R[3]  = 0.f;
+        R[4]  = r4 * valid;
+        R[5]  = r5 * valid + (1.f - valid) * 1.f;
+        R[6]  = r6 * valid;
+        R[7]  = 0.f;
+        R[8]  = r8 * valid;
+        R[9]  = r9 * valid;
+        R[10] = r10 * valid + (1.f - valid) * 1.f;
+        R[11] = 0.f;
+        R[12] = 0.f;
+        R[13] = 0.f;
+        R[14] = 0.f;
+        R[15] = 1.f;
     }
 
     /**
@@ -998,6 +1021,60 @@ namespace CUDAMPLib
 
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
+
+        // ////////////////////////////////////////////////////////////////
+        // // try NVRTC
+        // // get the kernelFuncPtr_ from space_info_single_arm_space
+        // auto kernelFuncPtr_from_space = space_info_single_arm_space->kernelFuncPtr;
+
+        // // Prepare host data.
+        // const int arraySize = 10;
+        // int h_a[arraySize], h_b[arraySize], h_c[arraySize];
+        // for (int i = 0; i < arraySize; i++) {
+        //     h_a[i] = i;
+        //     h_b[i] = i * 2;
+        // }
+
+        // // Allocate device memory using cudaMalloc.
+        // int *d_a, *d_b, *d_c;
+        // CUDA_CHECK(cudaMalloc((void**)&d_a, arraySize * sizeof(int)));
+        // CUDA_CHECK(cudaMalloc((void**)&d_b, arraySize * sizeof(int)));
+        // CUDA_CHECK(cudaMalloc((void**)&d_c, arraySize * sizeof(int)));
+
+        // // Copy input data from host to device using cudaMemcpy.
+        // CUDA_CHECK(cudaMemcpy(d_a, h_a, arraySize * sizeof(int), cudaMemcpyHostToDevice));
+        // CUDA_CHECK(cudaMemcpy(d_b, h_b, arraySize * sizeof(int), cudaMemcpyHostToDevice));
+
+        // // Set up kernel parameters.
+        // void *args[] = { &d_a, &d_b, &d_c };
+
+        // blocksPerGrid = (arraySize + threadsPerBlock - 1) / threadsPerBlock;
+
+        // // Launch the kernel using the member function of KernelFunction.
+        // // Launching with 1 block of 'arraySize' threads.
+        // kernelFuncPtr_from_space->launchKernel(dim3(blocksPerGrid, 1, 1),
+        //                             dim3(threadsPerBlock, 1, 1),
+        //                             0,          // shared memory size
+        //                             nullptr,    // stream
+        //                             args);
+
+        // // Wait for the kernel to finish.
+        // CUDA_CHECK(cudaDeviceSynchronize());
+
+        // // Copy the results back to the host.
+        // CUDA_CHECK(cudaMemcpy(h_c, d_c, arraySize * sizeof(int), cudaMemcpyDeviceToHost));
+
+        // // Print the results.
+        // for (int i = 0; i < arraySize; i++) {
+        //     std::cout << h_a[i] << " + " << h_b[i] << " = " << h_c[i] << std::endl;
+        // }
+
+        // // Free the device memory.
+        // CUDA_CHECK(cudaFree(d_a));
+        // CUDA_CHECK(cudaFree(d_b));
+        // CUDA_CHECK(cudaFree(d_c));
+
+        ////////////////////////////////////////////////////////////////
     }
 
     __global__ void sum_gradients_kernel(

@@ -184,7 +184,7 @@ void generate_state_markers(
     }
 }
 
-void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_JACOBIAN(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
@@ -225,12 +225,12 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     std::string check_link_name = "wrist_roll_link";
 
     // set a test joint values
-    // std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    // std::vector<float> joint_values_2 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5};
-    std::vector<float> joint_values_3 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<float> joint_values_2 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5};
+    std::vector<float> joint_values_3 = {0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     std::vector<std::vector<float>> joint_values_set;
-    // joint_values_set.push_back(joint_values_1);
-    // joint_values_set.push_back(joint_values_2);
+    joint_values_set.push_back(joint_values_1);
+    joint_values_set.push_back(joint_values_2);
     joint_values_set.push_back(joint_values_3);
 
     // create states based on the joint values
@@ -306,6 +306,126 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     }
 }
 
+/**
+    Use moveit to compute the forward kinematics
+ */
+void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    // create moveit robot state
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames()
+    );
+
+    std::string check_link_name = "wrist_roll_link";
+
+    std::vector<std::vector<float>> moveit_positions;
+    std::vector<std::vector<float>> moveit_orientations;
+
+    int test_config_num = 1000;
+    std::vector<std::vector<float>> joint_values_set;
+    for (int i = 0; i < test_config_num; i++)
+    {
+        // use moveit to randomly sample joint values
+        std::vector<double> joint_values_double;
+        robot_state->setToRandomPositions(joint_model_group);
+        robot_state->copyJointGroupPositions(joint_model_group, joint_values_double);
+        std::vector<float> joint_values_float;
+        for (size_t j = 0; j < joint_values_double.size(); j++)
+        {
+            joint_values_float.push_back((float)joint_values_double[j]);
+        }
+        joint_values_set.push_back(joint_values_float);
+
+        // store the end effector pose
+        robot_state->update();
+        Eigen::Isometry3d end_effector_link_pose = robot_state->getGlobalLinkTransform(check_link_name);
+        Eigen::Quaterniond q(end_effector_link_pose.rotation());
+        moveit_positions.push_back({
+            (float)(end_effector_link_pose.translation().x()),
+            (float)(end_effector_link_pose.translation().y()),
+            (float)(end_effector_link_pose.translation().z())
+        });
+        moveit_orientations.push_back({(float)(q.w()), (float)(q.x()), (float)(q.y()), (float)(q.z())});
+        // std::cout << "End effector pose " << i << " using moveit: " << std::endl;
+        // std::cout << "position: " << end_effector_link_pose.translation().transpose() << std::endl;
+        // std::cout << "quaternion: " << q.w() << " " << q.x() << " " << q.y() << " " << q.z() << std::endl;
+    }
+
+    // create states based on the joint values
+    auto states = single_arm_space->createStatesFromVector(joint_values_set);
+    states->update();
+
+    // statistic_cast_pointer_cast to SingleArmStates
+    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(states);
+
+    std::vector<Eigen::Isometry3d> end_effector_link_poses_in_base_link = single_arm_states->getLinkPoseInBaseLinkHost(check_link_name);
+
+    for (size_t i = 0; i < end_effector_link_poses_in_base_link.size(); i++)
+    {
+        // std::cout << "End effector pose " << i << ": " << std::endl;
+        // std::cout << "position: " << end_effector_link_poses_in_base_link[i].translation().transpose() << std::endl;
+        // // std::cout << end_effector_link_poses_in_base_link[i].rotation() << std::endl;
+        // // print it as quaternion
+        // Eigen::Quaterniond q(end_effector_link_poses_in_base_link[i].rotation());
+        // std::cout << "quaternion: " << q.w() << " " << q.x() << " " << q.y() << " " << q.z() << std::endl;
+        Eigen::Quaterniond q(end_effector_link_poses_in_base_link[i].rotation());
+
+        if (fabs(end_effector_link_poses_in_base_link[i].translation().x() - moveit_positions[i][0]) > 0.001 ||
+            fabs(end_effector_link_poses_in_base_link[i].translation().y() - moveit_positions[i][1]) > 0.001 ||
+            fabs(end_effector_link_poses_in_base_link[i].translation().z() - moveit_positions[i][2]) > 0.001)
+        {
+            // print in red
+            std::cout << "\033[1;31m" << "Error in position" << "\033[0m" << std::endl;
+            continue;
+        }
+
+        if (fabs((float)(q.w()) - moveit_orientations[i][0]) > 0.01 ||
+            fabs((float)(q.x()) - moveit_orientations[i][1]) > 0.01 ||
+            fabs((float)(q.y()) - moveit_orientations[i][2]) > 0.01 ||
+            fabs((float)(q.z()) - moveit_orientations[i][3]) > 0.01)
+        {
+            // print in red
+            std::cout << "\033[1;31m" << "Error in orientation" << "\033[0m" << std::endl;
+            continue;
+        }
+
+        // print in green
+        std::cout << "\033[1;32m" << "Same poses" << "\033[0m" << std::endl;
+    }
+
+}
+
 void EVAL_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
     std::string collision_spheres_file_path;
@@ -345,7 +465,7 @@ void EVAL_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     );
 
     // sample a set of states
-    int num_of_test_states = 1000;
+    int num_of_test_states = 10000;
     CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
 
     // update states
@@ -2033,6 +2153,8 @@ int main(int argc, char** argv)
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    // TEST_JACOBIAN(kinematic_model, GROUP_NAME, cuda_test_node);
 
     EVAL_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 

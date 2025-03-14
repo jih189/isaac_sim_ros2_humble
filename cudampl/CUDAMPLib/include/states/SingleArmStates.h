@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <util.h>
 
+#include <NvrtcUtil.h>
+
 namespace CUDAMPLib
 {
     #define CUDAMPLib_UNKNOWN 0
@@ -38,6 +40,9 @@ namespace CUDAMPLib
         float * d_lower_bound;
         float * d_upper_bound;
         float * d_default_joint_values;
+
+        // kernel function of the space
+        KernelFunctionPtr kernelFuncPtr;
     };
     typedef std::shared_ptr<SingleArmSpaceInfo> SingleArmSpaceInfoPtr;
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(foliation_planner LANGUAGES C CXX CUDA)
+project(foliation_planner LANGUAGES C CXX)
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
@@ -31,7 +31,6 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   tf2_geometry_msgs
   tf2_ros
   moveit_visual_tools
-  CUDA
   ompl
 )
 
