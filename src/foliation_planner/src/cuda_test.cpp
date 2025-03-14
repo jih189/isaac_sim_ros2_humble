@@ -306,6 +306,56 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     }
 }
 
+void EVAL_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    // create moveit robot state
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames()
+    );
+
+    // sample a set of states
+    int num_of_test_states = 1000;
+    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+
+    // update states
+    auto start_time = std::chrono::high_resolution_clock::now();
+    single_arm_states->calculateForwardKinematics();
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time = end_time - start_time;
+    std::cout << "\033[1;32m" << "Time taken by forward kinematics: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
+}
+
 void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
     std::string collision_spheres_file_path;
@@ -1984,6 +2034,8 @@ int main(int argc, char** argv)
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
+    EVAL_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+
     // TEST_CONSTRAINT_PROJECT(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
@@ -1996,7 +2048,7 @@ int main(int argc, char** argv)
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_CONSTRAINED_MOTION_PLANNING(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_CHECK_CONSTRAINED_MOTION(kinematic_model, GROUP_NAME, cuda_test_node);
 

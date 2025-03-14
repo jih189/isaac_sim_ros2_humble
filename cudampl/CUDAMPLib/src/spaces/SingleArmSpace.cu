@@ -1040,8 +1040,6 @@ namespace CUDAMPLib {
         int blocksPerGrid = (num_of_states1 + threadsPerBlock - 1) / threadsPerBlock;
         int blocksPerGrid2 = (num_of_states1 * num_of_joints + threadsPerBlock - 1) / threadsPerBlock;
 
-        bool still_approaching = true;
-        // while(still_approaching)
         for (size_t ii = 0; ii < 10000; ii++)
         {
             // store the previous intermediate states
@@ -1155,7 +1153,7 @@ namespace CUDAMPLib {
             }
 
             // Reshape the joint states
-            for (int i = 0; i < num_of_states1; i++)
+            for (size_t i = 0; i < num_of_states1; i++)
             {
                 // std::cout << "intermediate_states[" << i << "]: ";
                 std::vector<float> current_joint_values(num_of_joints, 0.0);
@@ -1215,7 +1213,7 @@ namespace CUDAMPLib {
         SingleArmStatesPtr interpolated_states = std::make_shared<SingleArmStates>(total_steps, space_info);
         float * d_joint_values_interpolated_states = interpolated_states->getJointStatesCuda();
 
-        for (int i = 0; i < num_of_states1; i++)
+        for (size_t i = 0; i < num_of_states1; i++)
         {
             if (h_achieve_goal_int[i] != 0){
                 // for motion i
@@ -1238,7 +1236,7 @@ namespace CUDAMPLib {
 
         std::vector<std::vector<std::vector<float>>> cropped_constrained_motions(num_of_states1, std::vector<std::vector<float>>());
 
-        for (int i = 0; i < num_of_states1; i++)
+        for (size_t i = 0; i < num_of_states1; i++)
         {
             if (h_achieve_goal_int[i] != 0)
             {
@@ -1413,7 +1411,7 @@ namespace CUDAMPLib {
         std::vector<std::vector<float>> states1_joint_values;
         std::vector<std::vector<float>> states2_joint_values;
 
-        for (int i = 0 ; i < num_of_waypoints - 1; i++)
+        for (size_t i = 0 ; i < num_of_waypoints - 1; i++)
         {
             // forward motion
             states1_joint_values.push_back(waypoints_joint_values[i]);
