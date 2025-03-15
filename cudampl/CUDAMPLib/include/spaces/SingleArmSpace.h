@@ -14,6 +14,8 @@
 #include <ctime>
 #include <limits>
 
+#include <spaces/KernelGenerator.h>
+
 namespace CUDAMPLib
 {
     class SingleArmSpace : public BaseSpace

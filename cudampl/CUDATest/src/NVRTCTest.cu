@@ -129,13 +129,38 @@ private:
 
 int main() {
     // Define the kernel code.
-    const char *kernel_code = R"(
-    extern "C" __global__
-    void add(const int* a, const int* b, int* c) {
-        int idx = threadIdx.x;
-        c[idx] = a[idx] + b[idx];
-    }
+    // const char *kernel_code = R"(
+    // __device__ void multipletwo(int* a) {
+    //     *a = (*a) * 2;
+    // }
+
+    // extern "C" __global__
+    // void add(const int* a, const int* b, int* c, int size) {
+    //     int idx = threadIdx.x;
+    //     c[idx] = a[idx] + b[idx];
+    //     multipletwo(&c[idx]);
+    // }
+    // )";
+
+    std::string source_code = R"(
+__device__ __forceinline__ void multipletwo(int* a) {
+    *a = (*a) * 2;
+}
+
+extern "C" __global__
+void add(const int* a, const int* b, int* c, int size) {
+    int idx = threadIdx.x;
+    if (idx >= size) return; // Prevent out-of-bounds access
+    c[idx] = a[idx] + b[idx];
+    multipletwo(&c[idx]);
+    // sqrt
+    c[idx] = sqrtf(c[idx]);
+}
     )";
+
+    std::cout << source_code << std::endl;
+
+    const char *kernel_code = source_code.c_str();
 
     // Create the kernel function using the class's static factory method.
     std::shared_ptr<KernelFunction> kernelFuncPtr = KernelFunction::create(kernel_code, "add");
@@ -145,7 +170,7 @@ int main() {
     }
 
     // Prepare host data.
-    const int arraySize = 10;
+    int arraySize = 10;
     int h_a[arraySize], h_b[arraySize], h_c[arraySize];
     for (int i = 0; i < arraySize; i++) {
         h_a[i] = i;
@@ -163,7 +188,7 @@ int main() {
     CUDA_SAFE_CALL(cudaMemcpy(d_b, h_b, arraySize * sizeof(int), cudaMemcpyHostToDevice));
 
     // Set up kernel parameters.
-    void *args[] = { &d_a, &d_b, &d_c };
+    void *args[] = { &d_a, &d_b, &d_c, &arraySize};
 
     int threadsPerBlock = 256;
     int blocksPerGrid = (arraySize + threadsPerBlock - 1) / threadsPerBlock;
@@ -184,7 +209,7 @@ int main() {
 
     // Print the results.
     for (int i = 0; i < arraySize; i++) {
-        std::cout << h_a[i] << " + " << h_b[i] << " = " << h_c[i] << std::endl;
+        std::cout << "sqrt(2 * (" << h_a[i] << " + " << h_b[i] << ")) = " << h_c[i] << std::endl;
     }
 
     // Free the device memory.

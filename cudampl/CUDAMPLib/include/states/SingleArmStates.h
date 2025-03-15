@@ -148,6 +148,11 @@ namespace CUDAMPLib
              */
             void calculateForwardKinematics();
 
+            /**
+                @brief Calculate the forward kinematics of the states using nvrtc.
+             */
+            void calculateForwardKinematicsNvrtv();
+
             void calculateTotalGradientAndError(const std::vector<int> & constraint_indexs) override;
 
             /**

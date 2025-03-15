@@ -399,184 +399,6 @@ namespace CUDAMPLib
         }
     }
 
-
-    // __global__ void kin_forward_kernel_w_space_jacobian(
-    //     const float* __restrict__ joint_values, 
-    //     const int num_of_joint,
-    //     const int configuration_size,
-    //     const int* __restrict__ joint_types,
-    //     const float* __restrict__ joint_poses,
-    //     const int num_of_links,
-    //     const float* __restrict__ joint_axes,
-    //     const int* __restrict__ link_maps,
-    //     float* __restrict__ link_poses_set,
-    //     float* __restrict__ space_jacobians // [configuration][link][joint][6]
-    // ) 
-    // {
-    //     int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    //     if (idx >= configuration_size) {
-    //         return;
-    //     }
-
-    //     // Pointer offset for the current configuration.
-    //     int config_offset = idx * num_of_links * 16;
-    //     int jac_config_offset = idx * num_of_links * 6 * num_of_joint;
-
-    //     // The base link (index 0) is the fixed base.
-    //     set_identity(&link_poses_set[config_offset]);
-        
-    //     // For the base link, set every column in its Jacobian to zero.
-    //     for (int j = 0; j < num_of_joint; j++) {
-    //         int base_jac_offset = jac_config_offset + (0 * 6 * num_of_joint) + (j * 6);
-    //         #pragma unroll
-    //         for (int r = 0; r < 6; r++) {
-    //             space_jacobians[base_jac_offset + r] = 0.f;
-    //         }
-    //     }
-        
-    //     // Compute forward kinematics and Jacobians for links 1 .. num_of_links-1.
-    //     // In a serial chain, we assume that joint i (i>=1) is responsible for link i.
-    //     for (int i = 1; i < num_of_links; i++) 
-    //     {
-    //         // Get the parent link’s pose.
-    //         float* parent_link_pose = &link_poses_set[ config_offset + link_maps[i] * 16 ];
-    //         // Compute the current link’s pose and store it.
-    //         float* current_link_pose = &link_poses_set[ config_offset + i * 16 ];
-    //         int cur_joint_type = joint_types[i];
-    //         float j_val = joint_values[idx * num_of_joint + i];
-    //         switch (cur_joint_type)
-    //         {
-    //             case CUDAMPLib_REVOLUTE:
-    //                 revolute_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], j_val, current_link_pose);
-    //                 break;
-    //             case CUDAMPLib_PRISMATIC:
-    //                 prism_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], j_val, current_link_pose);
-    //                 break;
-    //             case CUDAMPLib_FIXED:
-    //                 fixed_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], current_link_pose);
-    //                 break;
-    //             default:
-    //                 printf("Unknown joint type: %d\n", joint_types[i]);
-    //                 break;
-    //         }
-            
-    //         // Extract the position of the current link from its 4x4 pose.
-    //         float p_i[3] = { current_link_pose[3], current_link_pose[7], current_link_pose[11] };
-            
-    //         // For each joint j (columns 0..num_of_joint-1) in the Jacobian for link i:
-    //         // In a serial chain, if j > i the joint does not affect link i.
-    //         for (int j = 0; j < num_of_joint; j++)
-    //         {
-    //             int jac_base_index = jac_config_offset + (i * 6 * num_of_joint) + (j * 6);
-    //             if (j > i) 
-    //             {
-    //                 // Joint j does not affect link i: fill column with zeros.
-    //                 #pragma unroll
-    //                 for (int r = 0; r < 6; r++) {
-    //                     space_jacobians[jac_base_index + r] = 0.f;
-    //                 }
-    //             }
-    //             else 
-    //             {
-    //                 // For this implementation, we assume joint index 0 is the base (which is fixed).
-    //                 if (j == 0) 
-    //                 {
-    //                     #pragma unroll
-    //                     for (int r = 0; r < 6; r++) {
-    //                         space_jacobians[jac_base_index + r] = 0.f;
-    //                     }
-    //                 }
-    //                 else 
-    //                 {
-    //                     // Retrieve the transformation up to joint j.
-    //                     // We assume that the pose for joint j was already computed and stored in link_poses_set.
-    //                     float* T_j = &link_poses_set[ config_offset + j * 16 ];
-                        
-    //                     // Extract the 3x3 rotation part from T_j (row-major order).
-    //                     float R_j[9];
-    //                     R_j[0] = T_j[0];  R_j[1] = T_j[1];  R_j[2] = T_j[2];
-    //                     R_j[3] = T_j[4];  R_j[4] = T_j[5];  R_j[5] = T_j[6];
-    //                     R_j[6] = T_j[8];  R_j[7] = T_j[9];  R_j[8] = T_j[10];
-                        
-    //                     // Transform the joint axis (stored per joint in joint_axes) into the space frame.
-    //                     float axis[3] = { joint_axes[j * 3 + 0], joint_axes[j * 3 + 1], joint_axes[j * 3 + 2] };
-    //                     float w[3];
-    //                     w[0] = R_j[0] * axis[0] + R_j[1] * axis[1] + R_j[2] * axis[2];
-    //                     w[1] = R_j[3] * axis[0] + R_j[4] * axis[1] + R_j[5] * axis[2];
-    //                     w[2] = R_j[6] * axis[0] + R_j[7] * axis[1] + R_j[8] * axis[2];
-                        
-    //                     // Extract the position of joint j from T_j.
-    //                     float p_j[3] = { T_j[3], T_j[7], T_j[11] };
-                        
-    //                     float J_col[6];
-    //                     int jt = joint_types[j];
-    //                     if (jt == CUDAMPLib_REVOLUTE) 
-    //                     {
-    //                         // For revolute joints: angular part is w; linear part is w x (p_i - p_j).
-    //                         J_col[0] = w[0];
-    //                         J_col[1] = w[1];
-    //                         J_col[2] = w[2];
-    //                         float d[3] = { p_i[0] - p_j[0], p_i[1] - p_j[1], p_i[2] - p_j[2] };
-    //                         J_col[3] = w[1] * d[2] - w[2] * d[1];
-    //                         J_col[4] = w[2] * d[0] - w[0] * d[2];
-    //                         J_col[5] = w[0] * d[1] - w[1] * d[0];
-    //                     } 
-    //                     else if (jt == CUDAMPLib_PRISMATIC) 
-    //                     {
-    //                         // For prismatic joints: angular part is zero; linear part is the translated axis.
-    //                         J_col[0] = 0.f;
-    //                         J_col[1] = 0.f;
-    //                         J_col[2] = 0.f;
-    //                         J_col[3] = w[0];
-    //                         J_col[4] = w[1];
-    //                         J_col[5] = w[2];
-    //                     } 
-    //                     else // fixed joint or unknown type
-    //                     {
-    //                         J_col[0] = 0.f;  J_col[1] = 0.f;  J_col[2] = 0.f;
-    //                         J_col[3] = 0.f;  J_col[4] = 0.f;  J_col[5] = 0.f;
-    //                     }
-                        
-    //                     // Write the computed column into the space Jacobian.
-    //                     #pragma unroll
-    //                     for (int r = 0; r < 6; r++) {
-    //                         space_jacobians[jac_base_index + r] = J_col[r];
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-
-
-
-    // __global__ void update_collision_spheres_kernel(
-    //     const int num_of_states,
-    //     const int num_of_links,
-    //     const int num_of_self_collision_spheres,
-    //     const int* __restrict__ collision_spheres_map,
-    //     const float* __restrict__ collision_spheres_pos, // collision sphere position in link frame
-    //     const float* __restrict__ link_poses_set,
-    //     float* collision_spheres_pos_in_baselink
-    // )
-    // {
-    //     int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    //     if (idx >= num_of_states * num_of_self_collision_spheres)
-    //         return;
-
-    //     int state_idx = idx / num_of_self_collision_spheres;
-    //     int sphere_idx = idx % num_of_self_collision_spheres;
-
-    //     const float* collision_sphere_pos = &collision_spheres_pos[sphere_idx * 3]; // collision sphere position in link frame
-    //     float* collision_sphere_pos_in_baselink = &collision_spheres_pos_in_baselink[state_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3]; // collision sphere position in base link frame
-    //     const float* link_pose = &link_poses_set[state_idx * num_of_links * 16 + collision_spheres_map[sphere_idx] * 16]; // link pose in base link frame
-
-    //     collision_sphere_pos_in_baselink[0] = link_pose[0] * collision_sphere_pos[0] + link_pose[1] * collision_sphere_pos[1] + link_pose[2] * collision_sphere_pos[2] + link_pose[3];
-    //     collision_sphere_pos_in_baselink[1] = link_pose[4] * collision_sphere_pos[0] + link_pose[5] * collision_sphere_pos[1] + link_pose[6] * collision_sphere_pos[2] + link_pose[7];
-    //     collision_sphere_pos_in_baselink[2] = link_pose[8] * collision_sphere_pos[0] + link_pose[9] * collision_sphere_pos[1] + link_pose[10] * collision_sphere_pos[2] + link_pose[11];
-    // }
-
     __global__ void update_collision_spheres_kernel(
         const int num_of_states,
         const int num_of_links,
@@ -967,7 +789,8 @@ namespace CUDAMPLib
         
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
 
-        this->calculateForwardKinematics();
+        // this->calculateForwardKinematics();
+        this->calculateForwardKinematicsNvrtv();
 
         int threadsPerBlock = 256;
         // calculate space jacobian
@@ -1000,6 +823,96 @@ namespace CUDAMPLib
         CUDA_CHECK(cudaDeviceSynchronize());
     }
 
+    void SingleArmStates::calculateForwardKinematicsNvrtv()
+    {
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+        
+        // // Update the states
+        // kin_forward_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+        //     d_joint_states,
+        //     num_of_joints,
+        //     num_of_states_,
+        //     space_info_single_arm_space->d_joint_types,
+        //     space_info_single_arm_space->d_joint_poses,
+        //     space_info_single_arm_space->num_of_links,
+        //     space_info_single_arm_space->d_joint_axes,
+        //     space_info_single_arm_space->d_link_parent_link_maps,
+        //     d_link_poses_in_base_link
+        // );
+
+        // Set up kernel parameters.
+        void *args[] = { &d_joint_states, &num_of_joints, &num_of_states_,
+                        &space_info_single_arm_space->d_joint_types, &space_info_single_arm_space->d_joint_poses,
+                        &space_info_single_arm_space->num_of_links, &space_info_single_arm_space->d_joint_axes,
+                        &space_info_single_arm_space->d_link_parent_link_maps, &d_link_poses_in_base_link };
+
+        // Launch the kernel using the member function of KernelFunction.
+        space_info_single_arm_space->kernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
+                                    dim3(threadsPerBlock, 1, 1),
+                                    0,          // shared memory size
+                                    nullptr,    // stream
+                                    args);
+
+        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        ////////////////////////////////////////////////////////////////
+        // // try NVRTC
+        // // get the kernelFuncPtr_ from space_info_single_arm_space
+        // auto kernelFuncPtr_from_space = space_info_single_arm_space->kernelFuncPtr;
+
+        // // Prepare host data.
+        // int arraySize = 10;
+        // int h_a[arraySize], h_b[arraySize], h_c[arraySize];
+        // for (int i = 0; i < arraySize; i++) {
+        //     h_a[i] = i;
+        //     h_b[i] = i * 2;
+        // }
+
+        // // Allocate device memory using cudaMalloc.
+        // int *d_a, *d_b, *d_c;
+        // CUDA_CHECK(cudaMalloc((void**)&d_a, arraySize * sizeof(int)));
+        // CUDA_CHECK(cudaMalloc((void**)&d_b, arraySize * sizeof(int)));
+        // CUDA_CHECK(cudaMalloc((void**)&d_c, arraySize * sizeof(int)));
+
+        // // Copy input data from host to device using cudaMemcpy.
+        // CUDA_CHECK(cudaMemcpy(d_a, h_a, arraySize * sizeof(int), cudaMemcpyHostToDevice));
+        // CUDA_CHECK(cudaMemcpy(d_b, h_b, arraySize * sizeof(int), cudaMemcpyHostToDevice));
+
+        // // Set up kernel parameters.
+        // void *args[] = { &d_a, &d_b, &d_c, &arraySize};
+
+        // blocksPerGrid = (arraySize + threadsPerBlock - 1) / threadsPerBlock;
+
+        // // Launch the kernel using the member function of KernelFunction.
+        // // Launching with 1 block of 'arraySize' threads.
+        // kernelFuncPtr_from_space->launchKernel(dim3(blocksPerGrid, 1, 1),
+        //                             dim3(threadsPerBlock, 1, 1),
+        //                             0,          // shared memory size
+        //                             nullptr,    // stream
+        //                             args);
+
+        // // Wait for the kernel to finish.
+        // CUDA_CHECK(cudaDeviceSynchronize());
+
+        // // Copy the results back to the host.
+        // CUDA_CHECK(cudaMemcpy(h_c, d_c, arraySize * sizeof(int), cudaMemcpyDeviceToHost));
+
+        // // Print the results.
+        // for (int i = 0; i < arraySize; i++) {
+        //     std::cout << "2 * (" << h_a[i] << " + " << h_b[i] << ") = " << h_c[i] << std::endl;
+        // }
+
+        // // Free the device memory.
+        // CUDA_CHECK(cudaFree(d_a));
+        // CUDA_CHECK(cudaFree(d_b));
+        // CUDA_CHECK(cudaFree(d_c));
+
+        ////////////////////////////////////////////////////////////////
+    }
+
     void SingleArmStates::calculateForwardKinematics()
     {
         int threadsPerBlock = 256;
@@ -1022,13 +935,13 @@ namespace CUDAMPLib
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        // ////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////
         // // try NVRTC
         // // get the kernelFuncPtr_ from space_info_single_arm_space
         // auto kernelFuncPtr_from_space = space_info_single_arm_space->kernelFuncPtr;
 
         // // Prepare host data.
-        // const int arraySize = 10;
+        // int arraySize = 10;
         // int h_a[arraySize], h_b[arraySize], h_c[arraySize];
         // for (int i = 0; i < arraySize; i++) {
         //     h_a[i] = i;
@@ -1046,7 +959,7 @@ namespace CUDAMPLib
         // CUDA_CHECK(cudaMemcpy(d_b, h_b, arraySize * sizeof(int), cudaMemcpyHostToDevice));
 
         // // Set up kernel parameters.
-        // void *args[] = { &d_a, &d_b, &d_c };
+        // void *args[] = { &d_a, &d_b, &d_c, &arraySize};
 
         // blocksPerGrid = (arraySize + threadsPerBlock - 1) / threadsPerBlock;
 
@@ -1066,7 +979,7 @@ namespace CUDAMPLib
 
         // // Print the results.
         // for (int i = 0; i < arraySize; i++) {
-        //     std::cout << h_a[i] << " + " << h_b[i] << " = " << h_c[i] << std::endl;
+        //     std::cout << "2 * (" << h_a[i] << " + " << h_b[i] << ") = " << h_c[i] << std::endl;
         // }
 
         // // Free the device memory.

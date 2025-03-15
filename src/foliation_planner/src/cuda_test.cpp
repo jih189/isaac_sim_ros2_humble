@@ -470,7 +470,8 @@ void EVAL_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // update states
     auto start_time = std::chrono::high_resolution_clock::now();
-    single_arm_states->calculateForwardKinematics();
+    // single_arm_states->calculateForwardKinematics();
+    single_arm_states->calculateForwardKinematicsNvrtv();
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_time = end_time - start_time;
     std::cout << "\033[1;32m" << "Time taken by forward kinematics: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;

@@ -103,20 +103,18 @@ namespace CUDAMPLib {
         // try to generate kernel code.
         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        // Define the kernel code.
-        const char *kernel_code = R"(
-        extern "C" __global__
-        void add(const int* a, const int* b, int* c) {
-            int idx = threadIdx.x;
-            c[idx] = a[idx] + b[idx];
-        }
-        )";
+        // generate kernel code for forward kinematics
+        std::string kin_forward_source_code = genForwardKinematicsKernelCode(joint_types);
+        // std::cout << kin_forward_source_code << std::endl;
+
+        // convert to c_str
+        const char *kin_forward_source_code_c_str = kin_forward_source_code.c_str();
 
         // Create the kernel function using the class's static factory method.
-        kernelFuncPtr_ = KernelFunction::create(kernel_code, "add");
+        kernelFuncPtr_ = KernelFunction::create(kin_forward_source_code_c_str, "kin_forward_nvrtc_kernel");
 
         if (! kernelFuncPtr_ || ! kernelFuncPtr_->function) {
-            std::cerr << "\033[31m" << "Kernel function 'add' compilation failed." << "\033[0m" << std::endl;
+            std::cerr << "\033[31m" << "Kernel function 'kin_forward_nvrtc_kernel' compilation failed." << "\033[0m" << std::endl;
         }
         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     }
