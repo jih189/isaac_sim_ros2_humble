@@ -843,10 +843,7 @@ namespace CUDAMPLib
         // );
 
         // Set up kernel parameters.
-        void *args[] = { &d_joint_states, &num_of_joints, &num_of_states_,
-                        &space_info_single_arm_space->d_joint_types, &space_info_single_arm_space->d_joint_poses,
-                        &space_info_single_arm_space->num_of_links, &space_info_single_arm_space->d_joint_axes,
-                        &space_info_single_arm_space->d_link_parent_link_maps, &d_link_poses_in_base_link };
+        void *args[] = { &d_joint_states, &num_of_states_, &d_link_poses_in_base_link };
 
         // Launch the kernel using the member function of KernelFunction.
         space_info_single_arm_space->kernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),

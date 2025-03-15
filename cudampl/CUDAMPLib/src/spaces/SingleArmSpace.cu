@@ -87,10 +87,13 @@ namespace CUDAMPLib {
         cudaMalloc(&d_upper_bound, upper_bound_bytes);
         cudaMalloc(&d_default_joint_values, default_joint_values_bytes);
 
+        std::vector<float> joint_poses_flatten = IsometryVectorFlatten(joint_poses);
+        std::vector<float> joint_axes_flatten = Vector3dflatten(joint_axes);
+
         // copy data to device memory
         cudaMemcpy(d_joint_types, joint_types.data(), joint_types_bytes, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_joint_poses, IsometryVectorFlatten(joint_poses).data(), joint_poses_bytes, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_joint_axes, Vector3dflatten(joint_axes).data(), joint_axes_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_joint_poses, joint_poses_flatten.data(), joint_poses_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_joint_axes, joint_axes_flatten.data(), joint_axes_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_link_parent_link_maps, link_parent_link_maps.data(), link_parent_link_maps_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_collision_spheres_to_link_map, collision_spheres_to_link_map.data(), collision_spheres_to_link_map_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_self_collision_spheres_pos_in_link, floatVectorFlatten(collision_spheres_pos_in_link).data(), self_collision_spheres_pos_in_link_bytes, cudaMemcpyHostToDevice);
@@ -104,7 +107,8 @@ namespace CUDAMPLib {
         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         // generate kernel code for forward kinematics
-        std::string kin_forward_source_code = genForwardKinematicsKernelCode(joint_types);
+        std::string kin_forward_source_code = genForwardKinematicsKernelCode(
+            joint_types, num_of_links, num_of_joints, joint_poses_flatten, joint_axes_flatten, link_parent_link_maps);
         // std::cout << kin_forward_source_code << std::endl;
 
         // convert to c_str

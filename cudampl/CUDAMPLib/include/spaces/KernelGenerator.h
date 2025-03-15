@@ -4,7 +4,14 @@
 
 namespace CUDAMPLib
 {
-    inline std::string genForwardKinematicsKernelCode(std::vector<int> joint_types)
+    inline std::string genForwardKinematicsKernelCode(
+        std::vector<int> joint_types, 
+        const int num_of_links, 
+        const int num_of_joints,
+        std::vector<float> joint_poses_flatten, 
+        std::vector<float> joint_axes_flatten, 
+        std::vector<int> link_parent_link_maps
+    )
     {
         std::string kernel_code;
         kernel_code += R"(
@@ -120,50 +127,74 @@ __device__ __forceinline__ void prism_joint_fn_cuda(const float* parent_link_pos
 extern "C" __global__ 
 void kin_forward_nvrtc_kernel(
     const float* __restrict__ joint_values,
-    const int num_of_joint,
     const int configuration_size,
-    const int* __restrict__ joint_types,
-    const float* __restrict__ joint_poses,
-    const int num_of_links,
-    const float* __restrict__ joint_axes,
-    const int* __restrict__ link_maps,
     float* __restrict__ link_poses_set)
 {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if (idx >= configuration_size)
         return;
-
-    // Set base link to identity.
-    set_identity(&link_poses_set[idx * num_of_links * 16]);
 )";
+
+                    kernel_code += "    // Set base link to identity.\n    set_identity(&link_poses_set[idx * " + std::to_string(num_of_links * 16) + "]);\n";
+
+                    // set joint_poses
+                    kernel_code += "    float joint_poses[" + std::to_string(num_of_joints * 16) + "] = {";
+                    for (size_t i = 0; i < joint_poses_flatten.size(); ++i)
+                    {
+                        kernel_code += std::to_string(joint_poses_flatten[i]);
+                        if (i < joint_poses_flatten.size() - 1)
+                            kernel_code += ", ";
+                    }
+                    kernel_code += "};\n";
+
+                    // set joint_axes
+                    kernel_code += "    float joint_axes[" + std::to_string(num_of_joints * 3) + "] = {";
+                    for (size_t i = 0; i < joint_axes_flatten.size(); ++i)
+                    {
+                        kernel_code += std::to_string(joint_axes_flatten[i]);
+                        if (i < joint_axes_flatten.size() - 1)
+                            kernel_code += ", ";
+                    }
+                    kernel_code += "};\n";
+
+                    // set link_maps
+                    kernel_code += "    int link_maps[" + std::to_string(num_of_links) + "] = {";
+                    for (size_t i = 0; i < link_parent_link_maps.size(); ++i)
+                    {
+                        kernel_code += std::to_string(link_parent_link_maps[i]);
+                        if (i < link_parent_link_maps.size() - 1)
+                            kernel_code += ", ";
+                    }
+                    kernel_code += "};\n";
 
                     // Unroll each joint block explicitly.
                     // Note: We assume joint_types[0] corresponds to the base and is already set.
                     for (size_t i = 1; i < joint_types.size(); ++i)
                     {
                         // Start an unrolled block for joint i.
-                        kernel_code += "\n    // Unrolled joint " + std::to_string(i) + "\n";
-                        kernel_code += "    float* parent_link_pose_" + std::to_string(i) + " = &link_poses_set[idx * num_of_links * 16 + link_maps[" + std::to_string(i) + "] * 16];\n";
-                        kernel_code += "    float* current_link_pose_" + std::to_string(i) + " = &link_poses_set[idx * num_of_links * 16 + " + std::to_string(i) + " * 16];\n";
+                        kernel_code += "    // Unrolled joint " + std::to_string(i) + "\n";
+                        // kernel_code += "    float* parent_link_pose_" + std::to_string(i) + " = &link_poses_set[idx * num_of_links * 16 + link_maps[" + std::to_string(i) + "] * 16];\n";
+                        kernel_code += "    float* parent_link_pose_" + std::to_string(i) + " = &link_poses_set[idx * " + std::to_string(num_of_links * 16) + " + link_maps[" + std::to_string(i) + "] * 16];\n";
+                        kernel_code += "    float* current_link_pose_" + std::to_string(i) + " = &link_poses_set[idx * " + std::to_string(num_of_links * 16) + " + " + std::to_string(i * 16) + "];\n";
 
                         // Depending on the joint type, insert the corresponding call.
                         int type = joint_types[i];
                         if (type == 1)  // REVOLUTE
                         {
                             kernel_code += "    revolute_joint_fn_cuda(parent_link_pose_" + std::to_string(i) +
-                                ", &joint_poses[" + std::to_string(i) + " * 16], &joint_axes[" + std::to_string(i) + " * 3], joint_values[idx * num_of_joint + " + std::to_string(i) +
+                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values[idx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
                                 "], current_link_pose_" + std::to_string(i) + ");\n";
                         }
                         else if (type == 2)  // PRISMATIC
                         {
                             kernel_code += "    prism_joint_fn_cuda(parent_link_pose_" + std::to_string(i) +
-                                ", &joint_poses[" + std::to_string(i) + " * 16], &joint_axes[" + std::to_string(i) + " * 3], joint_values[idx * num_of_joint + " + std::to_string(i) +
+                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values[idx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
                                 "], current_link_pose_" + std::to_string(i) + ");\n";
                         }
                         else if (type == 5)  // FIXED
                         {
                             kernel_code += "    fixed_joint_fn_cuda(parent_link_pose_" + std::to_string(i) +
-                                ", &joint_poses[" + std::to_string(i) + " * 16], current_link_pose_" + std::to_string(i) + ");\n";
+                                ", &joint_poses[" + std::to_string(i * 16) + "], current_link_pose_" + std::to_string(i) + ");\n";
                         }
                         else
                         {
