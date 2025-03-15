@@ -112,13 +112,10 @@ namespace CUDAMPLib {
         cudaMemcpy(d_upper_bound, upper.data(), upper_bound_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_default_joint_values, default_joint_values.data(), default_joint_values_bytes, cudaMemcpyHostToDevice);
 
-        // try to generate kernel code.
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
         // generate kernel code for forward kinematics
         std::string kin_forward_source_code = genForwardKinematicsKernelCode(
             joint_types, num_of_links, num_of_joints, joint_poses_flatten, joint_axes_flatten, link_parent_link_maps);
-        // std::cout << kin_forward_source_code << std::endl;
+        std::cout << kin_forward_source_code << std::endl;
 
         // convert to c_str
         const char *kin_forward_source_code_c_str = kin_forward_source_code.c_str();
@@ -129,7 +126,6 @@ namespace CUDAMPLib {
         if (! kernelFuncPtr_ || ! kernelFuncPtr_->function) {
             std::cerr << "\033[31m" << "Kernel function 'kin_forward_nvrtc_kernel' compilation failed." << "\033[0m" << std::endl;
         }
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     }
 
     SingleArmSpace::~SingleArmSpace()

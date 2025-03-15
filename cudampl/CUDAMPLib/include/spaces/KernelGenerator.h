@@ -141,39 +141,26 @@ void kin_forward_nvrtc_kernel(
     const int configuration_size,
     float* __restrict__ link_poses_set)
 {
+    extern __shared__ float joint_values_shared[];
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx >= configuration_size)
-        return;
+    int tidx = threadIdx.x;
 )";
+                    kernel_code += "    int base = blockIdx.x * blockDim.x * " + std::to_string(num_of_joints) + ";\n";
+                    kernel_code += "    #pragma unroll\n";
+                    kernel_code += "    for (int i = 0; i < " + std::to_string(num_of_joints) + "; i++)\n";
+                    kernel_code += "    {\n";
+                    kernel_code += "        joint_values_shared[i * blockDim.x + tidx] = joint_values[base + i * blockDim.x + tidx];\n";
+                    kernel_code += "    }\n";
 
+                    kernel_code += "    __syncthreads();\n\n";
+                    kernel_code += "    if (idx >= configuration_size) {return;}\n";
+                    
                     kernel_code += "    float* current_link_pose_0 = &link_poses_set[idx * " + std::to_string(num_of_links * 16) + "];\n";
                     kernel_code += "    current_link_pose_0[0] = 1.0; current_link_pose_0[1] = 0.0; current_link_pose_0[2] = 0.0; current_link_pose_0[3] = 0.0;\n";
                     kernel_code += "    current_link_pose_0[4] = 0.0; current_link_pose_0[5] = 1.0; current_link_pose_0[6] = 0.0; current_link_pose_0[7] = 0.0;\n";
                     kernel_code += "    current_link_pose_0[8] = 0.0; current_link_pose_0[9] = 0.0; current_link_pose_0[10] = 1.0; current_link_pose_0[11] = 0.0;\n";
                     kernel_code += "    current_link_pose_0[12] = 0.0; current_link_pose_0[13] = 0.0; current_link_pose_0[14] = 0.0; current_link_pose_0[15] = 1.0;\n\n";
-
-                    // // set joint_poses
-                    // kernel_code += "    float joint_poses[" + std::to_string(num_of_joints * 16) + "] = {";
-                    // for (size_t i = 0; i < joint_poses_flatten.size(); ++i)
-                    // {
-                    //     kernel_code += std::to_string(joint_poses_flatten[i]);
-                    //     if (i < joint_poses_flatten.size() - 1)
-                    //         kernel_code += ", ";
-                    // }
-                    // kernel_code += "};\n";
-
-                    // // set joint_axes
-                    // kernel_code += "    float joint_axes[" + std::to_string(num_of_joints * 3) + "] = {";
-                    // for (size_t i = 0; i < joint_axes_flatten.size(); ++i)
-                    // {
-                    //     kernel_code += std::to_string(joint_axes_flatten[i]);
-                    //     if (i < joint_axes_flatten.size() - 1)
-                    //         kernel_code += ", ";
-                    // }
-                    // kernel_code += "};\n";
-
-                    // Unroll each joint block explicitly.
-                    // Note: We assume joint_types[0] corresponds to the base and is already set.
+                    
                     for (size_t i = 1; i < joint_types.size(); ++i)
                     {
                         // Start an unrolled block for joint i.
@@ -186,13 +173,13 @@ void kin_forward_nvrtc_kernel(
                         if (type == 1)  // REVOLUTE
                         {
                             kernel_code += "    revolute_joint_fn_cuda(current_link_pose_" + std::to_string(link_parent_link_maps[i]) +
-                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values[idx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
+                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values_shared[tidx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
                                 "], current_link_pose_" + std::to_string(i) + ");\n";
                         }
                         else if (type == 2)  // PRISMATIC
                         {
                             kernel_code += "    prism_joint_fn_cuda(current_link_pose_" + std::to_string(link_parent_link_maps[i]) +
-                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values[idx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
+                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values_shared[tidx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
                                 "], current_link_pose_" + std::to_string(i) + ");\n";
                         }
                         else if (type == 5)  // FIXED

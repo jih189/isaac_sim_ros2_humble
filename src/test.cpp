@@ -219,3 +219,34 @@ __global__ void kin_forward_kernel(
         }
     }
 }
+
+// given the joint values with size (num_of_joints * configuration_size)
+
+int idx = threadIdx.x + blockIdx.x * blockDim.x;
+if (idx >= configuration_size)
+    return;
+
+int tidx = threadIdx.x;
+int base = blockIdx.x * blockDim.x;
+
+extern __shared__ float joint_values_shared[]; // size is (num_of_joints * blockDim.x) * sizeof(float)
+#pragma unroll
+for (int i = 0; i < num_of_joints; i++)
+{
+    joint_values_shared[i * blockDim.x + tidx] = joint_values[base + i * blockDim.x + tidx]
+}
+__syncthreads();
+
+if (idx == 0)
+{
+    // print the shared memory
+    for (int i = 0; i < blockDim.x ; i++)
+    {
+        for (int j = 0; j < num_of_joints; j++)
+        {
+            std::cout << joint_values_shared[i * num_of_joints + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+}

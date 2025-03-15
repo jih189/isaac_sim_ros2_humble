@@ -361,10 +361,13 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_state->setToRandomPositions(joint_model_group);
         robot_state->copyJointGroupPositions(joint_model_group, joint_values_double);
         std::vector<float> joint_values_float;
+        // std::cout << "index " << i << ": ";
         for (size_t j = 0; j < joint_values_double.size(); j++)
         {
             joint_values_float.push_back((float)joint_values_double[j]);
+            // std::cout << joint_values_float[j] << " ";
         }
+        // std::cout << std::endl;
         joint_values_set.push_back(joint_values_float);
 
         // store the end effector pose
@@ -406,7 +409,7 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
             fabs(end_effector_link_poses_in_base_link[i].translation().z() - moveit_positions[i][2]) > 0.001)
         {
             // print in red
-            std::cout << "\033[1;31m" << "Error in position" << "\033[0m" << std::endl;
+            std::cout << "\033[1;31m" << "Error in position at index " << i << "\033[0m" << std::endl;
             continue;
         }
 
@@ -416,12 +419,12 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
             fabs((float)(q.z()) - moveit_orientations[i][3]) > 0.01)
         {
             // print in red
-            std::cout << "\033[1;31m" << "Error in orientation" << "\033[0m" << std::endl;
+            std::cout << "\033[1;31m" << "Error in orientation at index " << i << "\033[0m" << std::endl;
             continue;
         }
 
         // print in green
-        std::cout << "\033[1;32m" << "Same poses" << "\033[0m" << std::endl;
+        std::cout << "\033[1;32m" << "Same poses at index " << i << "\033[0m" << std::endl;
     }
 
 }

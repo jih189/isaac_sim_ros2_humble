@@ -832,10 +832,17 @@ namespace CUDAMPLib
         // Set up kernel parameters.
         void *args[] = { &d_joint_states, &num_of_states_, &d_link_poses_in_base_link };
 
+        // // Launch the kernel using the member function of KernelFunction.
+        // space_info_single_arm_space->kernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
+        //                             dim3(threadsPerBlock, 1, 1),
+        //                             0,          // shared memory size
+        //                             nullptr,    // stream
+        //                             args);
+
         // Launch the kernel using the member function of KernelFunction.
         space_info_single_arm_space->kernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
                                     dim3(threadsPerBlock, 1, 1),
-                                    0,          // shared memory size
+                                    threadsPerBlock * num_of_joints * sizeof(float),          // shared memory size
                                     nullptr,    // stream
                                     args);
 
@@ -864,60 +871,6 @@ namespace CUDAMPLib
 
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
-
-        ////////////////////////////////////////////////////////////////
-        // // try NVRTC
-        // // get the kernelFuncPtr_ from space_info_single_arm_space
-        // auto kernelFuncPtr_from_space = space_info_single_arm_space->kernelFuncPtr;
-
-        // // Prepare host data.
-        // int arraySize = 10;
-        // int h_a[arraySize], h_b[arraySize], h_c[arraySize];
-        // for (int i = 0; i < arraySize; i++) {
-        //     h_a[i] = i;
-        //     h_b[i] = i * 2;
-        // }
-
-        // // Allocate device memory using cudaMalloc.
-        // int *d_a, *d_b, *d_c;
-        // CUDA_CHECK(cudaMalloc((void**)&d_a, arraySize * sizeof(int)));
-        // CUDA_CHECK(cudaMalloc((void**)&d_b, arraySize * sizeof(int)));
-        // CUDA_CHECK(cudaMalloc((void**)&d_c, arraySize * sizeof(int)));
-
-        // // Copy input data from host to device using cudaMemcpy.
-        // CUDA_CHECK(cudaMemcpy(d_a, h_a, arraySize * sizeof(int), cudaMemcpyHostToDevice));
-        // CUDA_CHECK(cudaMemcpy(d_b, h_b, arraySize * sizeof(int), cudaMemcpyHostToDevice));
-
-        // // Set up kernel parameters.
-        // void *args[] = { &d_a, &d_b, &d_c, &arraySize};
-
-        // blocksPerGrid = (arraySize + threadsPerBlock - 1) / threadsPerBlock;
-
-        // // Launch the kernel using the member function of KernelFunction.
-        // // Launching with 1 block of 'arraySize' threads.
-        // kernelFuncPtr_from_space->launchKernel(dim3(blocksPerGrid, 1, 1),
-        //                             dim3(threadsPerBlock, 1, 1),
-        //                             0,          // shared memory size
-        //                             nullptr,    // stream
-        //                             args);
-
-        // // Wait for the kernel to finish.
-        // CUDA_CHECK(cudaDeviceSynchronize());
-
-        // // Copy the results back to the host.
-        // CUDA_CHECK(cudaMemcpy(h_c, d_c, arraySize * sizeof(int), cudaMemcpyDeviceToHost));
-
-        // // Print the results.
-        // for (int i = 0; i < arraySize; i++) {
-        //     std::cout << "2 * (" << h_a[i] << " + " << h_b[i] << ") = " << h_c[i] << std::endl;
-        // }
-
-        // // Free the device memory.
-        // CUDA_CHECK(cudaFree(d_a));
-        // CUDA_CHECK(cudaFree(d_b));
-        // CUDA_CHECK(cudaFree(d_c));
-
-        ////////////////////////////////////////////////////////////////
     }
 
     __global__ void sum_gradients_kernel(
