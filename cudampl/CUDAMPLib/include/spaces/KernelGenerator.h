@@ -40,15 +40,6 @@ __device__ __forceinline__ void multiply4x4(const float* __restrict__ A,
     C[12] = 0.f; C[13] = 0.f; C[14] = 0.f; C[15] = 1.f;
 }
 
-// Set a 4x4 matrix to identity
-__device__ __forceinline__ void set_identity(float* __restrict__ M)
-{
-    M[0]  = 1.f; M[1]  = 0.f; M[2]  = 0.f; M[3]  = 0.f;
-    M[4]  = 0.f; M[5]  = 1.f; M[6]  = 0.f; M[7]  = 0.f;
-    M[8]  = 0.f; M[9]  = 0.f; M[10] = 1.f; M[11] = 0.f;
-    M[12] = 0.f; M[13] = 0.f; M[14] = 0.f; M[15] = 1.f;
-}
-
 // Fixed joint: multiply parent's pose with joint's fixed pose.
 __device__ __forceinline__ void fixed_joint_fn_cuda(const float* parent_link_pose,
                                                     const float* joint_pose,
@@ -135,7 +126,11 @@ void kin_forward_nvrtc_kernel(
         return;
 )";
 
-                    kernel_code += "    // Set base link to identity.\n    set_identity(&link_poses_set[idx * " + std::to_string(num_of_links * 16) + "]);\n";
+                    kernel_code += "    float* current_link_pose_0 = &link_poses_set[idx * " + std::to_string(num_of_links * 16) + "];\n";
+                    kernel_code += "    current_link_pose_0[0] = 1.0; current_link_pose_0[1] = 0.0; current_link_pose_0[2] = 0.0; current_link_pose_0[3] = 0.0;\n";
+                    kernel_code += "    current_link_pose_0[4] = 0.0; current_link_pose_0[5] = 1.0; current_link_pose_0[6] = 0.0; current_link_pose_0[7] = 0.0;\n";
+                    kernel_code += "    current_link_pose_0[8] = 0.0; current_link_pose_0[9] = 0.0; current_link_pose_0[10] = 1.0; current_link_pose_0[11] = 0.0;\n";
+                    kernel_code += "    current_link_pose_0[12] = 0.0; current_link_pose_0[13] = 0.0; current_link_pose_0[14] = 0.0; current_link_pose_0[15] = 1.0;\n\n";
 
                     // set joint_poses
                     kernel_code += "    float joint_poses[" + std::to_string(num_of_joints * 16) + "] = {";
@@ -157,43 +152,32 @@ void kin_forward_nvrtc_kernel(
                     }
                     kernel_code += "};\n";
 
-                    // set link_maps
-                    kernel_code += "    int link_maps[" + std::to_string(num_of_links) + "] = {";
-                    for (size_t i = 0; i < link_parent_link_maps.size(); ++i)
-                    {
-                        kernel_code += std::to_string(link_parent_link_maps[i]);
-                        if (i < link_parent_link_maps.size() - 1)
-                            kernel_code += ", ";
-                    }
-                    kernel_code += "};\n";
-
                     // Unroll each joint block explicitly.
                     // Note: We assume joint_types[0] corresponds to the base and is already set.
                     for (size_t i = 1; i < joint_types.size(); ++i)
                     {
                         // Start an unrolled block for joint i.
                         kernel_code += "    // Unrolled joint " + std::to_string(i) + "\n";
-                        // kernel_code += "    float* parent_link_pose_" + std::to_string(i) + " = &link_poses_set[idx * num_of_links * 16 + link_maps[" + std::to_string(i) + "] * 16];\n";
-                        kernel_code += "    float* parent_link_pose_" + std::to_string(i) + " = &link_poses_set[idx * " + std::to_string(num_of_links * 16) + " + link_maps[" + std::to_string(i) + "] * 16];\n";
+                        // kernel_code += "    float link_pose_" + std::to_string(i) + "[16];\n";
                         kernel_code += "    float* current_link_pose_" + std::to_string(i) + " = &link_poses_set[idx * " + std::to_string(num_of_links * 16) + " + " + std::to_string(i * 16) + "];\n";
 
                         // Depending on the joint type, insert the corresponding call.
                         int type = joint_types[i];
                         if (type == 1)  // REVOLUTE
                         {
-                            kernel_code += "    revolute_joint_fn_cuda(parent_link_pose_" + std::to_string(i) +
+                            kernel_code += "    revolute_joint_fn_cuda(current_link_pose_" + std::to_string(link_parent_link_maps[i]) +
                                 ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values[idx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
                                 "], current_link_pose_" + std::to_string(i) + ");\n";
                         }
                         else if (type == 2)  // PRISMATIC
                         {
-                            kernel_code += "    prism_joint_fn_cuda(parent_link_pose_" + std::to_string(i) +
+                            kernel_code += "    prism_joint_fn_cuda(current_link_pose_" + std::to_string(link_parent_link_maps[i]) +
                                 ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values[idx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
                                 "], current_link_pose_" + std::to_string(i) + ");\n";
                         }
                         else if (type == 5)  // FIXED
                         {
-                            kernel_code += "    fixed_joint_fn_cuda(parent_link_pose_" + std::to_string(i) +
+                            kernel_code += "    fixed_joint_fn_cuda(current_link_pose_" + std::to_string(link_parent_link_maps[i]) +
                                 ", &joint_poses[" + std::to_string(i * 16) + "], current_link_pose_" + std::to_string(i) + ");\n";
                         }
                         else

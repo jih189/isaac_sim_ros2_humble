@@ -53,6 +53,15 @@ namespace CUDAMPLib {
             }
         }
 
+        // check if each element in link_parent_link_maps is smaller than its index
+        for (size_t i = 0; i < link_parent_link_maps.size(); i++)
+        {
+            if (link_parent_link_maps[i] >= (int)i)
+            {
+                throw std::runtime_error("Link parent link map is not valid at index " + std::to_string(i) + ". Value: " + std::to_string(link_parent_link_maps[i]));
+            }
+        }
+
         // set the link names
         link_names_ = link_names;
 
@@ -109,7 +118,7 @@ namespace CUDAMPLib {
         // generate kernel code for forward kinematics
         std::string kin_forward_source_code = genForwardKinematicsKernelCode(
             joint_types, num_of_links, num_of_joints, joint_poses_flatten, joint_axes_flatten, link_parent_link_maps);
-        // std::cout << kin_forward_source_code << std::endl;
+        std::cout << kin_forward_source_code << std::endl;
 
         // convert to c_str
         const char *kin_forward_source_code_c_str = kin_forward_source_code.c_str();
