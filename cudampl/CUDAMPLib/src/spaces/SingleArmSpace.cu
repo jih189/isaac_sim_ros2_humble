@@ -118,7 +118,7 @@ namespace CUDAMPLib {
         // generate kernel code for forward kinematics
         std::string kin_forward_source_code = genForwardKinematicsKernelCode(
             joint_types, num_of_links, num_of_joints, joint_poses_flatten, joint_axes_flatten, link_parent_link_maps);
-        std::cout << kin_forward_source_code << std::endl;
+        // std::cout << kin_forward_source_code << std::endl;
 
         // convert to c_str
         const char *kin_forward_source_code_c_str = kin_forward_source_code.c_str();

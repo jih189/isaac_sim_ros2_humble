@@ -14,6 +14,26 @@ namespace CUDAMPLib
     )
     {
         std::string kernel_code;
+
+        // set constants
+        kernel_code += "__constant__ float joint_poses[" + std::to_string(num_of_joints * 16) + "] = {";
+        for (size_t i = 0; i < joint_poses_flatten.size(); ++i)
+        {
+            kernel_code += std::to_string(joint_poses_flatten[i]);
+            if (i < joint_poses_flatten.size() - 1)
+                kernel_code += ", ";
+        }
+        kernel_code += "};\n";
+
+        kernel_code += "__constant__ float joint_axes[" + std::to_string(num_of_joints * 3) + "] = {";
+        for (size_t i = 0; i < joint_axes_flatten.size(); ++i)
+        {
+            kernel_code += std::to_string(joint_axes_flatten[i]);
+            if (i < joint_axes_flatten.size() - 1)
+                kernel_code += ", ";
+        }
+        kernel_code += "};\n";
+
         kernel_code += R"(
 
 // Multiply two 4x4 matrices (row-major order)
@@ -132,25 +152,25 @@ void kin_forward_nvrtc_kernel(
                     kernel_code += "    current_link_pose_0[8] = 0.0; current_link_pose_0[9] = 0.0; current_link_pose_0[10] = 1.0; current_link_pose_0[11] = 0.0;\n";
                     kernel_code += "    current_link_pose_0[12] = 0.0; current_link_pose_0[13] = 0.0; current_link_pose_0[14] = 0.0; current_link_pose_0[15] = 1.0;\n\n";
 
-                    // set joint_poses
-                    kernel_code += "    float joint_poses[" + std::to_string(num_of_joints * 16) + "] = {";
-                    for (size_t i = 0; i < joint_poses_flatten.size(); ++i)
-                    {
-                        kernel_code += std::to_string(joint_poses_flatten[i]);
-                        if (i < joint_poses_flatten.size() - 1)
-                            kernel_code += ", ";
-                    }
-                    kernel_code += "};\n";
+                    // // set joint_poses
+                    // kernel_code += "    float joint_poses[" + std::to_string(num_of_joints * 16) + "] = {";
+                    // for (size_t i = 0; i < joint_poses_flatten.size(); ++i)
+                    // {
+                    //     kernel_code += std::to_string(joint_poses_flatten[i]);
+                    //     if (i < joint_poses_flatten.size() - 1)
+                    //         kernel_code += ", ";
+                    // }
+                    // kernel_code += "};\n";
 
-                    // set joint_axes
-                    kernel_code += "    float joint_axes[" + std::to_string(num_of_joints * 3) + "] = {";
-                    for (size_t i = 0; i < joint_axes_flatten.size(); ++i)
-                    {
-                        kernel_code += std::to_string(joint_axes_flatten[i]);
-                        if (i < joint_axes_flatten.size() - 1)
-                            kernel_code += ", ";
-                    }
-                    kernel_code += "};\n";
+                    // // set joint_axes
+                    // kernel_code += "    float joint_axes[" + std::to_string(num_of_joints * 3) + "] = {";
+                    // for (size_t i = 0; i < joint_axes_flatten.size(); ++i)
+                    // {
+                    //     kernel_code += std::to_string(joint_axes_flatten[i]);
+                    //     if (i < joint_axes_flatten.size() - 1)
+                    //         kernel_code += ", ";
+                    // }
+                    // kernel_code += "};\n";
 
                     // Unroll each joint block explicitly.
                     // Note: We assume joint_types[0] corresponds to the base and is already set.
