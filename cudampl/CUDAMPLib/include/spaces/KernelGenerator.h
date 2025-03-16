@@ -149,7 +149,14 @@ void kin_forward_nvrtc_kernel(
                     kernel_code += "    #pragma unroll\n";
                     kernel_code += "    for (int i = 0; i < " + std::to_string(num_of_joints) + "; i++)\n";
                     kernel_code += "    {\n";
-                    kernel_code += "        joint_values_shared[i * blockDim.x + tidx] = joint_values[base + i * blockDim.x + tidx];\n";
+                    ////////////////////////////////////////////////////////////////////// Array of Structs
+                    // kernel_code += "        joint_values_shared[i * blockDim.x + tidx] = joint_values[base + i * blockDim.x + tidx];\n";
+                    ////////////////////////////////////////////////////////////////////// Struct of Arrays
+                    kernel_code += "        int p = i * blockDim.x + tidx;\n";
+                    kernel_code += "        int col_id = p % " + std::to_string(num_of_joints) + ";\n";
+                    kernel_code += "        int row_id = p / " + std::to_string(num_of_joints) + ";\n";
+                    kernel_code += "        joint_values_shared[row_id + col_id * blockDim.x] = joint_values[base + p];\n";
+                    ////////////////////////////////////////////////////////////////////////////////////////////////////////
                     kernel_code += "    }\n";
 
                     kernel_code += "    __syncthreads();\n\n";
@@ -165,22 +172,33 @@ void kin_forward_nvrtc_kernel(
                     {
                         // Start an unrolled block for joint i.
                         kernel_code += "    // Unrolled joint " + std::to_string(i) + "\n";
-                        // kernel_code += "    float link_pose_" + std::to_string(i) + "[16];\n";
                         kernel_code += "    float* current_link_pose_" + std::to_string(i) + " = &link_poses_set[idx * " + std::to_string(num_of_links * 16) + " + " + std::to_string(i * 16) + "];\n";
 
                         // Depending on the joint type, insert the corresponding call.
                         int type = joint_types[i];
                         if (type == 1)  // REVOLUTE
                         {
+                            ///////////////////////////////////////////////////////////////////////////// Array of Structs
+                            // kernel_code += "    revolute_joint_fn_cuda(current_link_pose_" + std::to_string(link_parent_link_maps[i]) +
+                            //     ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values_shared[tidx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
+                            //     "], current_link_pose_" + std::to_string(i) + ");\n";
+                            ///////////////////////////////////////////////////////////////////////////// Struct of Arrays
                             kernel_code += "    revolute_joint_fn_cuda(current_link_pose_" + std::to_string(link_parent_link_maps[i]) +
-                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values_shared[tidx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
+                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values_shared[tidx + blockDim.x * " + std::to_string(i) +
                                 "], current_link_pose_" + std::to_string(i) + ");\n";
+                            ///////////////////////////////////////////////////////////////////////////////
                         }
                         else if (type == 2)  // PRISMATIC
                         {
+                            /////////////////////////////////////////////////////////////////////////////// Array of Structs
+                            // kernel_code += "    prism_joint_fn_cuda(current_link_pose_" + std::to_string(link_parent_link_maps[i]) +
+                            //     ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values_shared[tidx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
+                            //     "], current_link_pose_" + std::to_string(i) + ");\n";
+                            /////////////////////////////////////////////////////////////////////////////// Struct of Arrays
                             kernel_code += "    prism_joint_fn_cuda(current_link_pose_" + std::to_string(link_parent_link_maps[i]) +
-                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values_shared[tidx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) +
+                                ", &joint_poses[" + std::to_string(i * 16) + "], &joint_axes[" + std::to_string(i * 3) + "], joint_values_shared[tidx + blockDim.x * " + std::to_string(i) +
                                 "], current_link_pose_" + std::to_string(i) + ");\n";
+                            ///////////////////////////////////////////////////////////////////////////////
                         }
                         else if (type == 5)  // FIXED
                         {
@@ -192,6 +210,7 @@ void kin_forward_nvrtc_kernel(
                             kernel_code += "    // Unsupported joint type: " + std::to_string(type) + "\n";
                         }
                         kernel_code += "\n";
+                        
                     }
 
                     // Close the kernel function and extern "C" block.

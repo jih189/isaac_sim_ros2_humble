@@ -352,7 +352,8 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     std::vector<std::vector<float>> moveit_positions;
     std::vector<std::vector<float>> moveit_orientations;
 
-    int test_config_num = 1000;
+    int test_config_num = 100;
+    double moveit_update_time = 0.0;
     std::vector<std::vector<float>> joint_values_set;
     for (int i = 0; i < test_config_num; i++)
     {
@@ -371,7 +372,11 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         joint_values_set.push_back(joint_values_float);
 
         // store the end effector pose
+        auto start = std::chrono::high_resolution_clock::now();
         robot_state->update();
+        auto end = std::chrono::high_resolution_clock::now();
+        moveit_update_time += std::chrono::duration<double, std::milli>(end - start).count();
+
         Eigen::Isometry3d end_effector_link_pose = robot_state->getGlobalLinkTransform(check_link_name);
         Eigen::Quaterniond q(end_effector_link_pose.rotation());
         moveit_positions.push_back({
@@ -426,6 +431,9 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         // print in green
         std::cout << "\033[1;32m" << "Same poses at index " << i << "\033[0m" << std::endl;
     }
+
+    // print the average time for moveit update
+    std::cout << "\033[1;32m" << "Average time for moveit update: " << moveit_update_time / (double)test_config_num << " ms" << "\033[0m" << std::endl;
 
 }
 
@@ -2156,11 +2164,11 @@ int main(int argc, char** argv)
     // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
-    // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_JACOBIAN(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    EVAL_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+    // EVAL_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_CONSTRAINT_PROJECT(kinematic_model, GROUP_NAME, cuda_test_node);
 
