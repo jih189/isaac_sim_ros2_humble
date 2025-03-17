@@ -2197,11 +2197,11 @@ int main(int argc, char** argv)
 
     // TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

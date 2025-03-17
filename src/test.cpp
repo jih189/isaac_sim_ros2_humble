@@ -250,3 +250,151 @@ if (idx == 0)
     }
     std::cout << std::endl;
 }
+
+
+
+__global__ void computeSelfCollisionCostFastKernel(
+    const float* __restrict__ d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
+    const int num_of_configurations,
+    const int num_of_self_collision_spheres,
+    const int num_of_self_collision_check_per_config,
+    const int* __restrict__ d_collision_sphere_indices_1,
+    const int* __restrict__ d_collision_sphere_indices_2,
+    const float* __restrict__ d_collision_distance_threshold,
+    float* d_self_collision_costs // num_of_configurations x num_of_self_collision_check_per_config
+)
+{
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < num_of_configurations * num_of_self_collision_check_per_config)
+    {
+        int config_idx = idx / num_of_self_collision_check_per_config;
+        int collision_check_idx = idx % num_of_self_collision_check_per_config;
+
+        int sphere_idx_1 = d_collision_sphere_indices_1[collision_check_idx];
+        int sphere_idx_2 = d_collision_sphere_indices_2[collision_check_idx];
+
+        int base_idx = config_idx * num_of_self_collision_spheres * 3;
+
+        // get the positions of the two spheres
+        float collision_sphere_1_pos_x = d_self_collision_spheres_pos_in_base_link[base_idx + sphere_idx_1 * 3 + 0];
+        float collision_sphere_1_pos_y = d_self_collision_spheres_pos_in_base_link[base_idx + sphere_idx_1 * 3 + 1];
+        float collision_sphere_1_pos_z = d_self_collision_spheres_pos_in_base_link[base_idx + sphere_idx_1 * 3 + 2];
+
+        float collision_sphere_2_pos_x = d_self_collision_spheres_pos_in_base_link[base_idx + sphere_idx_2 * 3 + 0];
+        float collision_sphere_2_pos_y = d_self_collision_spheres_pos_in_base_link[base_idx + sphere_idx_2 * 3 + 1];
+        float collision_sphere_2_pos_z = d_self_collision_spheres_pos_in_base_link[base_idx + sphere_idx_2 * 3 + 2];
+
+        // compute squared distance
+        float diff_in_x = collision_sphere_1_pos_x - collision_sphere_2_pos_x;
+        float diff_in_y = collision_sphere_1_pos_y - collision_sphere_2_pos_y;
+        float diff_in_z = collision_sphere_1_pos_z - collision_sphere_2_pos_z;
+
+        float squared_distance = diff_in_x * diff_in_x + diff_in_y * diff_in_y + diff_in_z * diff_in_z; // squared Euclidean distance
+        float collision_distance_threshold_sq = d_collision_distance_threshold[collision_check_idx];
+
+        // the cost the overlap of the two spheres
+        float self_collision_cost = 0.0f;
+        if (squared_distance < collision_distance_threshold_sq){
+            float sum_of_radius = sqrtf(collision_distance_threshold_sq);
+            self_collision_cost = sum_of_radius - sqrtf(squared_distance);
+        }
+
+        d_self_collision_costs[idx] = self_collision_cost;
+    }
+}
+
+__global__ void sumSelfCollisionCostFastKernel(
+    const float* d_cost, // num_of_configurations x num_of_elements
+    int num_of_elements,
+    int num_of_configurations,
+    float* d_sum_cost // num_of_configurations
+)
+{
+    extern __shared__ float sdata[];
+    
+    // Each block handles one configuration.
+    int configIdx = blockIdx.x;
+    if (configIdx >= num_of_configurations)
+        return;
+
+    int tid = threadIdx.x;
+    int totalElements = num_of_elements;
+    float sum = 0.0f;
+
+    // Each thread sums a portion of the elements using striding
+    for (int i = tid; i < totalElements; i += blockDim.x) {
+        int index = configIdx * totalElements + i;
+        sum += d_cost[index];
+    }
+    
+    // Store the partial sum in shared memory
+    sdata[tid] = sum;
+    __syncthreads();
+
+    // Perform reduction in shared memory
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid] += sdata[tid + s];
+        }
+        __syncthreads();
+    }
+
+    // Write the result for this configuration to global memory
+    if (tid == 0) {
+        d_sum_cost[configIdx] = sdata[0];
+    }
+}
+
+void SelfCollisionConstraint::computeCostFast(BaseStatesPtr states)
+{
+    // Cast the states and space information for SingleArmSpace
+    SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
+    SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
+
+    // check the cost location of this constraint
+    int constraint_index = getConstraintIndex(space_info);
+    if (constraint_index == -1){
+        // raise an error
+        printf("Constraint %s is not found in the space\n", this->constraint_name.c_str());
+        return;
+    }
+
+    size_t d_self_collision_costs_bytes = (size_t)(single_arm_states->getNumOfStates()) * num_of_self_collision_check_ * sizeof(float);
+    float * d_self_collision_costs;
+    cudaMalloc(&d_self_collision_costs, d_self_collision_costs_bytes);
+
+    // get constraint cost location
+    float * d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
+    
+    int threadsPerBlock = 256;
+    int blocksPerGrid = ((size_t)(single_arm_states->getNumOfStates()) * num_of_self_collision_check_ + threadsPerBlock - 1) / threadsPerBlock;
+
+    computeSelfCollisionCostFastKernel<<<blocksPerGrid, threadsPerBlock>>>(
+        single_arm_states->getSelfCollisionSpheresPosInBaseLinkCuda(), 
+        single_arm_states->getNumOfStates(), 
+        space_info->num_of_self_collision_spheres, 
+        num_of_self_collision_check_,
+        d_collision_sphere_indices_1,
+        d_collision_sphere_indices_2,
+        d_collision_distance_threshold,
+        d_self_collision_costs
+    );
+
+    CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    blocksPerGrid = single_arm_states->getNumOfStates();
+    size_t sharedMemSize = threadsPerBlock * sizeof(float);
+
+    sumSelfCollisionCostFastKernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(
+        d_self_collision_costs, 
+        num_of_self_collision_check_, 
+        single_arm_states->getNumOfStates(), 
+        d_cost_of_current_constraint
+    );
+
+    CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    cudaFree(d_self_collision_costs);
+}

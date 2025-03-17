@@ -792,8 +792,8 @@ namespace CUDAMPLib
         // this->calculateForwardKinematics();
         this->calculateForwardKinematicsNvrtv();
 
-        // compute space jacobian in base link
-        this->calculateSpaceJacobian(false);
+        // // compute space jacobian in base link
+        // this->calculateSpaceJacobian(false);
 
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres + threadsPerBlock - 1) / threadsPerBlock;
@@ -842,9 +842,6 @@ namespace CUDAMPLib
 
     void SingleArmStates::calculateForwardKinematicsNvrtv()
     {
-        CUDA_CHECK(cudaDeviceSynchronize());
-        CUDA_CHECK(cudaGetLastError());
-
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
@@ -858,13 +855,7 @@ namespace CUDAMPLib
                                     0,          // shared memory size
                                     nullptr,    // stream
                                     args);
-        cudaDeviceSynchronize();
-        // check for errors
-        if (cudaGetLastError() != cudaSuccess) {
-            // print in red
-            std::cerr << "\033[31m" << "number of states: " << num_of_states_ << " num_of_joints: " << num_of_joints << "\033[0m" << std::endl;
-        }
-        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+        CUDA_CHECK(cudaDeviceSynchronize()); // Check for launch errors
     }
 
     void SingleArmStates::calculateForwardKinematics()
