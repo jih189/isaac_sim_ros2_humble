@@ -792,24 +792,14 @@ namespace CUDAMPLib
         // this->calculateForwardKinematics();
         this->calculateForwardKinematicsNvrtv();
 
-        int threadsPerBlock = 256;
-        // calculate space jacobian
-        int blocksPerGrid_1 = (num_of_states_ * space_info_single_arm_space->num_of_links + threadsPerBlock - 1) / threadsPerBlock;
-        int blocksPerGrid_2 = (num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres + threadsPerBlock - 1) / threadsPerBlock;
+        // compute space jacobian in base link
+        this->calculateSpaceJacobian(false);
 
-        // update the space jacobian in base link frame
-        kin_space_jacobian_per_link_kernel<<<blocksPerGrid_1, threadsPerBlock>>>(
-            num_of_states_,
-            num_of_joints,
-            space_info_single_arm_space->num_of_links,
-            space_info_single_arm_space->d_joint_types,
-            space_info_single_arm_space->d_joint_axes,
-            d_link_poses_in_base_link,
-            d_space_jacobian_in_base_link
-        );
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres + threadsPerBlock - 1) / threadsPerBlock;
 
         // update the self collision spheres position in base link frame
-        update_collision_spheres_kernel<<<blocksPerGrid_2, threadsPerBlock>>>(
+        update_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
             num_of_states_,
             space_info_single_arm_space->num_of_links,
             space_info_single_arm_space->num_of_self_collision_spheres,
@@ -823,8 +813,11 @@ namespace CUDAMPLib
         CUDA_CHECK(cudaDeviceSynchronize());
     }
 
-    void SingleArmStates::calculateForwardKinematicsNvrtv()
+    void SingleArmStates::calculateForwardKinematicsWithSharedMemoryNvrtv()
     {
+        CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaGetLastError());
+
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
         SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
@@ -832,22 +825,46 @@ namespace CUDAMPLib
         // Set up kernel parameters.
         void *args[] = { &d_joint_states, &num_of_states_, &d_link_poses_in_base_link };
 
-        // // Launch the kernel using the member function of KernelFunction.
-        // space_info_single_arm_space->kernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
-        //                             dim3(threadsPerBlock, 1, 1),
-        //                             0,          // shared memory size
-        //                             nullptr,    // stream
-        //                             args);
-
         // Launch the kernel using the member function of KernelFunction.
         space_info_single_arm_space->kernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
                                     dim3(threadsPerBlock, 1, 1),
                                     threadsPerBlock * num_of_joints * sizeof(float),          // shared memory size
                                     nullptr,    // stream
                                     args);
-
+        cudaDeviceSynchronize();
+        // check for errors
+        if (cudaGetLastError() != cudaSuccess) {
+            // print in red
+            std::cerr << "\033[31m" << "number of states: " << num_of_states_ << " num_of_joints: " << num_of_joints << "\033[0m" << std::endl;
+        }
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+    }
+
+    void SingleArmStates::calculateForwardKinematicsNvrtv()
+    {
         CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaGetLastError());
+
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+        
+        // Set up kernel parameters.
+        void *args[] = { &d_joint_states, &num_of_states_, &d_link_poses_in_base_link };
+
+        // Launch the kernel using the member function of KernelFunction.
+        space_info_single_arm_space->kernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
+                                    dim3(threadsPerBlock, 1, 1),
+                                    0,          // shared memory size
+                                    nullptr,    // stream
+                                    args);
+        cudaDeviceSynchronize();
+        // check for errors
+        if (cudaGetLastError() != cudaSuccess) {
+            // print in red
+            std::cerr << "\033[31m" << "number of states: " << num_of_states_ << " num_of_joints: " << num_of_joints << "\033[0m" << std::endl;
+        }
+        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
     }
 
     void SingleArmStates::calculateForwardKinematics()
@@ -871,6 +888,32 @@ namespace CUDAMPLib
 
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
+    }
+
+    void SingleArmStates::calculateSpaceJacobian(bool synchronize)
+    {
+        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+
+        int threadsPerBlock = 256;
+        // calculate space jacobian
+        int blocksPerGrid = (num_of_states_ * space_info_single_arm_space->num_of_links + threadsPerBlock - 1) / threadsPerBlock;
+
+        // update the space jacobian in base link frame
+        kin_space_jacobian_per_link_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            num_of_states_,
+            num_of_joints,
+            space_info_single_arm_space->num_of_links,
+            space_info_single_arm_space->d_joint_types,
+            space_info_single_arm_space->d_joint_axes,
+            d_link_poses_in_base_link,
+            d_space_jacobian_in_base_link
+        );
+
+        if (synchronize)
+        {
+            CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+            CUDA_CHECK(cudaDeviceSynchronize());
+        }
     }
 
     __global__ void sum_gradients_kernel(

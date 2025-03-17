@@ -55,6 +55,8 @@ public:
       // Create self collision constraint
       self_collision_constraint_ = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
           "self_collision_constraint",
+          robot_info_ptr_->getCollisionSpheresMap(),
+          robot_info_ptr_->getCollisionSpheresRadius(),
           robot_info_ptr_->getSelfCollisionEnabledMap()
       );
     }

@@ -164,6 +164,8 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);

@@ -152,8 +152,17 @@ namespace CUDAMPLib
                 @brief Calculate the forward kinematics of the states using nvrtc.
              */
             void calculateForwardKinematicsNvrtv();
+            void calculateForwardKinematicsWithSharedMemoryNvrtv();
 
+            /**
+                Calculate the total gradient and error of the states based on the constraint indexs.
+             */
             void calculateTotalGradientAndError(const std::vector<int> & constraint_indexs) override;
+
+            /** 
+                @brief Calculate the space jacobian of the states. This function requires the forward kinematics to be calculated first.
+            */
+            void calculateSpaceJacobian(bool synchronize = true);
 
             /**
                 @brief Print the joint states. For debugging purposes.

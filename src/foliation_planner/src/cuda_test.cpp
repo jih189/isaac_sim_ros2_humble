@@ -200,6 +200,8 @@ void TEST_JACOBIAN(const moveit::core::RobotModelPtr & robot_model, const std::s
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -325,6 +327,8 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -453,6 +457,8 @@ void EVAL_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -511,10 +517,12 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
         balls_pos,
         ball_radius
     );
-    constraints.push_back(env_constraint);
+    // constraints.push_back(env_constraint);
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -560,8 +568,8 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
         return;
     }
 
-    // dumpy update
-    single_arm_states_1->oldUpdate();
+    // // dumpy update
+    // single_arm_states_1->oldUpdate();
 
     auto start_time_update = std::chrono::high_resolution_clock::now();
     single_arm_states_2->update();
@@ -570,15 +578,15 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // print in green color
     printf("\033[1;32m" "Time taken by update: %f seconds" "\033[0m \n", elapsed_time_update.count());
 
-    auto start_time_old_update = std::chrono::high_resolution_clock::now();
-    single_arm_states_3->oldUpdate();
-    auto end_time_old_update = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed_time_old_update = end_time_old_update - start_time_old_update;
-    // print in green color
-    printf("\033[1;32m" "Time taken by old update: %f seconds" "\033[0m \n", elapsed_time_old_update.count());
+    // auto start_time_old_update = std::chrono::high_resolution_clock::now();
+    // single_arm_states_3->oldUpdate();
+    // auto end_time_old_update = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double> elapsed_time_old_update = end_time_old_update - start_time_old_update;
+    // // print in green color
+    // printf("\033[1;32m" "Time taken by old update: %f seconds" "\033[0m \n", elapsed_time_old_update.count());
 
     // check states
-    single_arm_space->oldCheckStates(single_arm_states_1); // dummy check
+    // single_arm_space->oldCheckStates(single_arm_states_1); // dummy check
 
     auto start_time_check_states = std::chrono::high_resolution_clock::now();
     single_arm_space->checkStates(single_arm_states_2);
@@ -587,12 +595,12 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // print in green color
     printf("\033[1;32m" "Time taken by checkStates: %f seconds" "\033[0m \n", elapsed_time_check_states.count());
 
-    auto start_time_old_check_states = std::chrono::high_resolution_clock::now();
-    single_arm_space->oldCheckStates(single_arm_states_3);
-    auto end_time_old_check_states = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed_time_old_check_states = end_time_old_check_states - start_time_old_check_states;
-    // print in green color
-    printf("\033[1;32m" "Time taken by oldCheckStates: %f seconds" "\033[0m \n", elapsed_time_old_check_states.count());
+    // auto start_time_old_check_states = std::chrono::high_resolution_clock::now();
+    // single_arm_space->oldCheckStates(single_arm_states_3);
+    // auto end_time_old_check_states = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double> elapsed_time_old_check_states = end_time_old_check_states - start_time_old_check_states;
+    // // print in green color
+    // printf("\033[1;32m" "Time taken by oldCheckStates: %f seconds" "\033[0m \n", elapsed_time_old_check_states.count());
 
     // // check motions
     // std::vector<bool> motion_feasibility;
@@ -684,6 +692,8 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     // create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -807,6 +817,8 @@ void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model,
     // create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -888,6 +900,8 @@ void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const s
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -935,6 +949,7 @@ void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const s
     std::cout << "\033[1;32m" << "Time taken by old filter state function: " << elapsed_time_filter.count() << " seconds" << "\033[0m" << std::endl;
 }
 
+
 /**
     Create a CUDAMPLib::SingleArmSpace and sample a set of states.
     Then, we will check the feasibility of the states and visualize the collision spheres in rviz.
@@ -965,6 +980,8 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -1225,6 +1242,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -1634,6 +1653,8 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
     // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -1910,6 +1931,8 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
@@ -2164,7 +2187,7 @@ int main(int argc, char** argv)
     // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
-    TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_JACOBIAN(kinematic_model, GROUP_NAME, cuda_test_node);
 
@@ -2178,7 +2201,7 @@ int main(int argc, char** argv)
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

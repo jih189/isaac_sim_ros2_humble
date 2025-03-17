@@ -6,6 +6,8 @@ namespace CUDAMPLib{
 
     SelfCollisionConstraint::SelfCollisionConstraint(
         const std::string& constraint_name,
+        const std::vector<int>& collision_spheres_map, // link index of each collision sphere
+        const std::vector<float>& collision_spheres_radius, // radius of each collision sphere
         const std::vector<std::vector<bool>>& self_collision_enables_map
     )
     : BaseConstraint(constraint_name, false) // This constraint is not projectable.
@@ -16,11 +18,43 @@ namespace CUDAMPLib{
 
         // Copy the self collision enables map to the device
         cudaMemcpy(d_self_collision_enables_map, boolMatrixFlatten(self_collision_enables_map).data(), self_collision_enables_map_bytes, cudaMemcpyHostToDevice);
+
+        // determine which pairs of collision spheres should be checked for self-collision.
+        std::vector<int> collision_sphere_indices_1;
+        std::vector<int> collision_sphere_indices_2;
+        std::vector<float> collision_distance_threshold;
+        num_of_self_collision_check_ = 0;
+
+        for (int i = 0; i < collision_spheres_map.size(); i++){
+            for (int j = i + 1; j < collision_spheres_map.size(); j++){
+                // check if the two spheres are not in the same link and self-collision is enabled between the two links
+                if (collision_spheres_map[i] != collision_spheres_map[j] && self_collision_enables_map[collision_spheres_map[i]][collision_spheres_map[j]]){
+                    collision_sphere_indices_1.push_back(i);
+                    collision_sphere_indices_2.push_back(j);
+                    collision_distance_threshold.push_back((collision_spheres_radius[i] + collision_spheres_radius[j]) * (collision_spheres_radius[i] + collision_spheres_radius[j])); // squared distance threshold
+                    num_of_self_collision_check_++;
+                }
+            }
+        }
+        
+        size_t self_collision_spheres_check_bytes = (size_t)num_of_self_collision_check_ * sizeof(int);
+        size_t self_collision_check_threshold_bytes = (size_t)num_of_self_collision_check_ * sizeof(float);
+        cudaMalloc(&d_collision_sphere_indices_1, self_collision_spheres_check_bytes);
+        cudaMalloc(&d_collision_sphere_indices_2, self_collision_spheres_check_bytes);
+        cudaMalloc(&d_collision_distance_threshold, self_collision_check_threshold_bytes);
+
+        // Copy the collision sphere indices to the device
+        cudaMemcpy(d_collision_sphere_indices_1, collision_sphere_indices_1.data(), self_collision_spheres_check_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_collision_sphere_indices_2, collision_sphere_indices_2.data(), self_collision_spheres_check_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_collision_distance_threshold, collision_distance_threshold.data(), self_collision_check_threshold_bytes, cudaMemcpyHostToDevice);
     }
 
     SelfCollisionConstraint::~SelfCollisionConstraint()
     {
         cudaFree(d_self_collision_enables_map);
+        cudaFree(d_collision_sphere_indices_1);
+        cudaFree(d_collision_sphere_indices_2);
+        cudaFree(d_collision_distance_threshold);
     }
 
     __global__ void computeSelfCollisionCostLargeKernel(
@@ -137,108 +171,9 @@ namespace CUDAMPLib{
         }
     }
 
-    // __global__ void computeSelfCollisionCostKernel(
-    //     const float* __restrict__ d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
-    //     const float* __restrict__ d_self_collision_spheres_radius, // num_of_self_collision_spheres
-    //     int num_of_self_collision_spheres,
-    //     int num_of_configurations,
-    //     const int* __restrict__ d_self_collision_spheres_map, // num_of_self_collision_spheres
-    //     int num_of_robot_links,
-    //     const int* __restrict__ d_self_collision_enables_map, // num_of_robot_links x num_of_robot_links
-    //     float* d_cost // num_of_configurations x num_of_self_collision_spheres
-    // )
-    // {
-    //     int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    //     if (idx < num_of_configurations * num_of_self_collision_spheres)
-    //     {
-    //         int config_idx = idx / num_of_self_collision_spheres;
-    //         int sphere_idx = idx % num_of_self_collision_spheres;
-
-    //         float cost = 0.0f;
-    //         for (int i = 0; i < num_of_self_collision_spheres; i++){ // For each self collision sphere
-    //             if (i != sphere_idx){
-    //                 // check if the two spheres are not in the same link
-    //                 int link_i = d_self_collision_spheres_map[sphere_idx];
-    //                 int link_j = d_self_collision_spheres_map[i];
-    //                 if ( link_i != link_j){
-    //                     // check if two links are enabled for collision
-    //                     if (d_self_collision_enables_map[link_i * num_of_robot_links + link_j] != 0)
-    //                     {
-    //                         float diff_in_x = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 0] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + i * 3 + 0];
-    //                         float diff_in_y = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 1] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + i * 3 + 1];
-    //                         float diff_in_z = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 2] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + i * 3 + 2];
-
-    //                         float distance = sqrtf(diff_in_x * diff_in_x + diff_in_y * diff_in_y + diff_in_z * diff_in_z); // Euclidean distance
-    //                         float sum_of_radius = d_self_collision_spheres_radius[sphere_idx] + d_self_collision_spheres_radius[i];
-
-    //                         // the cost the overlap of the two spheres
-    //                         cost += fmaxf(0.0f, sum_of_radius - distance);
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         d_cost[idx] = cost;
-    //     }
-    // }
-
-    /**
-        @brief Compute the cost between each pair of self collision spheres for each configuration.
-        @param d_self_collision_spheres_pos_in_base_link [num_of_configurations x num_of_self_collision_spheres x 3] The positions of self collision spheres in the base link frame.
-        @param d_self_collision_spheres_radius [num_of_self_collision_spheres] The radius of each self collision sphere.
-        @param num_of_self_collision_spheres The number of self collision spheres.
-        @param num_of_configurations The number of configurations.
-        @param d_self_collision_spheres_map [num_of_self_collision_spheres] The link index of each self collision sphere.
-        @param num_of_robot_links The number of links in the robot.
-        @param d_self_collision_enables_map [num_of_robot_links x num_of_robot_links] The map of enabled self collision between links.
-        @param d_cost [num_of_configurations x num_of_self_collision_spheres x num_of_self_collision_spheres] The cost between each pair of self collision spheres for each configuration.
-     */
-    __global__ void computeSelfCollisionCostFastKernel(
-        const float* __restrict__ d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
-        const float* __restrict__ d_self_collision_spheres_radius, // num_of_self_collision_spheres
-        int num_of_self_collision_spheres,
-        int num_of_configurations,
-        const int* __restrict__ d_self_collision_spheres_map, // num_of_self_collision_spheres
-        int num_of_robot_links,
-        const int* __restrict__ d_self_collision_enables_map, // num_of_robot_links x num_of_robot_links
-        float* d_cost // num_of_configurations x num_of_self_collision_spheres x num_of_self_collision_spheres
-    )
-    {
-        int idx = threadIdx.x + blockIdx.x * blockDim.x;
-        if (idx < num_of_configurations * num_of_self_collision_spheres * num_of_self_collision_spheres)
-        {
-            int config_idx = idx / ( num_of_self_collision_spheres * num_of_self_collision_spheres);
-            int sphere_idx = (idx / num_of_self_collision_spheres) % num_of_self_collision_spheres;
-            int other_sphere_idx = idx % num_of_self_collision_spheres;
-
-            float cost = 0.0f;
-
-            // check if the two spheres are not in the same link
-            int link_i = d_self_collision_spheres_map[sphere_idx];
-            int link_j = d_self_collision_spheres_map[other_sphere_idx];
-
-            if ( link_i != link_j){
-                // check if two links are enabled for collision
-                if (d_self_collision_enables_map[link_i * num_of_robot_links + link_j] != 0)
-                {
-                    float diff_in_x = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 0] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + other_sphere_idx * 3 + 0];
-                    float diff_in_y = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 1] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + other_sphere_idx * 3 + 1];
-                    float diff_in_z = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3 + 2] - d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + other_sphere_idx * 3 + 2];
-
-                    float distance = sqrtf(diff_in_x * diff_in_x + diff_in_y * diff_in_y + diff_in_z * diff_in_z); // Euclidean distance
-                    float sum_of_radius = d_self_collision_spheres_radius[sphere_idx] + d_self_collision_spheres_radius[other_sphere_idx];
-
-                    // the cost the overlap of the two spheres
-                    cost = fmaxf(0.0f, sum_of_radius - distance);
-                }
-            }
-
-            d_cost[idx] = cost;
-        }
-    }
-
     __global__ void sumSelfCollisionCostFastKernel(
-        const float* d_cost, // num_of_configurations x num_of_self_collision_spheres x num_of_self_collision_spheres
-        int num_of_self_collision_spheres,
+        const float* d_cost, // num_of_configurations x num_of_elements
+        int num_of_elements,
         int num_of_configurations,
         float* d_sum_cost // num_of_configurations
     )
@@ -251,7 +186,7 @@ namespace CUDAMPLib{
             return;
 
         int tid = threadIdx.x;
-        int totalElements = num_of_self_collision_spheres * num_of_self_collision_spheres;
+        int totalElements = num_of_elements;
         float sum = 0.0f;
 
         // Each thread sums a portion of the elements using striding
@@ -395,10 +330,56 @@ namespace CUDAMPLib{
         cudaFree(d_collision_cost);
     }
 
+    __global__ void computeSelfCollisionCostFastKernel(
+        const float* __restrict__ d_self_collision_spheres_pos_in_base_link, // num_of_configurations x num_of_self_collision_spheres x 3
+        const int num_of_configurations,
+        const int num_of_self_collision_spheres,
+        const int num_of_self_collision_check_per_config,
+        const int* __restrict__ d_collision_sphere_indices_1,
+        const int* __restrict__ d_collision_sphere_indices_2,
+        const float* __restrict__ d_collision_distance_threshold,
+        float* d_self_collision_costs // num_of_configurations x num_of_self_collision_check_per_config
+    )
+    {
+        int idx = threadIdx.x + blockIdx.x * blockDim.x;
+        if (idx < num_of_configurations * num_of_self_collision_check_per_config)
+        {
+            int config_idx = idx / num_of_self_collision_check_per_config;
+            int collision_check_idx = idx % num_of_self_collision_check_per_config;
+
+            int sphere_idx_1 = d_collision_sphere_indices_1[collision_check_idx];
+            int sphere_idx_2 = d_collision_sphere_indices_2[collision_check_idx];
+
+            // get the positions of the two spheres
+            float collision_sphere_1_pos_x = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx_1 * 3 + 0];
+            float collision_sphere_1_pos_y = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx_1 * 3 + 1];
+            float collision_sphere_1_pos_z = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx_1 * 3 + 2];
+
+            float collision_sphere_2_pos_x = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx_2 * 3 + 0];
+            float collision_sphere_2_pos_y = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx_2 * 3 + 1];
+            float collision_sphere_2_pos_z = d_self_collision_spheres_pos_in_base_link[config_idx * num_of_self_collision_spheres * 3 + sphere_idx_2 * 3 + 2];
+
+            // compute squared distance
+            float diff_in_x = collision_sphere_1_pos_x - collision_sphere_2_pos_x;
+            float diff_in_y = collision_sphere_1_pos_y - collision_sphere_2_pos_y;
+            float diff_in_z = collision_sphere_1_pos_z - collision_sphere_2_pos_z;
+
+            float squared_distance = diff_in_x * diff_in_x + diff_in_y * diff_in_y + diff_in_z * diff_in_z; // squared Euclidean distance
+            float collision_distance_threshold_sq = d_collision_distance_threshold[collision_check_idx];
+
+            // the cost the overlap of the two spheres
+            float self_collision_cost = 0.0f;
+            if (squared_distance < collision_distance_threshold_sq){
+                float sum_of_radius = sqrtf(collision_distance_threshold_sq);
+                self_collision_cost = sum_of_radius - sqrtf(squared_distance);
+            }
+
+            d_self_collision_costs[idx] = self_collision_cost;
+        }
+    }
+
     void SelfCollisionConstraint::computeCostFast(BaseStatesPtr states)
     {
-        // computeCost(states);
-
         // Cast the states and space information for SingleArmSpace
         SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
         SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
@@ -411,55 +392,36 @@ namespace CUDAMPLib{
             return;
         }
 
-        size_t num_of_collision_pairs = (size_t)(single_arm_states->getNumOfStates()) * space_info->num_of_self_collision_spheres * space_info->num_of_self_collision_spheres;
-        size_t d_collision_cost_bytes = num_of_collision_pairs * sizeof(float);
+        size_t d_self_collision_costs_bytes = (size_t)(single_arm_states->getNumOfStates()) * num_of_self_collision_check_ * sizeof(float);
+        float * d_self_collision_costs;
+        cudaMalloc(&d_self_collision_costs, d_self_collision_costs_bytes);
 
-        size_t free_byte, total_byte;
-        cudaMemGetInfo(&free_byte, &total_byte);
-
-        // if memory is not enough, use the original method
-        if (d_collision_cost_bytes > 0.1 * free_byte){
-            // printf("Not enough memory, use the original method\n");
-            computeCost(states);
-            return;
-        }
-
+        // get constraint cost location
         float * d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
-        float * d_collision_cost;
-        cudaMalloc(&d_collision_cost, d_collision_cost_bytes);
         
         int threadsPerBlock = 256;
-        int blocksPerGrid = (num_of_collision_pairs + threadsPerBlock - 1) / threadsPerBlock;
-
-        // printf("d_collision_cost_bytes: %zu, free_byte: %zu, total_byte: %zu\n", d_collision_cost_bytes, free_byte, total_byte);
-
-        // auto start_first_kernel = std::chrono::high_resolution_clock::now();
+        int blocksPerGrid = ((size_t)(single_arm_states->getNumOfStates()) * num_of_self_collision_check_ + threadsPerBlock - 1) / threadsPerBlock;
 
         computeSelfCollisionCostFastKernel<<<blocksPerGrid, threadsPerBlock>>>(
             single_arm_states->getSelfCollisionSpheresPosInBaseLinkCuda(), 
-            space_info->d_self_collision_spheres_radius, 
-            space_info->num_of_self_collision_spheres, 
             single_arm_states->getNumOfStates(), 
-            space_info->d_collision_spheres_to_link_map,
-            space_info->num_of_links,
-            d_self_collision_enables_map,
-            d_collision_cost
+            space_info->num_of_self_collision_spheres, 
+            num_of_self_collision_check_,
+            d_collision_sphere_indices_1,
+            d_collision_sphere_indices_2,
+            d_collision_distance_threshold,
+            d_self_collision_costs
         );
 
+        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
-
-        // auto end_first_kernel = std::chrono::high_resolution_clock::now();
-        // std::chrono::duration<double> elapsed_seconds = end_first_kernel - start_first_kernel;
-        // std::cout << "Self constraint Elapsed time for the first kernel: " << elapsed_seconds.count() << "s\n";
 
         blocksPerGrid = single_arm_states->getNumOfStates();
         size_t sharedMemSize = threadsPerBlock * sizeof(float);
 
-        // auto start_second_kernel = std::chrono::high_resolution_clock::now();
-
         sumSelfCollisionCostFastKernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(
-            d_collision_cost, 
-            space_info->num_of_self_collision_spheres, 
+            d_self_collision_costs, 
+            num_of_self_collision_check_, 
             single_arm_states->getNumOfStates(), 
             d_cost_of_current_constraint
         );
@@ -467,10 +429,6 @@ namespace CUDAMPLib{
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        // auto end_second_kernel = std::chrono::high_resolution_clock::now();
-        // elapsed_seconds = end_second_kernel - start_second_kernel;
-        // std::cout << "Self constraint Elapsed time for the second kernel: " << elapsed_seconds.count() << "s\n";
-
-        cudaFree(d_collision_cost);
+        cudaFree(d_self_collision_costs);
     }
 } // namespace CUDAMPLib
