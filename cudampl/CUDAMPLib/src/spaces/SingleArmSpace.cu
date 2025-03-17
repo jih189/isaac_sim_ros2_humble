@@ -1578,6 +1578,9 @@ namespace CUDAMPLib {
             constraints_[i]->computeCostFast(states);
         }
 
+        // wait for all the constraints to finish
+        CUDA_CHECK(cudaDeviceSynchronize());
+
         // get the total cost
         states->calculateTotalCosts();
     }

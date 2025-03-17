@@ -517,7 +517,7 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
         balls_pos,
         ball_radius
     );
-    // constraints.push_back(env_constraint);
+    constraints.push_back(env_constraint);
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
@@ -2197,11 +2197,11 @@ int main(int argc, char** argv)
 
     // TEST_TASK_WITH_GOAL_REGION(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

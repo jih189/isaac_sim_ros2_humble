@@ -544,7 +544,7 @@ namespace CUDAMPLib{
             d_cost_of_current_constraint
         );
 
-        CUDA_CHECK(cudaGetLastError());
-        CUDA_CHECK(cudaDeviceSynchronize());
+        // CUDA_CHECK(cudaGetLastError());
+        // CUDA_CHECK(cudaDeviceSynchronize());
     }
 } // namespace CUDAMPLib
