@@ -168,6 +168,7 @@ namespace CUDAMPLib
             // kernel function of the space
             KernelFunctionPtr kinForwardKernelFuncPtr_;
             KernelFunctionPtr getStepKernelFuncPtr_;
+            KernelFunctionPtr calculateInterpolatedStateKernelFuncPtr_;
 
             // random number generator
             // std::random_device rd;  // Non-deterministic seed (preferred)

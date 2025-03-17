@@ -464,4 +464,61 @@ void get_step_nvrtc_kernel(
         return kernel_code;
     }
 
+    inline std::string genCalculateInterpolatedStateKernelCode(
+        int num_of_joints
+    )
+    {
+        std::string kernel_code;
+
+        kernel_code += R"(
+extern "C" __global__
+void calculate_interpolated_state_nvrtc_kernel(
+    const float * __restrict__ d_from_states,
+    const float * __restrict__ d_to_states,
+    const int num_of_config,
+    const int * __restrict__ d_motion_start_index,
+    int * d_num_steps,
+    const float * __restrict__ d_move_direction,
+    float * d_interpolated_states
+)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_of_config) return;
+
+    // get the number of steps
+    int num_steps = d_num_steps[idx];
+
+    // get the start index
+    int start_index = d_motion_start_index[idx];
+
+)";
+
+        kernel_code += "    int base = idx * " + std::to_string(num_of_joints) + ";\n";
+
+kernel_code += R"(
+    // calculate the interpolated states
+    for (size_t i = 0; i < num_steps; i++)
+    {
+)";
+        for (size_t j = 0; j < num_of_joints; j++)
+        {
+            kernel_code += "        d_interpolated_states[(start_index + i) * " + std::to_string(num_of_joints) + " + " + std::to_string(j) + "] = d_from_states[base + " + std::to_string(j) + "] + d_move_direction[base + " + std::to_string(j) + "] * i;\n";
+        }
+kernel_code += R"(
+    }
+
+    // set the last state to the to state
+)";
+
+        for (size_t j = 0; j < num_of_joints; j++)
+        {
+            kernel_code += "    d_interpolated_states[(start_index + num_steps - 1) * " + std::to_string(num_of_joints) + " + " + std::to_string(j) + "] = d_to_states[base + " + std::to_string(j) + "];\n";
+        }
+        kernel_code += R"(
+}
+)";
+
+        return kernel_code;
+    }
+
 } // namespace CUDAMPLib

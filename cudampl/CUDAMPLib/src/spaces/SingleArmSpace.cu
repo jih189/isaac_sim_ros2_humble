@@ -124,9 +124,15 @@ namespace CUDAMPLib {
         // print the kernel code
         // std::cout << generate_get_step_source_code << std::endl;
 
+        // generate kernel code for calculate interpolated states
+        std::string calculate_interpolated_state_source_code = genCalculateInterpolatedStateKernelCode(num_of_joints);
+        // print the kernel code
+        // std::cout << calculate_interpolated_state_source_code << std::endl;
+
         // convert to c_str
         const char *kin_forward_source_code_c_str = kin_forward_source_code.c_str();
         const char *generate_get_step_source_code_c_str = generate_get_step_source_code.c_str();
+        const char *calculate_interpolated_state_source_code_c_str = calculate_interpolated_state_source_code.c_str();
 
         // Create the kernel function using the class's static factory method.
         kinForwardKernelFuncPtr_ = KernelFunction::create(kin_forward_source_code_c_str, "kin_forward_nvrtc_kernel");
@@ -139,6 +145,12 @@ namespace CUDAMPLib {
 
         if (! getStepKernelFuncPtr_ || ! getStepKernelFuncPtr_->function) {
             std::cerr << "\033[31m" << "Kernel function 'get_step_nvrtc_kernel' compilation failed." << "\033[0m" << std::endl;
+        }
+
+        calculateInterpolatedStateKernelFuncPtr_ = KernelFunction::create(calculate_interpolated_state_source_code_c_str, "calculate_interpolated_state_nvrtc_kernel");
+
+        if (! calculateInterpolatedStateKernelFuncPtr_ || ! calculateInterpolatedStateKernelFuncPtr_->function) {
+            std::cerr << "\033[31m" << "Kernel function 'calculate_interpolated_state_nvrtc_kernel' compilation failed." << "\033[0m" << std::endl;
         }
     }
 
@@ -160,6 +172,7 @@ namespace CUDAMPLib {
         // free kernel function
         kinForwardKernelFuncPtr_.reset();
         getStepKernelFuncPtr_.reset();
+        calculateInterpolatedStateKernelFuncPtr_.reset();
     }
 
     __global__ void initCurand(curandState * state, unsigned long seed, int state_size)
@@ -462,14 +475,14 @@ namespace CUDAMPLib {
         }
     }
 
-    __global__ void calculateInterpolatedState(
-        float * d_from_states,
-        float * d_to_states,
-        int num_of_config,
-        int num_of_joints,
-        int * d_motion_start_index,
+    __global__ void calculateInterpolatedStateKernel(
+        const float * __restrict__ d_from_states,
+        const float * __restrict__ d_to_states,
+        const int num_of_config,
+        const int num_of_joints,
+        const int * __restrict__ d_motion_start_index,
         int * d_num_steps,
-        float * d_move_direction,
+        const float * __restrict__ d_move_direction,
         float * d_interpolated_states
     )
     {
@@ -482,23 +495,21 @@ namespace CUDAMPLib {
         // get the start index
         int start_index = d_motion_start_index[idx];
 
-        // get the from state
-        float * from_state = &d_from_states[idx * num_of_joints];
-        float * to_state = &d_to_states[idx * num_of_joints];
+        int base = idx * num_of_joints;
 
         // calculate the interpolated states
         for (size_t i = 0; i < num_steps; i++)
         {
             for (size_t j = 0; j < num_of_joints; j++)
             {
-                d_interpolated_states[(start_index + i) * num_of_joints + j] = from_state[j] + d_move_direction[idx * num_of_joints + j] * i;
+                d_interpolated_states[(start_index + i) * num_of_joints + j] = d_from_states[base + j] + d_move_direction[base + j] * i;
             }
         }
 
         // set the last state to the to state
         for (size_t j = 0; j < num_of_joints; j++)
         {
-            d_interpolated_states[(start_index + num_steps - 1) * num_of_joints + j] = to_state[j];
+            d_interpolated_states[(start_index + num_steps - 1) * num_of_joints + j] = d_to_states[base + j];
         }
     }
     
@@ -666,16 +677,35 @@ namespace CUDAMPLib {
 
         float * d_interpolated_states = interpolated_states->getJointStatesCuda();
 
-        // Calculate the interpolated states
-        calculateInterpolatedState<<<blocksPerGrid, threadsPerBlock>>>(
-            d_joint_states1, 
-            d_joint_states2, 
-            num_of_states1, 
-            num_of_joints,
-            d_motion_start_index,
-            d_num_steps,
-            d_move_direction,
-            d_interpolated_states
+        // // Calculate the interpolated states
+        // calculateInterpolatedStateKernel<<<blocksPerGrid, threadsPerBlock>>>(
+        //     d_joint_states1, 
+        //     d_joint_states2, 
+        //     num_of_states1, 
+        //     num_of_joints,
+        //     d_motion_start_index,
+        //     d_num_steps,
+        //     d_move_direction,
+        //     d_interpolated_states
+        // );
+
+        // use nvrtc kernel
+        void *args2[] = {
+            &d_joint_states1, 
+            &d_joint_states2, 
+            &num_of_states1,
+            &d_motion_start_index,
+            &d_num_steps,
+            &d_move_direction,
+            &d_interpolated_states
+        };
+
+        calculateInterpolatedStateKernelFuncPtr_->launchKernel(
+            dim3(blocksPerGrid, 1, 1),
+            dim3(threadsPerBlock, 1, 1),
+            0,          // shared memory size
+            nullptr,    // stream
+            args2
         );
 
         // wait for the kernel to finish with cuda check
