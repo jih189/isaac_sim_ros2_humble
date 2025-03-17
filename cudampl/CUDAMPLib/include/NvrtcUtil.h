@@ -40,14 +40,15 @@ namespace CUDAMPLib
         CUcontext context = nullptr;
         CUmodule module = nullptr;
         CUfunction function = nullptr;
+        bool owns_context = false; // true if this object created the context
 
         ~KernelFunction() {
             if (module) {
-                // std::cout << "Destroying module" << std::endl;
+                // Unload module.
                 DRIVER_SAFE_CALL(cuModuleUnload(module));
             }
-            if (context) {
-                // std::cout << "Destroying context" << std::endl;
+            // Only destroy context if we created it.
+            if (owns_context && context) {
                 DRIVER_SAFE_CALL(cuCtxDestroy(context));
             }
         }
@@ -66,7 +67,6 @@ namespace CUDAMPLib
             DRIVER_SAFE_CALL(cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cuDevice));
             DRIVER_SAFE_CALL(cuDeviceGetAttribute(&minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, cuDevice));
             std::string arch_option = "--gpu-architecture=compute_" + std::to_string(major) + std::to_string(minor);
-            // std::cout << "Detected GPU architecture: " << arch_option << std::endl;
 
             // 3. Create and compile the NVRTC program.
             nvrtcProgram prog;
@@ -94,8 +94,17 @@ namespace CUDAMPLib
             NVRTC_SAFE_CALL(nvrtcGetPTX(prog, ptx.data()));
             NVRTC_SAFE_CALL(nvrtcDestroyProgram(&prog));
 
-            // 5. Create a CUDA context.
-            DRIVER_SAFE_CALL(cuCtxCreate(&kf->context, 0, cuDevice));
+            // 5. Use the current context if available.
+            CUcontext currentContext = nullptr;
+            DRIVER_SAFE_CALL(cuCtxGetCurrent(&currentContext));
+            if (currentContext == nullptr) {
+                // No current context exists; create one.
+                DRIVER_SAFE_CALL(cuCtxCreate(&kf->context, 0, cuDevice));
+                kf->owns_context = true;
+            } else {
+                kf->context = currentContext;
+                kf->owns_context = false;
+            }
 
             // 6. Load the PTX module.
             DRIVER_SAFE_CALL(cuModuleLoadDataEx(&kf->module, ptx.data(), 0, nullptr, nullptr));
@@ -107,7 +116,6 @@ namespace CUDAMPLib
         }
 
         // Member function to launch the kernel.
-        // You can pass grid dimensions, block dimensions, shared memory size, stream, and kernel parameters.
         void launchKernel(dim3 gridDim, dim3 blockDim, size_t sharedMem, CUstream stream, void** kernelParams) {
             DRIVER_SAFE_CALL(cuLaunchKernel(function,
                                             gridDim.x, gridDim.y, gridDim.z,

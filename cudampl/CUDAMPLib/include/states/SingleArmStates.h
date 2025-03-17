@@ -42,7 +42,7 @@ namespace CUDAMPLib
         float * d_default_joint_values;
 
         // kernel function of the space
-        KernelFunctionPtr kernelFuncPtr;
+        KernelFunctionPtr kinForwardKernelFuncPtr;
     };
     typedef std::shared_ptr<SingleArmSpaceInfo> SingleArmSpaceInfoPtr;
 

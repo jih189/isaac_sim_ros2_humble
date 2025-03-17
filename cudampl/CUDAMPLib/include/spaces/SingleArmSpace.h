@@ -166,7 +166,8 @@ namespace CUDAMPLib
             float * d_default_joint_values;
 
             // kernel function of the space
-            KernelFunctionPtr kernelFuncPtr_;
+            KernelFunctionPtr kinForwardKernelFuncPtr_;
+            KernelFunctionPtr getStepKernelFuncPtr_;
 
             // random number generator
             // std::random_device rd;  // Non-deterministic seed (preferred)

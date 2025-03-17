@@ -404,4 +404,64 @@ void kin_forward_nvrtc_kernel(
 
         return kernel_code;
     }
+
+    inline std::string genGetStepKernelCode(
+        int num_of_joints
+    )
+    {
+        std::string kernel_code;
+
+        kernel_code += R"(
+extern "C" __global__ 
+void get_step_nvrtc_kernel(
+    float * d_from_states,
+    float * d_to_states,
+    int num_of_config,
+    float d_step_size,
+    int * d_num_steps,
+    float * move_direction,
+    float * ditance_between_states
+)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_of_config) return;
+)";
+
+        kernel_code += "    float * from_state = &d_from_states[idx * " + std::to_string(num_of_joints) + "];\n";
+        kernel_code += "    float * to_state = &d_to_states[idx * " + std::to_string(num_of_joints) + "];\n";
+
+        kernel_code += R"(
+    // calculate the distance between the two states
+    float distance = 0.0f;
+)";
+
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            kernel_code += "    distance += (from_state[" + std::to_string(i) + "] - to_state[" + std::to_string(i) + "]) * (from_state[" + std::to_string(i) + "] - to_state[" + std::to_string(i) + "]);\n";
+        }
+
+        kernel_code += R"(
+    distance = sqrtf(distance);
+
+    // set the distance between states
+    ditance_between_states[idx] = distance;
+
+    // calculate the number of steps
+    int num_steps = (int)(distance / d_step_size) + 1;
+
+    d_num_steps[idx] = num_steps;
+
+    // calculate the move direction
+)";
+    for (size_t i = 0; i < num_of_joints; i++)
+    {
+        kernel_code += "    move_direction[idx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) + "] = (to_state[" + std::to_string(i) + "] - from_state[" + std::to_string(i) + "]) / num_steps;\n";
+    }
+    kernel_code += R"(
+}
+)";
+
+        return kernel_code;
+    }
+
 } // namespace CUDAMPLib

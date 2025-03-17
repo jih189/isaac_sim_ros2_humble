@@ -813,32 +813,32 @@ namespace CUDAMPLib
         CUDA_CHECK(cudaDeviceSynchronize());
     }
 
-    void SingleArmStates::calculateForwardKinematicsWithSharedMemoryNvrtv()
-    {
-        CUDA_CHECK(cudaDeviceSynchronize());
-        CUDA_CHECK(cudaGetLastError());
+    // void SingleArmStates::calculateForwardKinematicsWithSharedMemoryNvrtv()
+    // {
+    //     CUDA_CHECK(cudaDeviceSynchronize());
+    //     CUDA_CHECK(cudaGetLastError());
 
-        int threadsPerBlock = 256;
-        int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
-        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
+    //     int threadsPerBlock = 256;
+    //     int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
+    //     SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
         
-        // Set up kernel parameters.
-        void *args[] = { &d_joint_states, &num_of_states_, &d_link_poses_in_base_link };
+    //     // Set up kernel parameters.
+    //     void *args[] = { &d_joint_states, &num_of_states_, &d_link_poses_in_base_link };
 
-        // Launch the kernel using the member function of KernelFunction.
-        space_info_single_arm_space->kernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
-                                    dim3(threadsPerBlock, 1, 1),
-                                    threadsPerBlock * num_of_joints * sizeof(float),          // shared memory size
-                                    nullptr,    // stream
-                                    args);
-        cudaDeviceSynchronize();
-        // check for errors
-        if (cudaGetLastError() != cudaSuccess) {
-            // print in red
-            std::cerr << "\033[31m" << "number of states: " << num_of_states_ << " num_of_joints: " << num_of_joints << "\033[0m" << std::endl;
-        }
-        CUDA_CHECK(cudaGetLastError()); // Check for launch errors
-    }
+    //     // Launch the kernel using the member function of KernelFunction.
+    //     space_info_single_arm_space->kinForwardKernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
+    //                                 dim3(threadsPerBlock, 1, 1),
+    //                                 threadsPerBlock * num_of_joints * sizeof(float),          // shared memory size
+    //                                 nullptr,    // stream
+    //                                 args);
+    //     cudaDeviceSynchronize();
+    //     // check for errors
+    //     if (cudaGetLastError() != cudaSuccess) {
+    //         // print in red
+    //         std::cerr << "\033[31m" << "number of states: " << num_of_states_ << " num_of_joints: " << num_of_joints << "\033[0m" << std::endl;
+    //     }
+    //     CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+    // }
 
     void SingleArmStates::calculateForwardKinematicsNvrtv()
     {
@@ -850,7 +850,7 @@ namespace CUDAMPLib
         void *args[] = { &d_joint_states, &num_of_states_, &d_link_poses_in_base_link };
 
         // Launch the kernel using the member function of KernelFunction.
-        space_info_single_arm_space->kernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
+        space_info_single_arm_space->kinForwardKernelFuncPtr->launchKernel(dim3(blocksPerGrid, 1, 1),
                                     dim3(threadsPerBlock, 1, 1),
                                     0,          // shared memory size
                                     nullptr,    // stream

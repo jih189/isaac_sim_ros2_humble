@@ -119,14 +119,26 @@ namespace CUDAMPLib {
         // print the kernel code
         // std::cout << kin_forward_source_code << std::endl;
 
+        // generate kernel code for generate step
+        std::string generate_get_step_source_code = genGetStepKernelCode(num_of_joints);
+        // print the kernel code
+        // std::cout << generate_get_step_source_code << std::endl;
+
         // convert to c_str
         const char *kin_forward_source_code_c_str = kin_forward_source_code.c_str();
+        const char *generate_get_step_source_code_c_str = generate_get_step_source_code.c_str();
 
         // Create the kernel function using the class's static factory method.
-        kernelFuncPtr_ = KernelFunction::create(kin_forward_source_code_c_str, "kin_forward_nvrtc_kernel");
+        kinForwardKernelFuncPtr_ = KernelFunction::create(kin_forward_source_code_c_str, "kin_forward_nvrtc_kernel");
 
-        if (! kernelFuncPtr_ || ! kernelFuncPtr_->function) {
+        if (! kinForwardKernelFuncPtr_ || ! kinForwardKernelFuncPtr_->function) {
             std::cerr << "\033[31m" << "Kernel function 'kin_forward_nvrtc_kernel' compilation failed." << "\033[0m" << std::endl;
+        }
+
+        getStepKernelFuncPtr_ = KernelFunction::create(generate_get_step_source_code_c_str, "get_step_nvrtc_kernel");
+
+        if (! getStepKernelFuncPtr_ || ! getStepKernelFuncPtr_->function) {
+            std::cerr << "\033[31m" << "Kernel function 'get_step_nvrtc_kernel' compilation failed." << "\033[0m" << std::endl;
         }
     }
 
@@ -146,7 +158,8 @@ namespace CUDAMPLib {
         cudaFree(d_default_joint_values);
 
         // free kernel function
-        kernelFuncPtr_.reset();
+        kinForwardKernelFuncPtr_.reset();
+        getStepKernelFuncPtr_.reset();
     }
 
     __global__ void initCurand(curandState * state, unsigned long seed, int state_size)
@@ -579,17 +592,36 @@ namespace CUDAMPLib {
         int threadsPerBlock = 256;
         int blocksPerGrid = (num_of_states1 + threadsPerBlock - 1) / threadsPerBlock;
 
-        // Calculate the number of steps and the move direction.
-        getStepKernel<<<blocksPerGrid, threadsPerBlock>>>(
-            d_joint_states1, 
-            d_joint_states2, 
-            num_of_states1, 
-            num_of_joints,
-            resolution_,
-            d_num_steps,
-            d_move_direction,
-            d_distance_between_states
-        );
+        // // Calculate the number of steps and the move direction.
+        // getStepKernel<<<blocksPerGrid, threadsPerBlock>>>(
+        //     d_joint_states1, 
+        //     d_joint_states2, 
+        //     num_of_states1, 
+        //     num_of_joints,
+        //     resolution_,
+        //     d_num_steps,
+        //     d_move_direction,
+        //     d_distance_between_states
+        // );
+
+        // use nvrtc kernel
+        void *args[] = {
+            &d_joint_states1, 
+            &d_joint_states2, 
+            &num_of_states1, 
+            &resolution_, 
+            &d_num_steps, 
+            &d_move_direction, 
+            &d_distance_between_states 
+        };
+
+        getStepKernelFuncPtr_->launchKernel(
+            dim3(blocksPerGrid, 1, 1),
+            dim3(threadsPerBlock, 1, 1),
+            0,          // shared memory size
+            nullptr,    // stream
+            args
+        ); 
 
         // wait for the kernel to finish with cuda check
         CUDA_CHECK(cudaGetLastError());
@@ -1727,7 +1759,7 @@ namespace CUDAMPLib {
         space_info->active_joint_map = active_joint_map_;
 
         // set kernel functions of the space
-        space_info->kernelFuncPtr = kernelFuncPtr_;
+        space_info->kinForwardKernelFuncPtr = kinForwardKernelFuncPtr_;
     }
 
     BaseStateManagerPtr SingleArmSpace::createStateManager()
