@@ -12,20 +12,10 @@ namespace CUDAMPLib
             // virtual destructor. We need to define how to clean the cuda memory in the derived class.
             virtual ~BaseConstraint() {}
             
-            virtual void computeCost(BaseStatesPtr states) = 0;
-
             /**
-                @brief This function is used for fitting large states into gpu memory, but it is slower. This is optional.
-                       Large number of states requires large number of threads and blocks, so it may not fit into the gpu memory.
-                       In this case, we can use this function to fit the large states into the gpu memory.
-            */
-            virtual void computeCostLarge(BaseStatesPtr states) = 0;
-
-            /**
-                @brief This function is fast but it can only handle small number of states. This is optional.
-                       If the number of states is small, then we can use this function to compute the cost.
+                @brief Compute the cost of the states based on the constraint.
              */
-            virtual void computeCostFast(BaseStatesPtr states) = 0;
+            virtual void computeCost(BaseStatesPtr states) = 0;
 
             bool isProjectable() { return is_projectable_; }
 

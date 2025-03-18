@@ -18,27 +18,6 @@ namespace CUDAMPLib{
         std::transform(active_joint_map.begin(), active_joint_map.end(), active_joint_map_as_int.begin(),
             [](bool b) { return b ? 1 : 0; });
 
-        // Construct the boundary for full joints include non-active joints
-        // std::vector<float> lower_bound_full(active_joint_map.size());
-        // std::vector<float> upper_bound_full(active_joint_map.size());
-
-        // int active_joint_index = 0;
-        // for (size_t i = 0; i < active_joint_map.size(); i++)
-        // {
-        //     if (active_joint_map[i])
-        //     {
-        //         lower_bound_full[i] = lower_bound[active_joint_index];
-        //         upper_bound_full[i] = upper_bound[active_joint_index];
-        //         active_joint_index++;
-        //     }
-        //     else
-        //     {
-        //         // Set to 0.0 for non-active joints
-        //         lower_bound_full[i] = 0.0; 
-        //         upper_bound_full[i] = 0.0;
-        //     }
-        // }
-
         std::vector<float> lower_bound_full = lower_bound;
         std::vector<float> upper_bound_full = upper_bound;
 
@@ -148,18 +127,6 @@ namespace CUDAMPLib{
         );
 
         cudaDeviceSynchronize();
-    }
-
-    void BoundaryConstraint::computeCostLarge(BaseStatesPtr states)
-    {
-        // Let it be here for now
-        computeCost(states);
-    }
-
-    void BoundaryConstraint::computeCostFast(BaseStatesPtr states)
-    {
-        // Let it be here for now
-        computeCost(states);
     }
 
     __global__ void computeGradientErrorKernel(

@@ -214,16 +214,6 @@ namespace CUDAMPLib{
         CUDA_CHECK(cudaDeviceSynchronize());
     }
 
-    void TaskSpaceConstraint::computeCostFast(BaseStatesPtr states)
-    {
-        this->computeCost(states);
-    }
-
-    void TaskSpaceConstraint::computeCostLarge(BaseStatesPtr states)
-    {
-        this->computeCost(states);
-    }
-
     __global__ void computeGradientErrorKernel(
         const int num_of_states,               // number of states
         const float * d_link_poses_in_base_link, // [num_of_states * num_of_links * 16]
