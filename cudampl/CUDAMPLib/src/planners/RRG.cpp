@@ -269,21 +269,18 @@ namespace CUDAMPLib
             getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
 
             std::vector<std::vector<int>> nearest_neighbors_index;
-            // auto start_time_find_k_nearest_neighbors = std::chrono::high_resolution_clock::now();
             if (t % 2 == 0)
             {
                 // find the nearest neighbors of the states in the start group
-                state_manager->find_k_nearest_neighbors(1, states, nearest_neighbors_index, {start_group_indexs});
+                // state_manager->find_k_nearest_neighbors(1, states, {start_group_indexs}, nearest_neighbors_index);
+                state_manager->find_the_nearest_neighbors(states, {start_group_indexs}, nearest_neighbors_index);
             }
             else
             {
                 // find the nearest neighbors of the states in the goal group
-                state_manager->find_k_nearest_neighbors(1, states, nearest_neighbors_index, {goal_group_indexs});
+                // state_manager->find_k_nearest_neighbors(1, states,  {goal_group_indexs}, nearest_neighbors_index);
+                state_manager->find_the_nearest_neighbors(states, {goal_group_indexs}, nearest_neighbors_index);
             }
-            // auto end_time_find_k_nearest_neighbors = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_time_find_k_nearest_neighbors = end_time_find_k_nearest_neighbors - start_time_find_k_nearest_neighbors;
-            // // print
-            // printf("Time taken by find_k_nearest_neighbors: %f seconds\n", elapsed_time_find_k_nearest_neighbors.count());
 
             std::vector<int> nearest_neighbors_index_for_each_sampled_state;
             for(auto i : nearest_neighbors_index)
@@ -305,12 +302,7 @@ namespace CUDAMPLib
 
             // evaluate the feasibility of the states
             std::vector<bool> state_feasibility;
-            // auto start_time_check_states = std::chrono::high_resolution_clock::now();
             space_->checkStates(states, state_feasibility);
-            // auto end_time_check_states = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_time_check_states = end_time_check_states - start_time_check_states;
-            // // print
-            // printf("Time taken by checkStates: %f seconds\n", elapsed_time_check_states.count());
 
             // remove the infeasible states
             states->filterStates(state_feasibility);
@@ -325,7 +317,9 @@ namespace CUDAMPLib
 
             // find k nearest neighbors for each state
             std::vector<std::vector<int>> neighbors_index;
-            int actual_k = state_manager->find_k_nearest_neighbors(k_, states, neighbors_index, {start_group_indexs, goal_group_indexs});
+            // int actual_k = state_manager->find_k_nearest_neighbors(k_, states, {start_group_indexs, goal_group_indexs}, neighbors_index);
+            int actual_k = 2;
+            state_manager->find_the_nearest_neighbors(states, {start_group_indexs, goal_group_indexs}, neighbors_index);
 
             // validate the motion from the sampled states to their neighbors.
             // prepare the motion states 1

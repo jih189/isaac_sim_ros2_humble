@@ -1,165 +1,110 @@
-__global__ void computeCollisionCostFastKernel(
-    const float* __restrict__ d_self_collision_spheres_pos_in_base_link, // [num_configurations x num_self_collision_spheres x 3]
-    const float* __restrict__ d_self_collision_spheres_radius,            // [num_self_collision_spheres]
-    int num_of_self_collision_spheres,
-    int num_of_configurations,
-    const float* __restrict__ d_obstacle_sphere_pos_in_base_link,         // [num_of_obstacle_collision_spheres x 3]
-    const float* __restrict__ d_obstacle_sphere_radius,                   // [num_of_obstacle_collision_spheres]
-    int num_of_obstacle_collision_spheres,
-    float* d_cost                                                         // [num_configurations x num_of_self_collision_spheres x num_of_obstacle_collision_spheres]
-)
-{
-    // Global thread index: one thread per self-collision sphere per configuration.
-    int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx < num_of_configurations * num_of_self_collision_spheres * num_of_obstacle_collision_spheres)
-    {
-        float cost = 0.0f;
+// kernel to calculate the distance between two states
+__global__ void calculate_joint_state_distance(
+    float * d_states_1, int num_of_states_1,
+    float * d_states_2, int num_of_states_2, 
+    int num_of_joints, int * d_active_joint_map, float * d_distances) {
 
-        // Determine configuration, sphere, and obstacle indices.
-        int configuration_index = idx / (num_of_self_collision_spheres * num_of_obstacle_collision_spheres);
-        int self_collision_sphere_index = (idx / num_of_obstacle_collision_spheres) % num_of_self_collision_spheres;
-        int obstacle_index = idx % num_of_obstacle_collision_spheres;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-        // Compute the base index for this configuration.
-        int config_base = configuration_index * num_of_self_collision_spheres * 3;
-        int pos_index = config_base + self_collision_sphere_index * 3;
-
-        // Load current sphere's position and radius.
-        float self_x = d_self_collision_spheres_pos_in_base_link[pos_index + 0];
-        float self_y = d_self_collision_spheres_pos_in_base_link[pos_index + 1];
-        float self_z = d_self_collision_spheres_pos_in_base_link[pos_index + 2];
-        float self_radius = d_self_collision_spheres_radius[self_collision_sphere_index];
-
-        // Load obstacle sphere's position and radius.
-        int obs_index = obstacle_index * 3;
-        float obs_x = d_obstacle_sphere_pos_in_base_link[obs_index + 0];
-        float obs_y = d_obstacle_sphere_pos_in_base_link[obs_index + 1];
-        float obs_z = d_obstacle_sphere_pos_in_base_link[obs_index + 2];
-        float obs_radius = d_obstacle_sphere_radius[obstacle_index];
-
-        // Compute distance and cost.
-        float diff_x = self_x - obs_x;
-        float diff_y = self_y - obs_y;
-        float diff_z = self_z - obs_z;
-        float dist_sq = diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
-
-        float sum_radii = self_radius + obs_radius;
-        float sum_radii_sq = sum_radii * sum_radii;
-
-        // Only compute the square root if spheres are overlapping.
-        if (dist_sq < sum_radii_sq)
-        {
-            float distance = sqrtf(dist_sq);
-            cost = fmaxf(0.0f, sum_radii - distance);
-        }
-
-        // Write the computed cost back to global memory.
-        d_cost[idx] = cost;
-    }
-}
-
-/**
-    * @brief Kernel to sum the collision cost for each configuration with reduction.
-    */
-__global__ void sumCollisionCostFastKernel(
-    const float* d_collision_cost,  // num_of_states x num_of_self_collision_spheres x num_of_obstacle_collision_spheres
-    int num_of_states,
-    int num_of_self_collision_spheres,
-    int num_of_obstacle_collision_spheres,
-    float* d_cost                   // num_of_states
-)
-{
-    extern __shared__ float sdata[];
-
-    // Each block handles one state.
-    int state_index = blockIdx.x;
-    if (state_index >= num_of_states)
+    if (idx >= num_of_states_1 * num_of_states_2)
         return;
 
-    int tid = threadIdx.x;
-    int totalElements = num_of_self_collision_spheres * num_of_obstacle_collision_spheres;
+    int state_1_idx = idx / num_of_states_2;
+    int state_2_idx = idx % num_of_states_2;
+
     float sum = 0.0f;
 
-    // Each thread sums over a strided portion of the flattened cost matrix.
-    for (int i = tid; i < totalElements; i += blockDim.x) {
-        int index = state_index * totalElements + i;
-        sum += d_collision_cost[index];
-    }
-    
-    // Store the partial sum in shared memory.
-    sdata[tid] = sum;
-    __syncthreads();
-
-    // Parallel reduction in shared memory.
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            sdata[tid] += sdata[tid + s];
+    for (int i = 0; i < num_of_joints; i++) {
+        if (d_active_joint_map[i] != 0) {
+            float diff = d_states_1[state_1_idx * num_of_joints + i] - d_states_2[state_2_idx * num_of_joints + i];
+            sum += diff * diff;
         }
-        __syncthreads();
     }
 
-    // Write the result for this state to global memory.
-    if (tid == 0) {
-        d_cost[state_index] = sdata[0];
-    }
+    d_distances[idx] = sqrtf(sum);
 }
 
-void EnvConstraint::computeCostFast(BaseStatesPtr states)
+int SingleArmStateManager::find_k_nearest_neighbors(
+    int k, const BaseStatesPtr & query_states, 
+    const std::vector<std::vector<int>> & group_indexs,
+    std::vector<std::vector<int>> & neighbors_index
+)
 {
-    // Cast the states and space information for SingleArmSpace
-    SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
-    SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
 
-    // check the cost location of this constraint
-    int constraint_index = getConstraintIndex(space_info);
-    if (constraint_index == -1){
-        // raise an error
-        printf("Constraint %s is not found in the space\n", this->constraint_name.c_str());
-        return;
+    if (num_of_states_ == 0)
+    {
+        // raise error
+        throw std::runtime_error("Error in SingleArmStateManager::find_k_nearest_neighbors: manager is empty");
+    }
+    if (query_states->getNumOfStates() == 0)
+    {
+        // raise error
+        throw std::runtime_error("Error in SingleArmStateManager::find_k_nearest_neighbors: query states is empty");
     }
 
-    size_t num_of_env_collision_check = (size_t)(single_arm_states->getNumOfStates()) * space_info->num_of_self_collision_spheres * num_of_env_collision_spheres;
-    size_t d_collision_cost_bytes = num_of_env_collision_check * sizeof(float);
+    // static cast the query states to SingleArmStates
+    SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info_);
 
-    float * d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
-    float * d_collision_cost;
-    
-    cudaMalloc(&d_collision_cost, d_collision_cost_bytes);
+    // static cast the states to SingleArmStates
+    SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(query_states);
+    float * d_query_joint_states = single_arm_states->getJointStatesCuda();
 
-    int threadsPerBlock = 256;
-    int blocksPerGrid = (num_of_env_collision_check + threadsPerBlock - 1) / threadsPerBlock;
+    neighbors_index.clear();
 
-    auto start_first_kernel = std::chrono::high_resolution_clock::now();
+    int total_actual_k = 0;
+    std::vector<int> actual_k_in_each_group;
+    for (size_t i = 0; i < group_indexs.size(); i++)
+    {
+        actual_k_in_each_group.push_back((int)(group_indexs[i].size()) < k ? (int)(group_indexs[i].size()) : k);
+        total_actual_k += actual_k_in_each_group[i];
+    }
 
-    computeCollisionCostFastKernel<<<blocksPerGrid, threadsPerBlock>>>(
-        single_arm_states->getSelfCollisionSpheresPosInBaseLinkCuda(), 
-        space_info->d_self_collision_spheres_radius, 
-        space_info->num_of_self_collision_spheres, 
-        single_arm_states->getNumOfStates(), 
-        d_env_collision_spheres_pos_in_base_link, 
-        d_env_collision_spheres_radius, 
-        num_of_env_collision_spheres, 
-        d_collision_cost 
-    );
-    
-    // wait for the kernel to finish
-    CUDA_CHECK(cudaDeviceSynchronize());
+    float * d_distances_from_query_to_states;
+    size_t d_distances_from_query_to_states_bytes = query_states->getNumOfStates() * num_of_states_ * sizeof(float);
+    cudaMalloc(&d_distances_from_query_to_states, d_distances_from_query_to_states_bytes);
 
-    // sum the collision cost
-    blocksPerGrid = single_arm_states->getNumOfStates();
+    // calculate the distance between the query states and the states in the manager
+    int block_size = 256;
+    int grid_size = (query_states->getNumOfStates() * num_of_states_ + block_size - 1) / block_size;
 
-    size_t sharedMemSize = threadsPerBlock * sizeof(float);
-    sumCollisionCostFastKernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(
-        d_collision_cost,
-        single_arm_states->getNumOfStates(),
-        space_info->num_of_self_collision_spheres,
-        num_of_env_collision_spheres,
-        d_cost_of_current_constraint
+    calculate_joint_state_distance<<<grid_size, block_size>>>(
+        d_query_joint_states, query_states->getNumOfStates(),
+        d_joint_states, num_of_states_,
+        num_of_joints, single_arm_space_info->d_active_joint_map, d_distances_from_query_to_states
     );
 
     // wait for the kernel to finish
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
+    cudaDeviceSynchronize();
 
-    cudaFree(d_collision_cost);
+    std::vector<std::vector<float>> distances_from_query_to_states(query_states->getNumOfStates(), std::vector<float>(num_of_states_));
+    std::vector<float> distances_from_query_to_states_flatten(query_states->getNumOfStates() * num_of_states_);
+
+    // copy the distances from device to host
+    cudaMemcpy(distances_from_query_to_states_flatten.data(), d_distances_from_query_to_states, query_states->getNumOfStates() * num_of_states_ * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // reshape the distances
+    for (int i = 0; i < query_states->getNumOfStates(); i++) {
+        for (int j = 0; j < num_of_states_; j++) {
+            distances_from_query_to_states[i][j] = distances_from_query_to_states_flatten[i * num_of_states_ + j];
+        }
+    }
+
+    for (int i = 0; i < query_states->getNumOfStates(); i++) {
+        std::vector<int> index_k_nearest_neighbors;
+        for (size_t g = 0 ; g < group_indexs.size(); g++)
+        {
+            // find index of the k least distances of distances_from_query_to_states[i]
+            std::vector<int> index_k_nearest_neighbors_of_group = kLeastIndices(distances_from_query_to_states[i], actual_k_in_each_group[g], group_indexs[g]);
+            index_k_nearest_neighbors.insert(index_k_nearest_neighbors.end(), index_k_nearest_neighbors_of_group.begin(), index_k_nearest_neighbors_of_group.end());
+        }
+
+        neighbors_index.push_back(index_k_nearest_neighbors);
+    }
+
+    // free the memory
+    cudaFree(d_distances_from_query_to_states);
+
+    CUDA_CHECK(cudaGetLastError()); // Check for launch errors
+
+    return total_actual_k;
 }

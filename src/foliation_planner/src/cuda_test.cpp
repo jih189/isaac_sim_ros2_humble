@@ -31,6 +31,7 @@
 
 // include for time
 #include <chrono>
+#include <limits>
 
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
@@ -950,6 +951,138 @@ void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const s
 }
 
 
+void TEST_NEAREST_NEIGHBOR(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames()
+    );
+
+    // sample a set of states
+    int num_of_test_states = 100;
+    CUDAMPLib::SingleArmStatesPtr single_arm_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_test_states));
+
+    int num_of_query_states = 10;
+    CUDAMPLib::SingleArmStatesPtr query_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(num_of_query_states));
+
+    std::vector<int> search_group_1;
+    std::vector<int> search_group_2;
+    for (int i = 0; i < num_of_test_states; i++)
+    {
+        if (i % 2 == 0)
+            search_group_2.push_back(i);
+        else
+            search_group_1.push_back(i);
+    }
+    
+    std::vector<std::vector<float>> query_state_joint_values = query_states->getJointStatesHost();
+    std::vector<std::vector<float>> manager_state_joint_value = single_arm_states->getJointStatesHost();
+
+    for (int i = 0; i < query_state_joint_values.size(); i ++ )
+    {
+        int nearest_neighbor_index = -1;
+        float nearest_neighbor_dis = std::numeric_limits<float>::max();
+
+        for (int j = 0; j < search_group_1.size(); j++){
+            float sq_dis = 0.0;
+            std::vector<float> selected_joint_values = manager_state_joint_value[search_group_1[j]];
+
+            for (int k = 0; k < selected_joint_values.size(); k++ )
+            {
+                sq_dis += (query_state_joint_values[i][k] - selected_joint_values[k]) * (query_state_joint_values[i][k] - selected_joint_values[k]);
+            }
+
+            float dis = sqrt(sq_dis);
+
+            if (nearest_neighbor_dis > dis){
+                nearest_neighbor_index = j;
+                nearest_neighbor_dis = dis;
+            }
+
+        }
+        std::cout << "query state " << i << " with its nearest neighbor_index " << nearest_neighbor_index << " in group 0 " << std::endl;
+    }
+
+    for (int i = 0; i < query_state_joint_values.size(); i ++ )
+    {
+        int nearest_neighbor_index = -1;
+        float nearest_neighbor_dis = std::numeric_limits<float>::max();
+
+        for (int j = 0; j < search_group_2.size(); j++){
+            float sq_dis = 0.0;
+            std::vector<float> selected_joint_values = manager_state_joint_value[search_group_2[j]];
+
+            for (int k = 0; k < selected_joint_values.size(); k++ )
+            {
+                sq_dis += (query_state_joint_values[i][k] - selected_joint_values[k]) * (query_state_joint_values[i][k] - selected_joint_values[k]);
+            }
+
+            float dis = sqrt(sq_dis);
+
+            if (nearest_neighbor_dis > dis){
+                nearest_neighbor_index = j;
+                nearest_neighbor_dis = dis;
+            }
+
+        }
+        std::cout << "query state " << i << " with its nearest neighbor_index " << nearest_neighbor_index << " in group 1 " << std::endl;
+    }
+
+    // create state manager
+    auto state_manager = single_arm_space->createStateManager();
+
+    // add sampled states to state manager
+    state_manager->add_states(single_arm_states);
+
+    std::vector<std::vector<int>> index_groups;
+    index_groups.push_back(search_group_1);
+    index_groups.push_back(search_group_2);
+
+    std::vector<std::vector<int>> neighbors_index;
+
+    state_manager->find_the_nearest_neighbors(
+        query_states, 
+        index_groups,
+        neighbors_index
+    );
+
+    std::cout << "---------------------------------------------" << std::endl;
+    for(size_t j = 0; j < index_groups.size(); j++)
+    {
+        for(size_t i = 0; i < query_states->getNumOfStates(); i++)
+        {
+            std::cout << "query state " << i << " with its nearest neighbor_index " << neighbors_index[i][j] << " in group " << j << std::endl;
+        }
+    }
+}
+
+
 /**
     Create a CUDAMPLib::SingleArmSpace and sample a set of states.
     Then, we will check the feasibility of the states and visualize the collision spheres in rviz.
@@ -1286,13 +1419,13 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     planner->setMaxTravelDistance(5.0);
 
-    planner->setSampleAttemptsInEachIteration(100);
+    planner->setSampleAttemptsInEachIteration(10);
     
     // set the task
     planner->setMotionTask(task);
 
     // create termination condition
-    // CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(10);
+    // CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(5);
     CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
 
     // solve the task
@@ -2200,6 +2333,8 @@ int main(int argc, char** argv)
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    // TEST_NEAREST_NEIGHBOR(kinematic_model, GROUP_NAME, cuda_test_node);
 
     TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 

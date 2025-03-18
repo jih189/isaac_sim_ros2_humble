@@ -473,10 +473,10 @@ namespace CUDAMPLib
         float sum = 0.0f;
 
         for (int i = 0; i < num_of_joints; i++) {
-            if (d_active_joint_map[i] != 0) {
-                float diff = d_states_1[state_1_idx * num_of_joints + i] - d_states_2[state_2_idx * num_of_joints + i];
-                sum += diff * diff;
-            }
+            // if (d_active_joint_map[i] != 0) {
+            float diff = d_states_1[state_1_idx * num_of_joints + i] - d_states_2[state_2_idx * num_of_joints + i];
+            sum += diff * diff;
+            // }
         }
 
         d_distances[idx] = sqrtf(sum);
@@ -1262,6 +1262,7 @@ namespace CUDAMPLib
 
     int SingleArmStateManager::find_k_nearest_neighbors(
         int k, const BaseStatesPtr & query_states, 
+        const std::vector<std::vector<int>> & group_indexs,
         std::vector<std::vector<int>> & neighbors_index
     )
     {
@@ -1276,79 +1277,13 @@ namespace CUDAMPLib
             // raise error
             throw std::runtime_error("Error in SingleArmStateManager::find_k_nearest_neighbors: query states is empty");
         }
-
-        // static cast the query states to SingleArmStates
-        SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info_);
-
-        // static cast the states to SingleArmStates
-        SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(query_states);
-        float * d_query_joint_states = single_arm_states->getJointStatesCuda();
-
-        neighbors_index.clear();
-
-        if (k > num_of_states_){
-            // set k to num_of_states
-            k = num_of_states_;
-        }
-
-        float * d_distances_from_query_to_states;
-        size_t d_distances_from_query_to_states_bytes = query_states->getNumOfStates() * num_of_states_ * sizeof(float);
-        cudaMalloc(&d_distances_from_query_to_states, d_distances_from_query_to_states_bytes);
-
-        // calculate the distance between the query states and the states in the manager
-        int block_size = 256;
-        int grid_size = (query_states->getNumOfStates() * num_of_states_ + block_size - 1) / block_size;
-
-        calculate_joint_state_distance<<<grid_size, block_size>>>(
-            d_query_joint_states, query_states->getNumOfStates(),
-            d_joint_states, num_of_states_,
-            num_of_joints, single_arm_space_info->d_active_joint_map, d_distances_from_query_to_states
-        );
-
-        // wait for the kernel to finish
-        cudaDeviceSynchronize();
-
-        std::vector<std::vector<float>> distances_from_query_to_states(query_states->getNumOfStates(), std::vector<float>(num_of_states_));
-        std::vector<float> distances_from_query_to_states_flatten(query_states->getNumOfStates() * num_of_states_);
-
-        // copy the distances from device to host
-        cudaMemcpy(distances_from_query_to_states_flatten.data(), d_distances_from_query_to_states, query_states->getNumOfStates() * num_of_states_ * sizeof(float), cudaMemcpyDeviceToHost);
-
-        // reshape the distances
-        for (int i = 0; i < query_states->getNumOfStates(); i++) {
-            for (int j = 0; j < num_of_states_; j++) {
-                distances_from_query_to_states[i][j] = distances_from_query_to_states_flatten[i * num_of_states_ + j];
+        // check if each group has at least one element
+        for (size_t i = 0; i < group_indexs.size(); i++)
+        {
+            if (group_indexs[i].size() == 0)
+            {
+                throw std::runtime_error("Error in SingleArmStateManager::find_k_nearest_neighbors: group " + std::to_string(i) + " is empty");
             }
-        }
-
-        for (int i = 0; i < query_states->getNumOfStates(); i++) {
-            // find index of the k least distances of distances_from_query_to_states[i]
-            std::vector<int> index_k_nearest_neighbors = kLeastIndices(distances_from_query_to_states[i], k);
-            neighbors_index.push_back(index_k_nearest_neighbors);
-        }
-
-        // free the memory
-        cudaFree(d_distances_from_query_to_states);
-
-        return k;
-    }
-
-    int SingleArmStateManager::find_k_nearest_neighbors(
-        int k, const BaseStatesPtr & query_states, 
-        std::vector<std::vector<int>> & neighbors_index,
-        const std::vector<std::vector<int>> & group_indexs
-    )
-    {
-
-        if (num_of_states_ == 0)
-        {
-            // raise error
-            throw std::runtime_error("Error in SingleArmStateManager::find_k_nearest_neighbors: manager is empty");
-        }
-        if (query_states->getNumOfStates() == 0)
-        {
-            // raise error
-            throw std::runtime_error("Error in SingleArmStateManager::find_k_nearest_neighbors: query states is empty");
         }
 
         // static cast the query states to SingleArmStates
@@ -1416,6 +1351,175 @@ namespace CUDAMPLib
         CUDA_CHECK(cudaGetLastError()); // Check for launch errors
 
         return total_actual_k;
+    }
+
+    // One block handles one query state for a given group.
+    __global__ void find_the_nearest_neighbors_kernel(
+        float * d_query_states_joint_values, int num_query_states,
+        float * d_state_manager_states_joint_values,
+        int * d_group_index_i, int num_of_group_index_i,
+        int num_of_joints, int * d_active_joint_map, 
+        int num_of_groups, int current_group_id,
+        int * index_nearest_neighbor_of_each_group
+    )
+    {
+        // Each block handles one query state.
+        int query_idx = blockIdx.x;
+        if (query_idx >= num_query_states) return;
+
+        int query_state_base = query_idx * num_of_joints;
+        int tid = threadIdx.x;
+        // Initialize local best distance to a very high value.
+        float best_distance_local = 1e30f;
+        int best_index_local = -1;
+
+        // Each thread processes a subset of candidate indices in a strided loop.
+        for (int t = tid; t < num_of_group_index_i; t += blockDim.x)
+        {
+            int check_index = d_group_index_i[t];
+            int manager_state_base = check_index * num_of_joints;
+            float square_dis = 0.0f;
+            for (int j = 0; j < num_of_joints; j++)
+            {
+                if (d_active_joint_map[j] != 0)
+                {
+                    float diff = d_query_states_joint_values[query_state_base + j] - 
+                                d_state_manager_states_joint_values[manager_state_base + j];
+                    square_dis += diff * diff;
+                }
+            }
+            float dis = sqrtf(square_dis);
+            if (dis < best_distance_local)
+            {
+                best_distance_local = dis;
+                best_index_local = check_index;  // storing the candidate index in the group
+            }
+        }
+
+        // Use shared memory to perform block-level reduction.
+        // Allocate shared memory for both the best distances and corresponding indices.
+        extern __shared__ char shared_mem[];
+        float* shared_distance = (float*)shared_mem;
+        int* shared_index = (int*)&shared_distance[blockDim.x];
+
+        shared_distance[tid] = best_distance_local;
+        shared_index[tid] = best_index_local;
+        __syncthreads();
+
+        // Reduction within the block.
+        for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
+        {
+            if (tid < s)
+            {
+                if (shared_distance[tid + s] < shared_distance[tid])
+                {
+                    shared_distance[tid] = shared_distance[tid + s];
+                    shared_index[tid] = shared_index[tid + s];
+                }
+            }
+            __syncthreads();
+        }
+
+        // The first thread in the block writes the result.
+        if (tid == 0)
+        {
+            index_nearest_neighbor_of_each_group[query_idx * num_of_groups + current_group_id] = shared_index[0];
+        }
+    }
+
+    void SingleArmStateManager::find_the_nearest_neighbors(
+        const BaseStatesPtr & query_states, 
+        const std::vector<std::vector<int>> & group_indexs, 
+        std::vector<std::vector<int>> & neighbors_index // output
+    ) 
+    {
+        // Cast the query states to SingleArmStates.
+        SingleArmStatesPtr query_single_arm_states = std::static_pointer_cast<SingleArmStates>(query_states);
+        int num_query_states = query_single_arm_states->getNumOfStates();
+
+        neighbors_index.clear();
+
+        // static cast the query states to SingleArmStates
+        SingleArmSpaceInfoPtr single_arm_space_info = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info_);
+
+        // Check for errors.
+        if (num_of_states_ == 0)
+        {
+            throw std::runtime_error("Error in SingleArmStateManager::find_the_nearest_neighbors: manager is empty");
+        }
+        if (num_query_states == 0)
+        {
+            throw std::runtime_error("Error in SingleArmStateManager::find_the_nearest_neighbors: query states are empty");
+        }
+
+        // Verify that every group has at least one candidate.
+        for (size_t i = 0; i < group_indexs.size(); i++)
+        {
+            if (group_indexs[i].empty())
+            {
+                throw std::runtime_error("Error in SingleArmStateManager::find_the_nearest_neighbors: group " + std::to_string(i) + " is empty");
+            }
+        }
+
+        // Allocate device memory for each group's candidate indices.
+        std::vector<int*> d_group_indexs(group_indexs.size());
+        for (size_t i = 0; i < group_indexs.size(); i++)
+        {
+            size_t bytes = group_indexs[i].size() * sizeof(int);
+            CUDA_CHECK(cudaMalloc(&d_group_indexs[i], bytes));
+            CUDA_CHECK(cudaMemcpy(d_group_indexs[i], group_indexs[i].data(), bytes, cudaMemcpyHostToDevice));
+        }
+
+        // Allocate device memory for the output: one integer per query state per group.
+        int * index_nearest_neighbor_of_each_group;
+        CUDA_CHECK(cudaMalloc(&index_nearest_neighbor_of_each_group, group_indexs.size() * num_query_states * sizeof(int)));
+
+        // Define kernel launch parameters.
+        int threadsPerBlock = 256;               // Number of threads per block.
+        int blocksPerGrid = num_query_states;      // One block per query state.
+        int sharedMemSize = threadsPerBlock * (sizeof(float) + sizeof(int)); // Dynamic shared memory.
+
+        // Launch the kernel for each group.
+        for (size_t i = 0; i < group_indexs.size(); i++)
+        {
+            find_the_nearest_neighbors_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(
+                query_single_arm_states->getJointStatesCuda(), num_query_states,
+                d_joint_states,                  // Manager states (device pointer)
+                d_group_indexs[i],               // Current group's candidate indices.
+                group_indexs[i].size(),          // Number of candidates in the current group.
+                num_of_joints,
+                single_arm_space_info->d_active_joint_map,
+                group_indexs.size(),             // Total number of groups.
+                i,                             // Current group id.
+                index_nearest_neighbor_of_each_group
+            );
+        }
+
+        // Wait for all kernels to finish.
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // Copy the flattened nearest neighbor indices from device to host.
+        std::vector<int> flat_neighbors(num_query_states * group_indexs.size());
+        CUDA_CHECK(cudaMemcpy(flat_neighbors.data(), index_nearest_neighbor_of_each_group, 
+                num_query_states * group_indexs.size() * sizeof(int), cudaMemcpyDeviceToHost));
+
+        // Reshape the flat vector into a 2D vector (each row corresponds to a query state).
+        for (int i = 0; i < num_query_states; i++)
+        {
+            std::vector<int> neighbors_index_i;
+            for (size_t j = 0; j < group_indexs.size(); j++)
+            {
+                neighbors_index_i.push_back(flat_neighbors[i * group_indexs.size() + j]);
+            }
+            neighbors_index.push_back(neighbors_index_i);
+        }
+
+        // Free all allocated device memory.
+        for (size_t i = 0; i < group_indexs.size(); i++)
+        {
+            CUDA_CHECK(cudaFree(d_group_indexs[i]));
+        }
+        CUDA_CHECK(cudaFree(index_nearest_neighbor_of_each_group));
     }
 
     BaseStatesPtr SingleArmStateManager::get_states(const std::vector<int> & states_index)

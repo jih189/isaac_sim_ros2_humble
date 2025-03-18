@@ -215,22 +215,22 @@ namespace CUDAMPLib
             // Returns the number of states in the manager.
             int get_num_of_states() const { return num_of_states_; }
 
-            /** 
-                @brief Given a query states, finds and returns the index of k nearest neighbors.
-            */
-            virtual int find_k_nearest_neighbors(
-                int k, const BaseStatesPtr & query_states, 
-                std::vector<std::vector<int>> & neighbors_index
-            ) = 0;
-
             /**
-                @brief Similar to the above function, but this function allows users to specify the group indexs.
-                That is, this function will return the k nearest neighbors of the query states in each group.
+                @brief For each query state, find its k nearest neighbors for each group.
              */
             virtual int find_k_nearest_neighbors(
                 int k, const BaseStatesPtr & query_states, 
-                std::vector<std::vector<int>> & neighbors_index,
-                const std::vector<std::vector<int>> & group_indexs
+                const std::vector<std::vector<int>> & group_indexs,
+                std::vector<std::vector<int>> & neighbors_index // output
+            ) = 0;
+
+            /**
+                @brief For each query state, find its nearest neighbor for each group.
+             */
+            virtual void find_the_nearest_neighbors(
+                const BaseStatesPtr & query_states, 
+                const std::vector<std::vector<int>> & group_indexs, 
+                std::vector<std::vector<int>> & neighbors_index // output
             ) = 0;
 
             /**

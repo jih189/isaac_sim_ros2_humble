@@ -201,13 +201,14 @@ namespace CUDAMPLib
 
             int find_k_nearest_neighbors(
                 int k, const BaseStatesPtr & query_states, 
+                const std::vector<std::vector<int>> & group_indexs,
                 std::vector<std::vector<int>> & neighbors_index
             ) override;
 
-            int find_k_nearest_neighbors(
-                int k, const BaseStatesPtr & query_states, 
-                std::vector<std::vector<int>> & neighbors_index,
-                const std::vector<std::vector<int>> & group_indexs
+            void find_the_nearest_neighbors(
+                const BaseStatesPtr & query_states, 
+                const std::vector<std::vector<int>> & group_indexs, 
+                std::vector<std::vector<int>> & neighbors_index // output
             ) override;
 
             BaseStatesPtr get_states(const std::vector<int> & states_index) override;
