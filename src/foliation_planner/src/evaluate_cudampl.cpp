@@ -285,15 +285,16 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
 int main(int argc, char** argv)
 {
-    // ============================ parameters =================================== //
-    std::string task_dir_path = "/home/motion_planning_tasks";
-    const std::string GROUP_NAME = "arm";
-    // =========================================================================== //
-
     rclcpp::init(argc, argv);
     rclcpp::NodeOptions node_options;
     node_options.automatically_declare_parameters_from_overrides(true);
     auto motion_planning_evaluation_node = rclcpp::Node::make_shared("motion_planning_evaluation_node", node_options);
+
+    // ============================ parameters =================================== //
+    std::string GROUP_NAME;
+    motion_planning_evaluation_node->get_parameter("group_name", GROUP_NAME);
+    std::string task_dir_path = "/home/motion_planning_tasks/" + GROUP_NAME;
+    // =========================================================================== //
 
     // print out the node name
     RCLCPP_INFO(LOGGER, "Node name: %s", motion_planning_evaluation_node->get_name());

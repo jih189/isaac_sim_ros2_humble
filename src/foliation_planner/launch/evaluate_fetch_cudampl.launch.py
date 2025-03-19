@@ -45,7 +45,8 @@ def generate_launch_description():
         parameters=[
             moveit_config.to_dict(),
             {
-                "collision_spheres_file_path": collision_spheres_file_path
+                "collision_spheres_file_path": collision_spheres_file_path,
+                "group_name": "arm",
             }
         ]
     )

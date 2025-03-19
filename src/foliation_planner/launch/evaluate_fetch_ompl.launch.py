@@ -37,15 +37,16 @@ def generate_launch_description():
 
     node_list = []
 
-    create_motion_tasks_node = Node(
+    evaluate_ompl_node = Node(
         package='foliation_planner',
-        executable='create_motion_tasks',
-        name='create_motion_tasks_node',
+        executable='evaluate_ompl',
+        name='evaluate_ompl_node',
         output='screen',
         parameters=[
             moveit_config.to_dict(),
             {
-                "collision_spheres_file_path": collision_spheres_file_path
+                "collision_spheres_file_path": collision_spheres_file_path,
+                "group_name": "arm",
             }
         ]
     )
@@ -63,7 +64,7 @@ def generate_launch_description():
     #     ],
     # )
 
-    node_list.append(create_motion_tasks_node)
+    node_list.append(evaluate_ompl_node)
     # node_list.append(rviz_node)
 
     return LaunchDescription(node_list)

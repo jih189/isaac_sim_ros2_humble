@@ -124,17 +124,44 @@ visualization_msgs::msg::MarkerArray generate_self_collision_markers(
     return robot_collision_spheres_marker_array;
 }
 
-void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<float> & ball_radius)
+void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<float> & ball_radius, const std::string & group_name)
 {
-    float obstacle_spheres_radius = 0.06;
-    int num_of_obstacle_spheres = 40;
-    for (int i = 0; i < num_of_obstacle_spheres; i++)
+    if (group_name == "arm"){
+        float obstacle_spheres_radius = 0.06;
+        int num_of_obstacle_spheres = 40;
+        for (int i = 0; i < num_of_obstacle_spheres; i++)
+        {
+            float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
+            float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
+            float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
+            balls_pos.push_back({x, y, z});
+            ball_radius.push_back(obstacle_spheres_radius);
+        }
+    }
+    else if (group_name == "fr3_arm")
     {
-        float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
-        float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
-        float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
-        balls_pos.push_back({x, y, z});
-        ball_radius.push_back(obstacle_spheres_radius);
+        float obstacle_spheres_radius = 0.06;
+        int num_of_obstacle_spheres = 40;
+        for (int i = 0; i < num_of_obstacle_spheres; i++)
+        {
+            float x = 1.4 * ((float)rand() / RAND_MAX) - 0.7;
+            float y = 1.4 * ((float)rand() / RAND_MAX) - 0.7;
+            float z = 1.0 * ((float)rand() / RAND_MAX) + 0.0;
+
+            if (
+                x > -0.2 && x < 0.2 &&
+                y > -0.2 && y < 0.2 &&
+                z > 0.0 && z < 0.6
+            )
+                continue;
+
+            balls_pos.push_back({x, y, z});
+            ball_radius.push_back(obstacle_spheres_radius);
+        }
+    }
+    else
+    {
+        std::cout << "Group name is not supported!" << std::endl;
     }
 }
 
@@ -511,7 +538,7 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // ball_radius.push_back(0.2);
 
     // create obstacles randomly
-    prepare_obstacles(balls_pos, ball_radius);
+    prepare_obstacles(balls_pos, ball_radius, group_name);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -608,7 +635,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     std::vector<float> ball_radius;
 
     // create obstacles randomly
-    prepare_obstacles(balls_pos, ball_radius);
+    prepare_obstacles(balls_pos, ball_radius, group_name);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -1066,7 +1093,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    prepare_obstacles(balls_pos, ball_radius);
+    prepare_obstacles(balls_pos, ball_radius, group_name);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -1305,7 +1332,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // Prepare obstacle constraint
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    prepare_obstacles(balls_pos, ball_radius);
+    prepare_obstacles(balls_pos, ball_radius, group_name);
 
     // create planning scene
     auto world = std::make_shared<collision_detection::World>();
@@ -1541,7 +1568,7 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
     // Prepare obstacle constraint
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    prepare_obstacles(balls_pos, ball_radius);
+    prepare_obstacles(balls_pos, ball_radius, group_name);
 
     // create planning scene
     auto world = std::make_shared<collision_detection::World>();
