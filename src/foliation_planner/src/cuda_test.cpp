@@ -452,7 +452,6 @@ void EVAL_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     // set robot state to default state
     robot_state->setToDefaultValues();
-    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -1004,16 +1003,16 @@ void TEST_NEAREST_NEIGHBOR(const moveit::core::RobotModelPtr & robot_model, cons
     std::vector<std::vector<float>> query_state_joint_values = query_states->getJointStatesHost();
     std::vector<std::vector<float>> manager_state_joint_value = single_arm_states->getJointStatesHost();
 
-    for (int i = 0; i < query_state_joint_values.size(); i ++ )
+    for (size_t i = 0; i < query_state_joint_values.size(); i ++ )
     {
         int nearest_neighbor_index = -1;
         float nearest_neighbor_dis = std::numeric_limits<float>::max();
 
-        for (int j = 0; j < search_group_1.size(); j++){
+        for (size_t j = 0; j < search_group_1.size(); j++){
             float sq_dis = 0.0;
             std::vector<float> selected_joint_values = manager_state_joint_value[search_group_1[j]];
 
-            for (int k = 0; k < selected_joint_values.size(); k++ )
+            for (size_t k = 0; k < selected_joint_values.size(); k++ )
             {
                 sq_dis += (query_state_joint_values[i][k] - selected_joint_values[k]) * (query_state_joint_values[i][k] - selected_joint_values[k]);
             }
@@ -1029,16 +1028,16 @@ void TEST_NEAREST_NEIGHBOR(const moveit::core::RobotModelPtr & robot_model, cons
         std::cout << "query state " << i << " with its nearest neighbor_index " << nearest_neighbor_index << " in group 0 " << std::endl;
     }
 
-    for (int i = 0; i < query_state_joint_values.size(); i ++ )
+    for (size_t i = 0; i < query_state_joint_values.size(); i ++ )
     {
         int nearest_neighbor_index = -1;
         float nearest_neighbor_dis = std::numeric_limits<float>::max();
 
-        for (int j = 0; j < search_group_2.size(); j++){
+        for (size_t j = 0; j < search_group_2.size(); j++){
             float sq_dis = 0.0;
             std::vector<float> selected_joint_values = manager_state_joint_value[search_group_2[j]];
 
-            for (int k = 0; k < selected_joint_values.size(); k++ )
+            for (size_t k = 0; k < selected_joint_values.size(); k++ )
             {
                 sq_dis += (query_state_joint_values[i][k] - selected_joint_values[k]) * (query_state_joint_values[i][k] - selected_joint_values[k]);
             }
@@ -1075,7 +1074,7 @@ void TEST_NEAREST_NEIGHBOR(const moveit::core::RobotModelPtr & robot_model, cons
     std::cout << "---------------------------------------------" << std::endl;
     for(size_t j = 0; j < index_groups.size(); j++)
     {
-        for(size_t i = 0; i < query_states->getNumOfStates(); i++)
+        for(int i = 0; i < query_states->getNumOfStates(); i++)
         {
             std::cout << "query state " << i << " with its nearest neighbor_index " << neighbors_index[i][j] << " in group " << j << std::endl;
         }
@@ -1413,9 +1412,6 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // create the planner
     CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
-
-    // set parameters
-    planner->setK(1);
 
     planner->setMaxTravelDistance(5.0);
 
@@ -1901,8 +1897,6 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
 
     // create the planner
     CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
-
-    planner->setK(1);
 
     planner->setMaxTravelDistance(5.0);
 

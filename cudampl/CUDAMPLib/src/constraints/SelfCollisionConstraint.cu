@@ -25,8 +25,8 @@ namespace CUDAMPLib{
         std::vector<float> collision_distance_threshold;
         num_of_self_collision_check_ = 0;
 
-        for (int i = 0; i < collision_spheres_map.size(); i++){
-            for (int j = i + 1; j < collision_spheres_map.size(); j++){
+        for (size_t i = 0; i < collision_spheres_map.size(); i++){
+            for (size_t j = i + 1; j < collision_spheres_map.size(); j++){
                 // check if the two spheres are not in the same link and self-collision is enabled between the two links
                 if (collision_spheres_map[i] != collision_spheres_map[j] && self_collision_enables_map[collision_spheres_map[i]][collision_spheres_map[j]]){
                     collision_sphere_indices_1.push_back(i);

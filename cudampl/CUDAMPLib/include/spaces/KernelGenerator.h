@@ -435,7 +435,7 @@ void get_step_nvrtc_kernel(
     float distance = 0.0f;
 )";
 
-        for (size_t i = 0; i < num_of_joints; i++)
+        for (int i = 0; i < num_of_joints; i++)
         {
             kernel_code += "    distance += (from_state[" + std::to_string(i) + "] - to_state[" + std::to_string(i) + "]) * (from_state[" + std::to_string(i) + "] - to_state[" + std::to_string(i) + "]);\n";
         }
@@ -453,7 +453,7 @@ void get_step_nvrtc_kernel(
 
     // calculate the move direction
 )";
-    for (size_t i = 0; i < num_of_joints; i++)
+    for (int i = 0; i < num_of_joints; i++)
     {
         kernel_code += "    move_direction[idx * " + std::to_string(num_of_joints) + " + " + std::to_string(i) + "] = (to_state[" + std::to_string(i) + "] - from_state[" + std::to_string(i) + "]) / num_steps;\n";
     }
@@ -500,7 +500,7 @@ kernel_code += R"(
     for (size_t i = 0; i < num_steps; i++)
     {
 )";
-        for (size_t j = 0; j < num_of_joints; j++)
+        for (int j = 0; j < num_of_joints; j++)
         {
             kernel_code += "        d_interpolated_states[(start_index + i) * " + std::to_string(num_of_joints) + " + " + std::to_string(j) + "] = d_from_states[base + " + std::to_string(j) + "] + d_move_direction[base + " + std::to_string(j) + "] * i;\n";
         }
@@ -510,7 +510,7 @@ kernel_code += R"(
     // set the last state to the to state
 )";
 
-        for (size_t j = 0; j < num_of_joints; j++)
+        for (int j = 0; j < num_of_joints; j++)
         {
             kernel_code += "    d_interpolated_states[(start_index + num_steps - 1) * " + std::to_string(num_of_joints) + " + " + std::to_string(j) + "] = d_to_states[base + " + std::to_string(j) + "];\n";
         }

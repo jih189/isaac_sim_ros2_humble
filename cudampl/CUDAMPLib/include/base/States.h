@@ -217,6 +217,7 @@ namespace CUDAMPLib
 
             /**
                 @brief For each query state, find its k nearest neighbors for each group.
+                This function is not useful for RRG for now.
              */
             virtual int find_k_nearest_neighbors(
                 int k, const BaseStatesPtr & query_states, 

@@ -379,11 +379,6 @@ bool FoliationInterface::solve_motion_task(
     RCLCPP_INFO(node_->get_logger(), "Found planner configuration '%s' and use them", planner_config_name.c_str());
     auto config_settings = planner_configs_[planner_config_name];
 
-    if (config_settings.config.find("k") != config_settings.config.end())
-    {
-      planner->setK(std::stoi(config_settings.config["k"]));
-    }
-
     if (config_settings.config.find("sample_attempts_in_each_iteration") != config_settings.config.end())
     {
       planner->setSampleAttemptsInEachIteration(std::stoi(config_settings.config["sample_attempts_in_each_iteration"]));

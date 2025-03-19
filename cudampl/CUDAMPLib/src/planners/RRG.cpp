@@ -13,7 +13,6 @@ namespace CUDAMPLib
 
         // set the parameters as default values
         sample_attempts_in_each_iteration_ = 30;
-        k_ = 1;
         max_travel_distance_ = 0.5;
     }
 
@@ -272,13 +271,11 @@ namespace CUDAMPLib
             if (t % 2 == 0)
             {
                 // find the nearest neighbors of the states in the start group
-                // state_manager->find_k_nearest_neighbors(1, states, {start_group_indexs}, nearest_neighbors_index);
                 state_manager->find_the_nearest_neighbors(states, {start_group_indexs}, nearest_neighbors_index);
             }
             else
             {
                 // find the nearest neighbors of the states in the goal group
-                // state_manager->find_k_nearest_neighbors(1, states,  {goal_group_indexs}, nearest_neighbors_index);
                 state_manager->find_the_nearest_neighbors(states, {goal_group_indexs}, nearest_neighbors_index);
             }
 
@@ -317,21 +314,20 @@ namespace CUDAMPLib
 
             // find k nearest neighbors for each state
             std::vector<std::vector<int>> neighbors_index;
-            // int actual_k = state_manager->find_k_nearest_neighbors(k_, states, {start_group_indexs, goal_group_indexs}, neighbors_index);
-            int actual_k = 2;
+            int group_number = 2; // for start and goal group, we only need 1 nearest neighbor for each group.
             state_manager->find_the_nearest_neighbors(states, {start_group_indexs, goal_group_indexs}, neighbors_index);
 
             // validate the motion from the sampled states to their neighbors.
             // prepare the motion states 1
             std::vector<BaseStatesPtr> states_list;
-            for (int i = 0; i < actual_k; i++)
+            for (int i = 0; i < group_number; i++)
                 states_list.push_back(states);
 
             auto motion_states_1 = state_manager->concatinate_states(states_list);
 
             // prepare the motion states 2
             std::vector<int> indexs_in_manager;
-            for (int i = 0; i < actual_k; i++)
+            for (int i = 0; i < group_number; i++)
             {
                 for (size_t j = 0; j < neighbors_index.size(); j++)
                 {
@@ -383,7 +379,7 @@ namespace CUDAMPLib
                 std::vector<int> feasible_neighbors_indexs_of_added_states_i;
                 std::vector<float> feasible_neighbors_costs_of_added_states_i;
                 // check if this state is connected to any of its neighbors
-                for(int j = 0; j < actual_k; j++)
+                for(int j = 0; j < group_number; j++)
                 {
                     if(motion_feasibility[j * states->getNumOfStates() + i])
                     {
@@ -452,7 +448,7 @@ namespace CUDAMPLib
                                 printf("\033[1;31m Something is wrong \033[0m \n");
                             }
 
-                            // add an edge between v and v2 with the cost motion_costs[i * actual_k + j]
+                            // add an edge between v and v2 with the cost motion_costs[i * group_number + j]
                             boost::add_edge(v, v2, EdgeProperties{feasible_neighbors_costs_of_added_states[i][j]}, graph);
                             break;
                         }

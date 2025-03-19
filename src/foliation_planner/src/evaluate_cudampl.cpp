@@ -233,9 +233,6 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         // create the planner
         CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
 
-        // // set parameters
-        planner->setK(1);
-
         planner->setMaxTravelDistance(5.0);
 
         planner->setSampleAttemptsInEachIteration(50);
