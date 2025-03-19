@@ -141,8 +141,6 @@ namespace CUDAMPLib
              */
             void update() override;
 
-            void oldUpdate();
-
             /**
                 @brief Calculate the forward kinematics of the states.
              */

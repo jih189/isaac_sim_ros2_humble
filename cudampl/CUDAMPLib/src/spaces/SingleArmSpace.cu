@@ -760,105 +760,6 @@ namespace CUDAMPLib {
         return true;
     }
 
-    bool SingleArmSpace::oldCheckMotions(
-        const BaseStatesPtr & states1, 
-        const BaseStatesPtr & states2, 
-        std::vector<bool> & motion_feasibility,
-        std::vector<float> & motion_costs
-    )
-    {
-        int num_of_states1 = states1->getNumOfStates();
-        int num_of_states2 = states2->getNumOfStates();
-        if (num_of_states1 != num_of_states2)
-        {
-            // throw an exception
-            throw std::runtime_error("Number of states in states1 and states2 are not equal");
-        }
-        if (num_of_states1 == 0)
-        {
-            // throw an exception
-            throw std::runtime_error("No states to check");
-        }
-
-        // static cast to SingleArmStatesPtr
-        SingleArmStatesPtr single_arm_states1 = std::dynamic_pointer_cast<SingleArmStates>(states1);
-        SingleArmStatesPtr single_arm_states2 = std::dynamic_pointer_cast<SingleArmStates>(states2);
-
-        motion_feasibility.resize(num_of_states1);
-        motion_costs.resize(num_of_states1);
-
-        // get space info
-        SingleArmSpaceInfoPtr space_info = std::make_shared<SingleArmSpaceInfo>();
-        getSpaceInfo(space_info);
-
-        // get the joint states from the states
-        std::vector<std::vector<float>> joint_states1 = single_arm_states1->getJointStatesFullHost();
-        std::vector<std::vector<float>> joint_states2 = single_arm_states2->getJointStatesFullHost();
-
-        std::vector<int> motion_start;
-        std::vector<int> motion_end;
-        std::vector<std::vector<float>> all_motions;
-
-        for (int i = 0; i < num_of_states1; i++)
-        {
-            // get the interpolated states
-            std::vector<std::vector<float>> interpolated_states = interpolateVectors(joint_states1[i], joint_states2[i], resolution_); 
-
-            // calculate the sqrt difference between the two states
-            float cost = 0.0f;
-            for (size_t j = 0; j < joint_states1[i].size(); j++)
-            {
-                cost += (joint_states1[i][j] - joint_states2[i][j]) * (joint_states1[i][j] - joint_states2[i][j]);
-            }
-            motion_costs[i] = sqrt(cost);
-
-            // motion_sizes.push_back(interpolated_states.size());
-            motion_start.push_back(all_motions.size());
-            motion_end.push_back(all_motions.size() + interpolated_states.size()); // exclusive
-            all_motions.insert(all_motions.end(), interpolated_states.begin(), interpolated_states.end());
-        }
-
-        // create states from the all_motions
-        auto interpolated_states = createStatesFromVectorFull(all_motions);
-        if (interpolated_states == nullptr)
-        {
-            // print in red
-            std::cerr << "\033[31m" << "Failed to allocate memory for interpolated states. " << "\033[0m" << std::endl;
-
-            // set motion_feasibility to false
-            motion_feasibility.assign(num_of_states1, false);
-            // set motion_costs to 0
-            motion_costs.assign(num_of_states1, 0.0f);
-
-            return false;
-        }
-
-        interpolated_states->update();
-        std::vector<bool> motion_state_feasibility;
-        // check the interpolated_states
-        checkStates(interpolated_states, motion_state_feasibility);
-
-        // check the motion feasibility.
-        for (int i = 0; i < num_of_states1; i++)
-        {
-            bool feasible = true;
-            for (int j = motion_start[i]; j < motion_end[i]; j++)
-            {
-                if (!motion_state_feasibility[j])
-                {
-                    feasible = false;
-                    break;
-                }
-            }
-            motion_feasibility[i] = feasible;
-        }
-
-        // deallocate interpolated_states
-        interpolated_states.reset();
-
-        return true;
-    }
-
     __global__ void approachKernel(
         int * d_is_approaching,
         float * d_joint_states1,
@@ -1581,23 +1482,6 @@ namespace CUDAMPLib {
         return path_states;
     }
 
-    void SingleArmSpace::oldCheckStates(
-        const BaseStatesPtr & states,
-        std::vector<bool>& state_feasibility
-    )
-    {
-        this->oldCheckStates(states);
-
-        std::vector<float> total_costs = states->getTotalCostsHost();
-
-        state_feasibility.assign(total_costs.size(), false);
-
-        for (size_t i = 0; i < total_costs.size(); i++)
-        {
-            state_feasibility[i] = (total_costs[i] == 0.0f);
-        }
-    }
-
     void SingleArmSpace::checkStates(
         const BaseStatesPtr & states,
         std::vector<bool>& state_feasibility
@@ -1613,22 +1497,6 @@ namespace CUDAMPLib {
         {
             state_feasibility[i] = (total_costs[i] == 0.0f);
         }
-    }
-
-    void SingleArmSpace::oldCheckStates(const BaseStatesPtr & states)
-    {
-        // based on all the constraints, check if the states are feasible
-        for (size_t i = 0; i < constraints_.size(); i++)
-        {
-            // auto start_time = std::chrono::high_resolution_clock::now();
-            constraints_[i]->computeCost(states);
-            // auto end_time = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_seconds = end_time - start_time;
-            // std::cout << "Constraint " << constraints_[i]->getName() << " took: " << elapsed_seconds.count() << "s" << std::endl;
-        }
-
-        // get the total cost
-        states->calculateTotalCosts();
     }
 
     void SingleArmSpace::checkStates(const BaseStatesPtr & states)

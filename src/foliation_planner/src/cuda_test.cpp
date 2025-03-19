@@ -568,8 +568,6 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
         return;
     }
 
-    // // dumpy update
-    // single_arm_states_1->oldUpdate();
 
     auto start_time_update = std::chrono::high_resolution_clock::now();
     single_arm_states_2->update();
@@ -578,29 +576,12 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // print in green color
     printf("\033[1;32m" "Time taken by update: %f seconds" "\033[0m \n", elapsed_time_update.count());
 
-    // auto start_time_old_update = std::chrono::high_resolution_clock::now();
-    // single_arm_states_3->oldUpdate();
-    // auto end_time_old_update = std::chrono::high_resolution_clock::now();
-    // std::chrono::duration<double> elapsed_time_old_update = end_time_old_update - start_time_old_update;
-    // // print in green color
-    // printf("\033[1;32m" "Time taken by old update: %f seconds" "\033[0m \n", elapsed_time_old_update.count());
-
-    // check states
-    // single_arm_space->oldCheckStates(single_arm_states_1); // dummy check
-
     auto start_time_check_states = std::chrono::high_resolution_clock::now();
     single_arm_space->checkStates(single_arm_states_2);
     auto end_time_check_states = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_time_check_states = end_time_check_states - start_time_check_states;
     // print in green color
     printf("\033[1;32m" "Time taken by checkStates: %f seconds" "\033[0m \n", elapsed_time_check_states.count());
-
-    // auto start_time_old_check_states = std::chrono::high_resolution_clock::now();
-    // single_arm_space->oldCheckStates(single_arm_states_3);
-    // auto end_time_old_check_states = std::chrono::high_resolution_clock::now();
-    // std::chrono::duration<double> elapsed_time_old_check_states = end_time_old_check_states - start_time_old_check_states;
-    // // print in green color
-    // printf("\033[1;32m" "Time taken by oldCheckStates: %f seconds" "\033[0m \n", elapsed_time_old_check_states.count());
 
     // // check motions
     // std::vector<bool> motion_feasibility;
@@ -612,23 +593,6 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // std::chrono::duration<double> elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
     // // print in green color
     // printf("\033[1;32m" "Time taken by checkMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
-
-    // std::vector<bool> motion_feasibility_1;
-    // std::vector<float> motion_costs_1;
-
-    // start_time_check_motions = std::chrono::high_resolution_clock::now();
-    // single_arm_space->oldCheckMotions(single_arm_states_1, single_arm_states_2, motion_feasibility_1, motion_costs_1);
-    // end_time_check_motions = std::chrono::high_resolution_clock::now();
-    // elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
-    // // print in green color
-    // printf("\033[1;32m" "Time taken by oldCheckMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
-
-    // start_time_check_motions = std::chrono::high_resolution_clock::now();
-    // single_arm_space->checkMotions(single_arm_states_2, single_arm_states_3, motion_feasibility, motion_costs);
-    // end_time_check_motions = std::chrono::high_resolution_clock::now();
-    // elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
-    // // print in green color
-    // printf("\033[1;32m" "Time taken by second checkMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
 }
 
 void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
@@ -946,7 +910,7 @@ void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const s
     auto end_time_filter = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_time_filter = end_time_filter - start_time_filter;
     // print in green
-    std::cout << "\033[1;32m" << "Time taken by old filter state function: " << elapsed_time_filter.count() << " seconds" << "\033[0m" << std::endl;
+    std::cout << "\033[1;32m" << "Time taken by filter state function: " << elapsed_time_filter.count() << " seconds" << "\033[0m" << std::endl;
 }
 
 

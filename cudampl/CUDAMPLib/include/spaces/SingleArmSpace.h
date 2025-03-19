@@ -47,13 +47,6 @@ namespace CUDAMPLib
 
             BaseStatesPtr sample(int num_of_config) override;
 
-            bool oldCheckMotions(
-                const BaseStatesPtr & states1, 
-                const BaseStatesPtr & states2, 
-                std::vector<bool>& motion_feasibility,
-                std::vector<float>& motion_costs
-            );
-
             bool checkMotions(
                 const BaseStatesPtr & states1, 
                 const BaseStatesPtr & states2, 
@@ -87,14 +80,7 @@ namespace CUDAMPLib
                 std::vector<bool>& state_feasibility
             ) override;
 
-            void oldCheckStates(
-                const BaseStatesPtr & states, 
-                std::vector<bool>& state_feasibility
-            );
-
             void checkStates(const BaseStatesPtr & states) override;
-
-            void oldCheckStates(const BaseStatesPtr & states);
 
             void projectStates(BaseStatesPtr states) override;
 

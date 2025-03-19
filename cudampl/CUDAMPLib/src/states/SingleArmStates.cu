@@ -175,67 +175,6 @@ namespace CUDAMPLib
         multiply4x4(parent_link_pose, joint_pose_T, link_pose);
     }
 
-    __global__ void kin_forward_collision_spheres_kernel(
-        float* joint_values, 
-        int num_of_joint,
-        int configuration_size,
-        int* joint_types,
-        float* joint_poses,
-        int num_of_links,
-        float* joint_axes,
-        int* link_maps,
-        int num_of_collision_spheres,
-        int* collision_spheres_map,
-        float* collision_spheres_pos,
-        float* link_poses_set,
-        float* collision_spheres_pos_in_baselink
-    ) 
-    {
-        int idx = threadIdx.x + blockIdx.x * blockDim.x;
-        if (idx < configuration_size) {
-
-            // set the first link pose to identity matrix because it is the base link
-            set_identity(&link_poses_set[idx * num_of_links * 16]);
-
-            // Calculate forward kinematics for each link
-            for (size_t i = 1; i < num_of_links; i++) // The first link is the base link, so we can skip it
-            {
-                float* parent_link_pose = &link_poses_set[idx * num_of_links * 16 + link_maps[i] * 16];
-                float* current_link_pose = &link_poses_set[idx * num_of_links * 16 + i * 16];
-                // based on the joint type, calculate the link pose
-                switch (joint_types[i])
-                {
-                    case CUDAMPLib_REVOLUTE:
-                        revolute_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
-                        // j++;
-                        break;
-                    case CUDAMPLib_PRISMATIC:
-                        prism_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], &joint_axes[i * 3], joint_values[idx * num_of_joint + i], current_link_pose);
-                        // j++;
-                        break;
-                    case CUDAMPLib_FIXED:
-                        fixed_joint_fn_cuda(parent_link_pose, &joint_poses[i * 16], current_link_pose);
-                        break;
-                    default:
-                        printf("Unknown joint type: %d\n", joint_types[i]);
-                        break;
-                }
-            }
-
-            // Calculate the collision spheres position in the base link frame
-            for (size_t i = 0; i < num_of_collision_spheres; i++)
-            {
-                float* collision_sphere_pos = &collision_spheres_pos[i * 3]; // collision sphere position in link frame
-                float* collision_sphere_pos_in_baselink = &collision_spheres_pos_in_baselink[idx * num_of_collision_spheres * 3 + i * 3]; // collision sphere position in base link frame
-                float* link_pose = &link_poses_set[idx * num_of_links * 16 + collision_spheres_map[i] * 16]; // link pose in base link frame
-
-                collision_sphere_pos_in_baselink[0] = link_pose[0] * collision_sphere_pos[0] + link_pose[1] * collision_sphere_pos[1] + link_pose[2] * collision_sphere_pos[2] + link_pose[3];
-                collision_sphere_pos_in_baselink[1] = link_pose[4] * collision_sphere_pos[0] + link_pose[5] * collision_sphere_pos[1] + link_pose[6] * collision_sphere_pos[2] + link_pose[7];
-                collision_sphere_pos_in_baselink[2] = link_pose[8] * collision_sphere_pos[0] + link_pose[9] * collision_sphere_pos[1] + link_pose[10] * collision_sphere_pos[2] + link_pose[11];
-            }
-        }
-    }
-
     __global__ void kin_forward_kernel(
         const float* __restrict__ joint_values, 
         const int num_of_joint,
@@ -246,8 +185,8 @@ namespace CUDAMPLib
         const float* __restrict__ joint_axes,
         const int* __restrict__ link_maps,
         float* __restrict__ link_poses_set
-    ) 
-    {
+    ) {
+
         int idx = threadIdx.x + blockIdx.x * blockDim.x;
         if (idx >= configuration_size) {
             return;
@@ -289,8 +228,7 @@ namespace CUDAMPLib
         const float* __restrict__ joint_axes,
         const float* __restrict__ link_poses_set,
         float* __restrict__ space_jacobians // [configuration][link][joint][6]
-    )
-    {
+    ) {
         // Each thread processes one link of one configuration.
         int global_idx = threadIdx.x + blockIdx.x * blockDim.x;
         int total_links = configuration_size * num_of_links;
@@ -407,8 +345,7 @@ namespace CUDAMPLib
         const float* __restrict__ collision_spheres_pos, // collision sphere position in link frame
         const float* __restrict__ link_poses_set,
         float* __restrict__ collision_spheres_pos_in_baselink
-    )
-    {
+    ) {
         int idx = threadIdx.x + blockIdx.x * blockDim.x;
         if (idx >= num_of_states * num_of_self_collision_spheres)
             return;
@@ -454,7 +391,6 @@ namespace CUDAMPLib
         collision_spheres_pos_in_baselink[outIndex + 1] = out_y;
         collision_spheres_pos_in_baselink[outIndex + 2] = out_z;
     }
-        
 
     // kernel to calculate the distance between two states
     __global__ void calculate_joint_state_distance(
@@ -755,33 +691,6 @@ namespace CUDAMPLib
         }
 
         return self_collision_spheres_pos_in_base_link;
-    }
-
-    void SingleArmStates::oldUpdate()
-    {
-        int threadsPerBlock = 256;
-        int blocksPerGrid = (num_of_states_ + threadsPerBlock - 1) / threadsPerBlock;
-        SingleArmSpaceInfoPtr space_info_single_arm_space = std::static_pointer_cast<SingleArmSpaceInfo>(this->space_info);
-        
-        // Update the states
-        kin_forward_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
-            d_joint_states,
-            num_of_joints,
-            num_of_states_,
-            space_info_single_arm_space->d_joint_types,
-            space_info_single_arm_space->d_joint_poses,
-            space_info_single_arm_space->num_of_links,
-            space_info_single_arm_space->d_joint_axes,
-            space_info_single_arm_space->d_link_parent_link_maps,
-            space_info_single_arm_space->num_of_self_collision_spheres,
-            space_info_single_arm_space->d_collision_spheres_to_link_map,
-            space_info_single_arm_space->d_self_collision_spheres_pos_in_link,
-            d_link_poses_in_base_link,
-            d_self_collision_spheres_pos_in_base_link
-        );
-
-        // Wait for the kernel to finish
-        cudaDeviceSynchronize();
     }
 
     void SingleArmStates::update()
@@ -1128,8 +1037,7 @@ namespace CUDAMPLib
 
         return space_jacobian_in_base_link;
     }
-
-
+    
     void SingleArmStates::print() const
     {
         // static_cast the space_info to SingleArmSpaceInfo

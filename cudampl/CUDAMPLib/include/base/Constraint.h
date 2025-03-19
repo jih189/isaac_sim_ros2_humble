@@ -13,12 +13,18 @@ namespace CUDAMPLib
             virtual ~BaseConstraint() {}
             
             /**
-                @brief Compute the cost of the states based on the constraint.
+                @brief Compute the cost of the states and save the cost value into the states.
              */
             virtual void computeCost(BaseStatesPtr states) = 0;
 
+            /**
+                @brief Check if the constraint is projectable.
+             */
             bool isProjectable() { return is_projectable_; }
 
+            /**
+                @brief Compute the gradient and error of the states and save the gradient and error into the states.
+             */
             virtual void computeGradientAndError(BaseStatesPtr states) 
             {
                 if (!is_projectable_)
@@ -30,8 +36,16 @@ namespace CUDAMPLib
                 }
             }
 
+            /**
+                @brief Get the name of the constraint.
+             */
             std::string getName() const { return constraint_name; }
 
+            /**
+                @brief Get the constraint index in the space info.
+                @param space_info The space info
+                @return The index of the constraint in the space info. If not found, return -1.
+             */
             int getConstraintIndex(const SpaceInfoPtr space_info) {
                 for (int i = 0; i < space_info->num_of_constraints; i++)
                     if (space_info->constraint_names[i] == constraint_name)

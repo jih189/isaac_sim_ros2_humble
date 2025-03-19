@@ -13,10 +13,22 @@ namespace CUDAMPLib
             // constructor
             BasePlanner(BaseSpacePtr space) {space_ = space;}
             virtual ~BasePlanner() {}
+            /**
+                @brief Set the motion task.
+                @param task The motion task.
+                @param get_full_path If true, the planner will return the full path. Otherwise, it will return the waypoints.
+             */
             virtual void setMotionTask(BaseTaskPtr task, bool get_full_path) = 0;
+
+            /**
+                @brief Solve the motion task.
+                @param termination_condition The termination condition.
+             */
             virtual void solve(BaseTerminationPtr termination_condition) = 0;
             
-            /** get planning space */
+            /**
+                @brief get planning space. 
+             */
             BaseSpacePtr getSpace() {
                 return space_;
             }

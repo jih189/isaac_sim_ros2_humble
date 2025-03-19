@@ -14,8 +14,6 @@ namespace CUDAMPLib
 
     /**
         @brief The information of the space.
-        This is a struct to store the information of the space, so we can pass this information to other objects with differenth class such as states, constraints.
-        Later, those objects can be aware of the information of the space.
      */
     struct SpaceInfo 
     {
@@ -66,9 +64,23 @@ namespace CUDAMPLib
                 }
             }
 
+            /**
+                @brief Set the validity of the states.
+                @param is_valid The validity of the states.
+             */
             void setValid(bool is_valid) { is_valid_ = is_valid; }
+
+            /**
+                @brief Get the validity of the states. The validity here means the states can be used for further computation.
+                       For example, if the memory allocation fails, the states are not valid.
+                @return The validity of the states.
+             */
             bool isValid() const { return is_valid_; }
 
+            /**
+                @brief Filter the states based on the filter_map. This function is done in-place.
+                @param filter_map The filter map. If the value is true, the state is feasible. Otherwise, the state is infeasible.
+             */
             virtual void filterStates(const std::vector<bool> & filter_map){
 
                 // calculate the number of feasible states
@@ -133,22 +145,37 @@ namespace CUDAMPLib
 
             int getNumOfStates() const { return num_of_states_; }
 
+            /**
+                @brief Get the costs in device memory.
+                @return The costs in device memory, and the size is [num_of_states_ * num_of_constraints].
+             */
             float * getCostsCuda() {
                 return d_costs;
             }
 
+            /**
+                @brief Get the total costs in device memory.
+                @return The total costs in device memory, and the size is [num_of_states_].
+             */
             float * getTotalCostsCuda() {
                 return d_total_costs;
             }
 
             void calculateTotalCosts();
 
+            /**
+                @brief Calculate the total gradient and error of the states based on the constraint indexs.
+             */
             virtual void calculateTotalGradientAndError(const std::vector<int> & constraint_indexs)
             {
                 // raise an error
                 throw std::runtime_error("The function calculateTotalGradientAndError is not implemented.");
             }
 
+            /**
+                @brief Get the costs in host memory. Usually used for debugging.
+                @return The costs in host memory, and the size is [num_of_states_ * num_of_constraints].
+             */
             std::vector<std::vector<float>> getCostsHost() {
 
                 std::vector<std::vector<float>> costs_host(num_of_states_, std::vector<float>(space_info->num_of_constraints, 0.0));
@@ -164,6 +191,10 @@ namespace CUDAMPLib
                 return costs_host;
             }
 
+            /**
+                @brief Get the total costs in host memory. Usually used for debugging.
+                @return The total costs in host memory, and the size is [num_of_states_].
+             */
             std::vector<float> getTotalCostsHost() {
                 std::vector<float> total_costs_host(num_of_states_, 0.0);
                 cudaMemcpy(total_costs_host.data(), d_total_costs, num_of_states_ * sizeof(float), cudaMemcpyDeviceToHost);
@@ -171,7 +202,7 @@ namespace CUDAMPLib
             }
 
             /**
-                @brief Based on the current states, update robot information and states.
+                @brief Update the states. This function should be implemented in the derived class.
              */
             virtual void update() = 0;
 
@@ -180,14 +211,18 @@ namespace CUDAMPLib
              */
             virtual void print() const = 0;
 
+            /**
+                @brief Get the space info.
+                @return The space info.
+             */
             SpaceInfoPtr getSpaceInfo() const { return space_info; }
 
         protected:
             int num_of_states_;
             float * d_costs; // cost of each state and different constraints. The format should be [state1_constraint1, state2_constraint1, ..., state1_constraint2, state2_constraint2, ...]
             float * d_total_costs; // total cost of each state
-            bool is_valid_;
-            SpaceInfoPtr space_info;
+            bool is_valid_; // if the states are valid. If the memory allocation fails, the states are not valid.
+            SpaceInfoPtr space_info; // space info of the states
     };
     typedef std::shared_ptr<BaseStates> BaseStatesPtr;
 
@@ -209,15 +244,18 @@ namespace CUDAMPLib
                 num_of_states_ = 0;
             }
 
-            // Adds states and returns the index of the states in the manager.
+            /**
+                @brief Adds states and returns the index of the states in the manager.
+             */
             virtual std::vector<int> add_states(const BaseStatesPtr & states) = 0;
 
-            // Returns the number of states in the manager.
+            /**
+                @brief Returns the number of states in the manager.
+             */
             int get_num_of_states() const { return num_of_states_; }
 
             /**
-                @brief For each query state, find its k nearest neighbors for each group.
-                This function is not useful for RRG for now.
+                @brief For each query state, find its k nearest neighbors for each group. This function is unused now.
              */
             virtual int find_k_nearest_neighbors(
                 int k, const BaseStatesPtr & query_states, 
@@ -227,6 +265,11 @@ namespace CUDAMPLib
 
             /**
                 @brief For each query state, find its nearest neighbor for each group.
+                @param query_states The query states.
+                @param group_indexs The indexs of the groups. [group1_indexs, group2_indexs, ...]
+                @param neighbors_index The indexs of the nearest neighbors of query states from each group.
+                                       [[nearest_neighbor_index_from_group1, nearest_neighbor_index_from_group2, ...], 
+                                        [nearest_neighbor_index_from_group1, nearest_neighbor_index_from_group2, ...], ...]
              */
             virtual void find_the_nearest_neighbors(
                 const BaseStatesPtr & query_states, 
@@ -236,11 +279,15 @@ namespace CUDAMPLib
 
             /**
                 @brief Given indexs of states, find the states in the manager.
+                @param states_index The indexs of the states in the manager.
+                @return Create a new BaseStatesPtr with the states based on the states_index in the manager.
              */
             virtual BaseStatesPtr get_states(const std::vector<int> & states_index) = 0;
 
             /**
                 @brief Concatinate the multiple states into one states.
+                @param states The states to concatinate.
+                @return Create a new BaseStatesPtr with the concatination of the states.
              */
             virtual BaseStatesPtr concatinate_states(const std::vector<BaseStatesPtr> & states) = 0;
 

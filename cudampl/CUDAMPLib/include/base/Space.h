@@ -28,21 +28,19 @@ namespace CUDAMPLib
             size_t getDim() const { return dim; }
 
             /**
-                * @brief Sample a set of states.
-                * @param num_of_config The number of states to sample.
-                * @return A set of states.
+                @brief Sample a set of states.
+                @param num_of_config The number of states to sample.
+                @return A set of states.
             */
             virtual BaseStatesPtr sample(int num_of_config) = 0;
 
-
-
             /**
-                * @brief Given two sets of states, check the feasibility of motions between them.
-                * @param states1 The first set of states.
-                * @param states2 The second set of states.
-                * @param motion_feasibility The feasibility of the motions.
-                * @param motion_costs The costs of the motions.
-                * @return True if the check motions feasible.
+                @brief Given two sets of states, check the feasibility of motions between them.
+                @param states1 The first set of states.
+                @param states2 The second set of states.
+                @param motion_feasibility The feasibility of the motions.
+                @param motion_costs The costs of the motions.
+                @return True if the check motions feasible.
              */
             virtual bool checkMotions(
                 const BaseStatesPtr & states1, 
@@ -52,20 +50,18 @@ namespace CUDAMPLib
             ) = 0;
 
             /**
-                * @brief Get path from waypoints.
-                * @param waypoints The waypoints.
-                * @return The path.
+                @brief Get path from waypoints.
+                @param waypoints The waypoints.
+                @return The path.
              */
             virtual BaseStatesPtr getPathFromWaypoints(
                 const BaseStatesPtr & waypoints
             ) = 0;
 
             /**
-                * @brief Check the feasibility of a set of states.
-                * @param states The states to check.
-                * @param state_feasibility The feasibility of the states.
-                This function will return the feasibility of the states, so it moves data from device to host and
-                slow down the process. 
+                @brief Check the feasibility of a set of states.
+                @param states The states to check.
+                @param state_feasibility The feasibility of the states as output.
             */
             virtual void checkStates(
                 const BaseStatesPtr & states,
@@ -73,10 +69,8 @@ namespace CUDAMPLib
             ) = 0;
 
             /**
-                * @brief Check the feasibility of a set of states.
-                * @param states The states to check.
-                This function does not return the feasibility of the states, so it does not move data from device to host and
-                does not slow down the process.
+                @brief Check the feasibility of a set of states.
+                @param states The states to check.
              */
             virtual void checkStates(const BaseStatesPtr & states) = 0;
 
@@ -90,6 +84,10 @@ namespace CUDAMPLib
                 float max_distance
             ) = 0;
 
+            /**
+                @brief Project the states to satisfy the constraints. This project operation is done in-place.
+                @param states The states to project.
+             */
             virtual void projectStates(BaseStatesPtr states)
             {
                 // raise an exception if the function is not implemented
@@ -98,12 +96,13 @@ namespace CUDAMPLib
 
             /**
                 @brief Create a state manager.
+                @return The state manager.
              */
             virtual BaseStateManagerPtr createStateManager() = 0;
 
             /** 
                 @brief Get space information.
-                @return The space information.
+                @param space_info The space information as output.
              */
             void getSpaceInfo(SpaceInfoPtr space_info) {
                 space_info->dim = dim;
