@@ -48,7 +48,7 @@ cspace_to_urdf_rules:
 # not be able to avoid obstacles.
 
 collision_spheres:
-  - torso_lift_link:
+  torso_lift_link:
     - "center": [-0.102, -0.023, 0.439]
       "radius": 0.10291
     - "center": [-0.102, 0.042, 0.128]
@@ -209,7 +209,7 @@ collision_spheres:
       "radius": 0.04461
     - "center": [0.099, -0.022, 0.583]
       "radius": 0.04019
-  - head_pan_link:
+  head_pan_link:
     - "center": [0.059, 0.069, 0.03]
       "radius": 0.03703
     - "center": [0.053, -0.075, 0.03]
@@ -330,7 +330,7 @@ collision_spheres:
       "radius": 0.02749
     - "center": [-0.051, -0.018, 0.024]
       "radius": 0.02575
-  - head_tilt_link:
+  head_tilt_link:
     - "center": [-0.028, -0.029, -0.001]
       "radius": 0.03683
     - "center": [-0.027, 0.053, 0.004]
@@ -401,7 +401,7 @@ collision_spheres:
       "radius": 0.02467
     - "center": [-0.019, -0.067, 0.031]
       "radius": 0.02873
-  - shoulder_pan_link:
+  shoulder_pan_link:
     - "center": [-0.002, -0.012, 0.035]
       "radius": 0.04848
     - "center": [0.144, -0.031, 0.052]
@@ -412,10 +412,10 @@ collision_spheres:
       "radius": 0.03821
     - "center": [0.115, -0.033, 0.03]
       "radius": 0.03941
-  - shoulder_lift_link:
+  shoulder_lift_link:
     - "center": [0.125, -0.0, 0.0]
       "radius": 0.05572
-  - upperarm_roll_link:
+  upperarm_roll_link:
     - "center": [0.129, -0.028, 0.003]
       "radius": 0.04064
     - "center": [0.024, -0.026, -0.005]
@@ -428,7 +428,7 @@ collision_spheres:
       "radius": 0.0346
     - "center": [0.141, -0.031, 0.024]
       "radius": 0.0368
-  - elbow_flex_link:
+  elbow_flex_link:
     - "center": [0.117, 0.0, 0.0]
       "radius": 0.0551
     - "center": [-0.001, 0.032, -0.016]
@@ -443,7 +443,7 @@ collision_spheres:
       "radius": 0.03883
     - "center": [0.016, 0.031, 0.02]
       "radius": 0.03568
-  - forearm_roll_link:
+  forearm_roll_link:
     - "center": [0.02, -0.017, -0.002]
       "radius": 0.05992
     - "center": [0.076, -0.042, 0.002]
@@ -456,7 +456,7 @@ collision_spheres:
       "radius": 0.04098
     - "center": [0.052, -0.031, -0.005]
       "radius": 0.05571
-  - base_link:
+  base_link:
     - "center": [-0.11, 0.018, 0.183]
       "radius": 0.18576
     - "center": [0.145, -0.026, 0.13]
@@ -597,7 +597,7 @@ collision_spheres:
       "radius": 0.03608
     - "center": [-0.226, -0.024, 0.304]
       "radius": 0.06451
-  - wrist_flex_link:
+  wrist_flex_link:
     - "center": [0.036, -0.0, -0.001]
       "radius": 0.06132
     - "center": [-0.0, 0.002, -0.0]
@@ -606,7 +606,7 @@ collision_spheres:
       "radius": 0.06043
     - "center": [-0.001, 0.017, 0.002]
       "radius": 0.05953
-  - wrist_roll_link:
+  wrist_roll_link:
     - "center": [-0.002, -0.009, -0.009]
       "radius": 0.03105
     - "center": [-0.002, 0.018, 0.018]
@@ -633,7 +633,7 @@ collision_spheres:
       "radius": 0.03929
     - "center": [0.038, -0.011, -0.014]
       "radius": 0.03482
-  - l_gripper_finger_link:
+  l_gripper_finger_link:
     - "center": [-0.01, 0.009, -0.004]
       "radius": 0.0121
     - "center": [0.015, 0.009, 0.005]
@@ -650,7 +650,7 @@ collision_spheres:
       "radius": 0.01108
     - "center": [0.024, 0.009, 0.004]
       "radius": 0.01159
-  - r_gripper_finger_link:
+  r_gripper_finger_link:
     - "center": [-0.01, -0.009, -0.004]
       "radius": 0.0121
     - "center": [0.015, -0.009, 0.005]

@@ -32,6 +32,16 @@ class RobotInfo
         // Get all link names
         link_names = robot_model->getLinkModelNames();
 
+        // get the end effector link names
+        const std::vector< const moveit::core::JointModelGroup * > end_effector_joint_model_groups = robot_model->getEndEffectors();
+        for (size_t i = 0; i < end_effector_joint_model_groups.size(); i++)
+        {
+            for (std::string link_name : end_effector_joint_model_groups[i]->getLinkModelNames())
+            {
+                end_effector_link_names.push_back(link_name);
+            }
+        }
+
         if (! loadCollisionSpheres(collision_spheres_file_path)) // this requires the link_names is generated.
         {
             // RCLCPP_ERROR(LOGGER, "Failed to load collision spheres from file");
@@ -162,6 +172,7 @@ class RobotInfo
     
         const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
         const std::vector<std::string>& active_joint_model_names = joint_model_group->getActiveJointModelNames();
+        end_link_name_of_model = joint_model_group->getLinkModelNames().back();
         
         // get the active joint map
         for (const auto& joint_name : joint_name_to_parent_link)
@@ -233,6 +244,16 @@ class RobotInfo
         // Get all link names
         link_names = robot_model->getLinkModelNames();
 
+        // get the end effector link names
+        const std::vector< const moveit::core::JointModelGroup * > end_effector_joint_model_groups = robot_model->getEndEffectors();
+        for (size_t i = 0; i < end_effector_joint_model_groups.size(); i++)
+        {
+            for (std::string link_name : end_effector_joint_model_groups[i]->getLinkModelNames())
+            {
+                end_effector_link_names.push_back(link_name);
+            }
+        }
+
         if (! loadCollisionSpheres(collision_spheres_file_path)) // this requires the link_names is generated.
         {
             // RCLCPP_ERROR(LOGGER, "Failed to load collision spheres from file");
@@ -363,6 +384,7 @@ class RobotInfo
     
         const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
         const std::vector<std::string>& active_joint_model_names = joint_model_group->getActiveJointModelNames();
+        end_link_name_of_model = joint_model_group->getLinkModelNames().back();
         
         // get the active joint map
         for (const auto& joint_name : joint_name_to_parent_link)
@@ -445,37 +467,42 @@ class RobotInfo
 
             // print each collision sphere
             for (const auto& collision_sphere : collision_spheres_yaml["collision_spheres"]){
+
                 // std::cout << collision_sphere << std::endl;
-                // print each key of the collision sphere
-                for (const auto& key : collision_sphere){
-                    // std::cout << key.first.as<std::string>() << std::endl;
+                // print each collision_sphere of the collision sphere
+                // std::cout << collision_sphere.first.as<std::string>() << std::endl;
 
-                    std::string collision_sphere_link_name = key.first.as<std::string>();
+                std::string collision_sphere_link_name = collision_sphere.first.as<std::string>();
 
-                    // get collision_sphere_link_name index in link_names
-                    int collision_sphere_link_index = -1;
-                    for (size_t i = 0; i < link_names.size(); i++)
+                // get collision_sphere_link_name index in link_names
+                int collision_sphere_link_index = -1;
+                for (size_t i = 0; i < link_names.size(); i++)
+                {
+                    if (link_names[i] == collision_sphere_link_name)
                     {
-                        if (link_names[i] == collision_sphere_link_name)
-                        {
-                            collision_sphere_link_index = i;
-                            break;
-                        }
+                        collision_sphere_link_index = i;
+                        break;
                     }
+                }
 
-                    if (collision_sphere_link_index == -1){
-                        // print error message in red
-                        std::cout << "\033[1;31mCollision sphere link name is not in the link names\033[0m" << std::endl;
-                        return false;
+                if (collision_sphere_link_index == -1){
+                    // print error message in red
+                    std::cout << "\033[1;31mCollision sphere link " << collision_sphere_link_name << " is not in the link names\033[0m" << std::endl;
+                    // print all link names
+                    std::cout << "\033[1;31mLink names: \033[0m" << std::endl;
+                    for (const auto& link_name : link_names){
+                        std::cout << link_name << " ";
                     }
+                    std::cout << std::endl;
+                    continue;
+                }
 
-                    // print each value of the key
-                    for (const auto& value : key.second){
-                        // std::cout << "center " << value["center"][0] << " " << value["center"][1] << " " << value["center"][2] << " " << value["center"][3] << " radius " << value["radius"] << std::endl;
-                        collision_spheres_map.push_back(collision_sphere_link_index);
-                        collision_spheres_pos.push_back({value["center"][0].as<float>(), value["center"][1].as<float>(), value["center"][2].as<float>()});
-                        collision_spheres_radius.push_back(value["radius"].as<float>());
-                    }
+                // print each value of the collision_sphere
+                for (const auto& value : collision_sphere.second){
+                    // std::cout << "center " << value["center"][0] << " " << value["center"][1] << " " << value["center"][2] << " " << value["center"][3] << " radius " << value["radius"] << std::endl;
+                    collision_spheres_map.push_back(collision_sphere_link_index);
+                    collision_spheres_pos.push_back({value["center"][0].as<float>(), value["center"][1].as<float>(), value["center"][2].as<float>()});
+                    collision_spheres_radius.push_back(value["radius"].as<float>());
                 }
                 // std::cout << collision_sphere[0].first << std::endl;
             }
@@ -570,6 +597,17 @@ class RobotInfo
         return joint_name_to_parent_link;
     }
 
+    std::string getEndEffectorLinkName() const
+    {
+        // return the last link of link_names
+        return end_link_name_of_model;
+    }
+
+    std::vector<std::string> getEndEffectorLinkNames() const
+    {
+        return end_effector_link_names;
+    }
+
     private:
     std::vector<int> joint_types;
     std::vector<Eigen::Isometry3d> joint_poses;
@@ -586,4 +624,6 @@ class RobotInfo
     std::vector<float> upper_bounds;
     std::vector<float> lower_bounds;
     std::vector<float> default_joint_values;
+    std::string end_link_name_of_model;
+    std::vector<std::string> end_effector_link_names;
 };

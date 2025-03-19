@@ -144,16 +144,19 @@ void generate_state_markers(
     moveit::core::RobotStatePtr robot_state,
     const std::string & group_ns,
     const std_msgs::msg::ColorRGBA color,
-    visualization_msgs::msg::MarkerArray & robot_marker_array
+    visualization_msgs::msg::MarkerArray & robot_marker_array,
+    std::vector<std::string> end_effector_link_names
 )
 {
     std::vector<visualization_msgs::msg::MarkerArray> group_state_markers;
 
     std::vector<std::string> display_links_names = joint_model_group->getLinkModelNames();
-    // add end effector link by hard code
-    display_links_names.push_back(std::string("gripper_link"));
-    display_links_names.push_back(std::string("r_gripper_finger_link"));
-    display_links_names.push_back(std::string("l_gripper_finger_link"));
+
+    // add end effector link names
+    for (size_t i = 0; i < end_effector_link_names.size(); i++)
+    {
+        display_links_names.push_back(end_effector_link_names[i]);
+    }
 
     for (size_t i = 0; i < group_joint_values.size(); i++)
     {
@@ -225,7 +228,7 @@ void TEST_JACOBIAN(const moveit::core::RobotModelPtr & robot_model, const std::s
         robot_info.getLinkNames()
     );
 
-    std::string check_link_name = "wrist_roll_link";
+    std::string check_link_name = robot_info.getEndEffectorLinkName();
 
     // set a test joint values
     std::vector<float> joint_values_1 = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -291,7 +294,7 @@ void TEST_JACOBIAN(const moveit::core::RobotModelPtr & robot_model, const std::s
         }
         robot_state->setJointGroupPositions(joint_model_group, joint_values_double);
         robot_state->update();
-        // Eigen::Isometry3d end_effector_link_pose = robot_state->getGlobalLinkTransform("wrist_roll_link");
+        // Eigen::Isometry3d end_effector_link_pose = robot_state->getGlobalLinkTransform(robot_info.getEndEffectorLinkName());
         Eigen::Isometry3d end_effector_link_pose = robot_state->getGlobalLinkTransform(check_link_name);
         std::cout << "End effector pose " << i << " using moveit: " << std::endl;
         std::cout << "position: " << end_effector_link_pose.translation().transpose() << std::endl;
@@ -302,7 +305,7 @@ void TEST_JACOBIAN(const moveit::core::RobotModelPtr & robot_model, const std::s
 
         // compute Jacobian
         Eigen::MatrixXd jacobian;
-        // robot_state->getJacobian(joint_model_group, robot_state->getLinkModel("wrist_roll_link"), Eigen::Vector3d(0, 0, 0), jacobian);
+        // robot_state->getJacobian(joint_model_group, robot_state->getLinkModel(robot_info.getEndEffectorLinkName()), Eigen::Vector3d(0, 0, 0), jacobian);
         robot_state->getJacobian(joint_model_group, robot_state->getLinkModel(check_link_name), Eigen::Vector3d(0, 0, 0), jacobian);
         std::cout << "Jacobian: " << std::endl;
         std::cout << jacobian << std::endl;
@@ -352,7 +355,7 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_info.getLinkNames()
     );
 
-    std::string check_link_name = "wrist_roll_link";
+    std::string check_link_name = robot_info.getEndEffectorLinkName();
 
     std::vector<std::vector<float>> moveit_positions;
     std::vector<std::vector<float>> moveit_orientations;
@@ -619,7 +622,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     int task_link_index = -1;
     for (size_t i = 0; i < robot_info.getLinkNames().size(); i++)
     {
-        if (robot_info.getLinkNames()[i] == "wrist_roll_link")
+        if (robot_info.getLinkNames()[i] == robot_info.getEndEffectorLinkName())
         {
             task_link_index = i;
             break;
@@ -715,7 +718,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     color_sample.b = 0.0;
     color_sample.a = 0.4;
     visualization_msgs::msg::MarkerArray sample_group_state_markers;
-    generate_state_markers(states_joint_values, joint_model_group, robot_state, "sample_group", color_sample, sample_group_state_markers);
+    generate_state_markers(states_joint_values, joint_model_group, robot_state, "sample_group", color_sample, sample_group_state_markers, robot_info.getEndEffectorLinkNames());
     
     // create marker publisher
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("/ik_solver_markers", 10);
@@ -744,7 +747,7 @@ void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model,
     int task_link_index = -1;
     for (size_t i = 0; i < robot_info.getLinkNames().size(); i++)
     {
-        if (robot_info.getLinkNames()[i] == "wrist_roll_link")
+        if (robot_info.getLinkNames()[i] == robot_info.getEndEffectorLinkName())
         {
             task_link_index = i;
             break;
@@ -834,7 +837,7 @@ void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model,
     color_sample.g = 1.0;
     color_sample.b = 0.0;
     color_sample.a = 0.4;
-    generate_state_markers(states_joint_values, joint_model_group, robot_state, "sample_group", color_sample, sample_group_state_markers);
+    generate_state_markers(states_joint_values, joint_model_group, robot_state, "sample_group", color_sample, sample_group_state_markers, robot_info.getEndEffectorLinkNames());
 
     // create marker publisher
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("/goal_region_markers", 10);
@@ -1110,10 +1113,12 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
     single_arm_space->checkStates(sampled_states, state_feasibility);
 
     std::vector<std::string> display_links_names = joint_model_group->getLinkModelNames();
-    // add end effector link by hard code
-    display_links_names.push_back(std::string("gripper_link"));
-    display_links_names.push_back(std::string("r_gripper_finger_link"));
-    display_links_names.push_back(std::string("l_gripper_finger_link"));
+    
+    // add gripper link
+    for(std::string end_effector_link : robot_info.getEndEffectorLinkNames())
+    {
+        display_links_names.push_back(end_effector_link);
+    }
 
     std::vector<visualization_msgs::msg::MarkerArray> sample_group_state_markers;
 
@@ -1422,7 +1427,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_state,
         "start_group",
         color_start,
-        start_group_state_markers_combined
+        start_group_state_markers_combined,
+        robot_info.getEndEffectorLinkNames()
     );
 
     // create color
@@ -1439,7 +1445,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_state,
         "goal_group",
         color_goal,
-        goal_group_state_markers_combined
+        goal_group_state_markers_combined,
+        robot_info.getEndEffectorLinkNames()
     );
 
     /************************** Debug **************************************/
@@ -1756,7 +1763,7 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
     int task_link_index = -1;
     for (size_t i = 0; i < robot_info.getLinkNames().size(); i++)
     {
-        if (robot_info.getLinkNames()[i] == "wrist_roll_link")
+        if (robot_info.getLinkNames()[i] == robot_info.getEndEffectorLinkName())
         {
             task_link_index = i;
             break;
@@ -1899,7 +1906,8 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
         robot_state,
         "start_group",
         color_start,
-        start_group_state_markers_combined
+        start_group_state_markers_combined,
+        robot_info.getEndEffectorLinkNames()
     );
 
     // create color
@@ -1916,7 +1924,8 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
         robot_state,
         "goal_group",
         color_goal,
-        goal_group_state_markers_combined
+        goal_group_state_markers_combined,
+        robot_info.getEndEffectorLinkNames()
     );
 
     /************************** Debug **************************************/
@@ -2032,7 +2041,7 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     int task_link_index = -1;
     for (size_t i = 0; i < robot_info.getLinkNames().size(); i++)
     {
-        if (robot_info.getLinkNames()[i] == "wrist_roll_link")
+        if (robot_info.getLinkNames()[i] == robot_info.getEndEffectorLinkName())
         {
             task_link_index = i;
             break;
@@ -2249,14 +2258,28 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     }
 }
 
+void TEST_ROBOT_INFO(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+{
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+
+}
+
 int main(int argc, char** argv)
 {
-    const std::string GROUP_NAME = "arm";
+    // const std::string GROUP_NAME = "arm"; // Fetch
+    // const std::string GROUP_NAME = "fr3_arm"; // franka
 
     rclcpp::init(argc, argv);
     rclcpp::NodeOptions node_options;
     node_options.automatically_declare_parameters_from_overrides(true);
     auto cuda_test_node = rclcpp::Node::make_shared("cuda_test_node", node_options);
+
+    // get group name
+    std::string GROUP_NAME;
+    cuda_test_node->get_parameter("group_name", GROUP_NAME);
+    std::cout << "Group name: " << GROUP_NAME << std::endl;
 
     // print out the node name
     RCLCPP_INFO(LOGGER, "Node name: %s", cuda_test_node->get_name());
@@ -2277,6 +2300,8 @@ int main(int argc, char** argv)
     // std::string collision_spheres_file_path;
     // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
+
+    // TEST_ROBOT_INFO(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
