@@ -221,8 +221,6 @@ namespace CUDAMPLib
 
         if (has_solution)
         {
-            // print in green color
-            // printf("\033[1;32m There exists a solution between the start and goal states directly \033[0m \n");
             // there exists a solution between the start and goal states directly.
             auto waypoints = state_manager->get_states({feasible_start_index, feasible_goal_index});
             auto solution = space_->getPathFromWaypoints(waypoints);
@@ -239,8 +237,7 @@ namespace CUDAMPLib
         // main loop
         for(int t = 0 ; t < 1000000; t++)
         {
-            // auto start_time_iteration = std::chrono::high_resolution_clock::now();
-
+            // check the termination condition
             if(termination_condition->checkTerminationCondition())
             {
                 termination_condition->printTerminationReason();
@@ -249,24 +246,14 @@ namespace CUDAMPLib
             }
 
             // sample states
-            // auto start_time_samples = std::chrono::high_resolution_clock::now();
             auto states = space_->sample(sample_attempts_in_each_iteration_);
-            if (states == nullptr)
-            {
-                // print in red color "falied to sample states"
-                printf("\033[1;31m failed to sample states \033[0m \n");
 
-                break;
-            }
-            // auto end_time_samples = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_time_samples = end_time_samples - start_time_samples;
-            // // print
-            // printf("Time taken by sample: %f seconds\n", elapsed_time_samples.count());
-
+            // get state indexes of both start and goal group in the graph.
             std::vector<int> start_group_indexs;
             std::vector<int> goal_group_indexs;
             getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
 
+            // find the nearest neighbors of the states
             std::vector<std::vector<int>> nearest_neighbors_index;
             if (t % 2 == 0)
             {
@@ -279,32 +266,30 @@ namespace CUDAMPLib
                 state_manager->find_the_nearest_neighbors(states, {goal_group_indexs}, nearest_neighbors_index);
             }
 
+            // get the nearest state index for each sampled state
             std::vector<int> nearest_neighbors_index_for_each_sampled_state;
             for(auto i : nearest_neighbors_index)
             {
                 nearest_neighbors_index_for_each_sampled_state.push_back(i[0]);
             }
+
+            // get the nearest states
             auto nearest_states = state_manager->get_states(nearest_neighbors_index_for_each_sampled_state);
 
             // do interpolation between the sampled states and their nearest neighbors
             space_->interpolate(nearest_states, states, max_travel_distance_);
-            // auto start_time_update = std::chrono::high_resolution_clock::now();
             states->update();
-            // auto end_time_update = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_time_update = end_time_update - start_time_update;
-            // // print
-            // printf("Time taken by update: %f seconds\n", elapsed_time_update.count());
 
             nearest_states.reset();
 
-            // evaluate the feasibility of the states
+            // evaluate the feasibility of the sampled states
             std::vector<bool> state_feasibility;
             space_->checkStates(states, state_feasibility);
 
-            // remove the infeasible states
+            // remove the infeasible sampled states
             states->filterStates(state_feasibility);
 
-            // check if the sampled states are all infeasible, then continue
+            // if the sampled states are all infeasible, then continue
             if (states->getNumOfStates() == 0)
             {
                 // clear the states
@@ -312,7 +297,7 @@ namespace CUDAMPLib
                 continue;
             }
 
-            // find k nearest neighbors for each state
+            // find the nearest neighbor from start and goal group for each state
             std::vector<std::vector<int>> neighbors_index;
             int group_number = 2; // for start and goal group, we only need 1 nearest neighbor for each group.
             state_manager->find_the_nearest_neighbors(states, {start_group_indexs, goal_group_indexs}, neighbors_index);
@@ -340,12 +325,7 @@ namespace CUDAMPLib
             // calculate costs and check the feasibility of motion between the states pairs.
             std::vector<bool> motion_feasibility;
             std::vector<float> motion_costs;
-            // auto start_time_check_motions = std::chrono::high_resolution_clock::now();
             bool check_motions_feasiblity = space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
-            // auto end_time_check_motions = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_time_check_motions = end_time_check_motions - start_time_check_motions;
-            // // print
-            // printf("Time taken by checkMotions: %f seconds\n", elapsed_time_check_motions.count());
 
             // clear the states
             motion_states_1.reset();
@@ -359,16 +339,9 @@ namespace CUDAMPLib
                 // clear the states
                 states.reset();
 
-                break;
+                // throw an error
+                throw std::runtime_error("failed to check motions");
             }
-
-            /*
-                Assume we have three sampled states and k = 2, and S is the sampled state, N is the neighbor of S.
-                motion state 1:
-                    S 1, S 2, S 3, S 1, S 2, S 3
-                motion state 2:
-                    N 1 of S 1, N 1 of S 2, N 1 of S 3, N 2 of S 1, N 2 of S 2, N 2 of S 3
-            */
 
             // determine which sampled states can be added to the graph.
             std::vector<bool> can_connect(states->getNumOfStates(), false);
@@ -398,13 +371,8 @@ namespace CUDAMPLib
                 }
             }
 
-            // auto start_time_filter_states = std::chrono::high_resolution_clock::now();
             // remove the states can not connect to any neighbors
             states->filterStates(can_connect);
-            // auto end_time_filter_states = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_time_filter_states = end_time_filter_states - start_time_filter_states;
-            // // print
-            // printf("Time taken by filterStates: %f seconds\n", elapsed_time_filter_states.count());
 
             // add the states to the manager and get their indexs in the manager
             std::vector<int> indexs_of_new_state_in_manager = state_manager->add_states(states);
@@ -414,7 +382,6 @@ namespace CUDAMPLib
                 throw std::runtime_error("indexs_of_new_state_in_manager.size() != neighbors_index_actual.size()");
             }
 
-            // auto start_time_update_graph = std::chrono::high_resolution_clock::now();
             // add the states to the graph
             for(size_t i = 0; i < indexs_of_new_state_in_manager.size(); i++)
             {
@@ -474,23 +441,9 @@ namespace CUDAMPLib
                     throw std::runtime_error("Error: has_connect_to_start && has_connect_to_goal are both false");
                 }
             }
-            // auto end_time_update_graph = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_time_update_graph = end_time_update_graph - start_time_update_graph;
-            // // print
-            // printf("Time taken by update_graph: %f seconds\n", elapsed_time_update_graph.count());
 
             // clear states
             states.reset();
-
-            // auto end_time_iteration = std::chrono::high_resolution_clock::now();
-            // std::chrono::duration<double> elapsed_time_iteration = end_time_iteration - start_time_iteration;
-            // // print in green color
-            // printf("\033[1;32m" "Time taken by iteration %d: %f seconds" "\033[0m \n", t, elapsed_time_iteration.count());
-
-            // start_group_indexs.clear();
-            // goal_group_indexs.clear();
-            // getStartAndGoalGroupIndexs(start_group_indexs, goal_group_indexs);
-            // printf("iter %d start group size: %d, goal group size: %d\n", t, start_group_indexs.size(), goal_group_indexs.size());
 
             if(has_solution)
                 break;
