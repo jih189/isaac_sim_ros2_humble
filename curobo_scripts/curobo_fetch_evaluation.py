@@ -85,7 +85,7 @@ def load_motion_planning_tasks(task_dir_path):
 
 
 # Load the tasks from the task directory
-task_dir_path = "/home/motion_planning_tasks"
+task_dir_path = "/home/motion_planning_tasks/arm"
 tasks = load_motion_planning_tasks(task_dir_path)
 
 tensor_args = TensorDeviceType(device=torch.device("cuda:0"))
@@ -95,7 +95,7 @@ tensor_args = TensorDeviceType(device=torch.device("cuda:0"))
 obstacle_sphere = Sphere(
    name="dummy_obstacle",
    radius=0.2,
-   pose=[0.506, 0.0, 0.7, 1, 0, 0, 0],
+   pose=[0.506, 0.0, 10, 1, 0, 0, 0],
    color=[0, 1.0, 0, 1.0],
 )
 world_model = WorldConfig(
@@ -109,7 +109,7 @@ motion_gen_config = MotionGenConfig.load_from_robot_config(
     "/home/ros/curobo_scripts/fetch.yml",
     cuboid_world,
     interpolation_dt=0.01,
-    collision_cache={"obb": 20, "mesh": 20}
+    collision_cache={"obb": 50, "mesh": 50}
 )
 
 motion_gen = MotionGen(motion_gen_config)
