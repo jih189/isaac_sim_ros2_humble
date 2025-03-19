@@ -291,6 +291,8 @@ namespace CUDAMPLib
              */
             virtual BaseStatesPtr concatinate_states(const std::vector<BaseStatesPtr> & states) = 0;
 
+            virtual void interpolateToStates(const BaseStatesPtr & states, std::vector<int> & nearest_neighbors_indexes, float max_distance) = 0;
+
         protected:
             int num_of_states_; // number of states in manager
             SpaceInfoPtr space_info_;

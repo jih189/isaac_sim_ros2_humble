@@ -213,6 +213,8 @@ namespace CUDAMPLib
 
             BaseStatesPtr concatinate_states(const std::vector<BaseStatesPtr> & states) override;
 
+            void interpolateToStates(const BaseStatesPtr & states, std::vector<int> & nearest_neighbors_indexes, float max_distance) override;
+
         private:
             int num_of_joints;
             float * d_joint_states; // size is num_of_states_ * num_of_joints

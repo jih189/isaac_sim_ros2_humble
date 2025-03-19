@@ -1037,7 +1037,7 @@ namespace CUDAMPLib
 
         return space_jacobian_in_base_link;
     }
-    
+
     void SingleArmStates::print() const
     {
         // static_cast the space_info to SingleArmSpaceInfo
@@ -1484,4 +1484,76 @@ namespace CUDAMPLib
 
         return concatinated_states;
     }
+
+    __global__ void interpolate_to_states(
+        float * d_interpolated_states_joint_values,
+        int num_of_interpolated_states,
+        float * d_joint_states, // all the states in the manager [num_of_states_ * num_of_joints]
+        int num_of_joints,
+        int * d_nearest_neighbors_indexes,
+        float max_distance
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_interpolated_states)
+            return;
+
+        int nearest_neighbor_index = d_nearest_neighbors_indexes[idx];
+
+        float * from_state = &d_joint_states[nearest_neighbor_index * num_of_joints];
+        float * to_state = &d_interpolated_states_joint_values[idx * num_of_joints];
+
+        // calculate the distance between the two states
+        float distance = 0.0f;
+        for (size_t i = 0; i < num_of_joints; i++)
+        {
+            distance += (from_state[i] - to_state[i]) * (from_state[i] - to_state[i]);
+        }
+        distance = sqrtf(distance);
+
+        if (distance > max_distance)
+        {
+            // interpolate the two states
+            for (size_t i = 0; i < num_of_joints; i++)
+            {
+                to_state[i] = from_state[i] + (max_distance / distance) * (to_state[i] - from_state[i]);
+            }
+        }
+    }
+
+    void SingleArmStateManager::interpolateToStates(const BaseStatesPtr & interpolated_states, std::vector<int> & nearest_neighbors_indexes, float max_distance)
+    {
+        // check if the number of states is equal to the size of nearest_neighbors_indexes
+        if (interpolated_states->getNumOfStates() != (int)(nearest_neighbors_indexes.size()))
+        {
+            throw std::runtime_error("Error in SingleArmStateManager::interpolateToStates: the number of states is not equal to the size of nearest_neighbors_indexes");
+        }
+
+        // allocate memory for nearest_neighbors_indexes
+        int * d_nearest_neighbors_indexes;
+        size_t d_nearest_neighbors_indexes_bytes = nearest_neighbors_indexes.size() * sizeof(int);
+        cudaMalloc(&d_nearest_neighbors_indexes, d_nearest_neighbors_indexes_bytes);
+        cudaMemcpy(d_nearest_neighbors_indexes, nearest_neighbors_indexes.data(), d_nearest_neighbors_indexes_bytes, cudaMemcpyHostToDevice);
+
+        int num_of_interpolated_states = interpolated_states->getNumOfStates();
+
+        SingleArmStatesPtr single_arm_interpolated_states = std::dynamic_pointer_cast<SingleArmStates>(interpolated_states);
+
+        float * d_interpolated_states_joint_values = single_arm_interpolated_states->getJointStatesCuda();
+
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_interpolated_states + threadsPerBlock - 1) / threadsPerBlock;
+
+        interpolate_to_states<<<blocksPerGrid, threadsPerBlock>>>(
+            d_interpolated_states_joint_values, // [states->getNumOfStates * num_of_joints]
+            num_of_interpolated_states,
+            d_joint_states, // all the states in the manager [num_of_states_ * num_of_joints]
+            num_of_joints,
+            d_nearest_neighbors_indexes, // [states->getNumOfStates]W
+            max_distance
+        );
+
+        cudaFree(d_nearest_neighbors_indexes);
+    }
+
 } // namespace CUDAMPLib

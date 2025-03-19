@@ -273,14 +273,11 @@ namespace CUDAMPLib
                 nearest_neighbors_index_for_each_sampled_state.push_back(i[0]);
             }
 
-            // get the nearest states
-            auto nearest_states = state_manager->get_states(nearest_neighbors_index_for_each_sampled_state);
+            // constraint the sampled states to be within the max travel distance of their nearest neighbors
+            state_manager->interpolateToStates(states, nearest_neighbors_index_for_each_sampled_state, max_travel_distance_);
 
-            // do interpolation between the sampled states and their nearest neighbors
-            space_->interpolate(nearest_states, states, max_travel_distance_);
+            // update the states
             states->update();
-
-            nearest_states.reset();
 
             // evaluate the feasibility of the sampled states
             std::vector<bool> state_feasibility;
