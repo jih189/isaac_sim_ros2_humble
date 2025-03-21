@@ -15,6 +15,8 @@
 #include <fstream>
 #include <filesystem>
 
+#include "foliation_planner/obstacle_generator.hpp"
+
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("task generator");
 
 struct MotionPlanningTask
@@ -24,62 +26,6 @@ struct MotionPlanningTask
     std::vector<float> start_joint_values;
     std::vector<float> goal_joint_values;
 };
-
-// void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<float> & ball_radius)
-// {
-//     float obstacle_spheres_radius = 0.06;
-//     int num_of_obstacle_spheres = 20;
-//     for (int i = 0; i < num_of_obstacle_spheres; i++)
-//     {
-//         float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
-//         float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
-//         float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
-//         balls_pos.push_back({x, y, z});
-//         ball_radius.push_back(obstacle_spheres_radius);
-//     }
-// }
-
-void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<float> & ball_radius, const std::string & group_name)
-{
-    if (group_name == "arm"){
-        float obstacle_spheres_radius = 0.06;
-        int num_of_obstacle_spheres = 40;
-        for (int i = 0; i < num_of_obstacle_spheres; i++)
-        {
-            float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
-            float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
-            float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
-            balls_pos.push_back({x, y, z});
-            ball_radius.push_back(obstacle_spheres_radius);
-        }
-    }
-    else if (group_name == "fr3_arm")
-    {
-        float obstacle_spheres_radius = 0.06;
-        int num_of_obstacle_spheres = 40;
-        for (int i = 0; i < num_of_obstacle_spheres; i++)
-        {
-            float x = 1.4 * ((float)rand() / RAND_MAX) - 0.7;
-            float y = 1.4 * ((float)rand() / RAND_MAX) - 0.7;
-            float z = 1.0 * ((float)rand() / RAND_MAX) + 0.0;
-
-            if (
-                x > -0.2 && x < 0.2 &&
-                y > -0.2 && y < 0.2 &&
-                z > 0.0 && z < 0.6
-            )
-                continue;
-
-            balls_pos.push_back({x, y, z});
-            ball_radius.push_back(obstacle_spheres_radius);
-        }
-    }
-    else
-    {
-        std::cout << "Group name is not supported!" << std::endl;
-    }
-}
-
 
 std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, int num_tasks)
 {
@@ -93,7 +39,7 @@ std::vector<MotionPlanningTask> generateMotionPlanningTasks(const moveit::core::
     {
         MotionPlanningTask task;
         // generate random obstacles
-        prepare_obstacles(task.obstacle_pos, task.radius, group_name);
+        generate_sphere_obstacles(task.obstacle_pos, task.radius, group_name, 20, 0.06);
 
         // generate start and goal states
         std::vector<float> start_joint_values;
@@ -190,7 +136,7 @@ int main(int argc, char** argv)
 
     // ============================ parameters =================================== //
     // std::string task_dir_path = "/home/motion_planning_tasks";
-    int num_tasks = 100;
+    int num_tasks = 1000;
     std::string GROUP_NAME;
     motion_planning_evaluation_node->get_parameter("group_name", GROUP_NAME);
     std::string task_dir_path = "/home/motion_planning_tasks/" + GROUP_NAME;

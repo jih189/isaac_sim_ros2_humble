@@ -28,6 +28,11 @@
 #include <ompl/geometric/SimpleSetup.h>
 
 #include "foliation_planner/robot_info.hpp"
+#include "foliation_planner/obstacle_generator.hpp"
+
+#include <geometry_msgs/msg/pose.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 // include for time
 #include <chrono>
@@ -122,47 +127,6 @@ visualization_msgs::msg::MarkerArray generate_self_collision_markers(
         robot_collision_spheres_marker_array.markers.push_back(marker);
     }
     return robot_collision_spheres_marker_array;
-}
-
-void prepare_obstacles(std::vector<std::vector<float>> & balls_pos, std::vector<float> & ball_radius, const std::string & group_name)
-{
-    if (group_name == "arm"){
-        float obstacle_spheres_radius = 0.06;
-        int num_of_obstacle_spheres = 40;
-        for (int i = 0; i < num_of_obstacle_spheres; i++)
-        {
-            float x = 0.3 * ((float)rand() / RAND_MAX) + 0.3;
-            float y = 2.0 * 0.5 * ((float)rand() / RAND_MAX) - 0.5;
-            float z = 1.0 * ((float)rand() / RAND_MAX) + 0.5;
-            balls_pos.push_back({x, y, z});
-            ball_radius.push_back(obstacle_spheres_radius);
-        }
-    }
-    else if (group_name == "fr3_arm")
-    {
-        float obstacle_spheres_radius = 0.06;
-        int num_of_obstacle_spheres = 40;
-        for (int i = 0; i < num_of_obstacle_spheres; i++)
-        {
-            float x = 1.4 * ((float)rand() / RAND_MAX) - 0.7;
-            float y = 1.4 * ((float)rand() / RAND_MAX) - 0.7;
-            float z = 1.0 * ((float)rand() / RAND_MAX) + 0.0;
-
-            if (
-                x > -0.2 && x < 0.2 &&
-                y > -0.2 && y < 0.2 &&
-                z > 0.0 && z < 0.6
-            )
-                continue;
-
-            balls_pos.push_back({x, y, z});
-            ball_radius.push_back(obstacle_spheres_radius);
-        }
-    }
-    else
-    {
-        std::cout << "Group name is not supported!" << std::endl;
-    }
 }
 
 void generate_state_markers(
@@ -538,7 +502,7 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // ball_radius.push_back(0.2);
 
     // create obstacles randomly
-    prepare_obstacles(balls_pos, ball_radius, group_name);
+    generate_sphere_obstacles(balls_pos, ball_radius, group_name, 20, 0.06);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -635,7 +599,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     std::vector<float> ball_radius;
 
     // create obstacles randomly
-    prepare_obstacles(balls_pos, ball_radius, group_name);
+    generate_sphere_obstacles(balls_pos, ball_radius, group_name, 20, 0.06);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -1093,7 +1057,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    prepare_obstacles(balls_pos, ball_radius, group_name);
+    generate_sphere_obstacles(balls_pos, ball_radius, group_name, 20, 0.06);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -1332,7 +1296,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // Prepare obstacle constraint
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    prepare_obstacles(balls_pos, ball_radius, group_name);
+    generate_sphere_obstacles(balls_pos, ball_radius, group_name, 20, 0.06);
 
     // create planning scene
     auto world = std::make_shared<collision_detection::World>();
@@ -1568,7 +1532,7 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
     // Prepare obstacle constraint
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    prepare_obstacles(balls_pos, ball_radius, group_name);
+    generate_sphere_obstacles(balls_pos, ball_radius, group_name, 20, 0.06);
 
     // create planning scene
     auto world = std::make_shared<collision_detection::World>();
@@ -2285,12 +2249,110 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     }
 }
 
-void TEST_ROBOT_INFO(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+// struct BoundingBox
+// {
+//     float x_min;
+//     float x_max;
+//     float y_min;
+//     float y_max;
+//     float z_min;
+//     float z_max;
+
+//     // pose
+//     float x;
+//     float y;
+//     float z;
+//     float roll;
+//     float pitch;
+//     float yaw;
+// };
+
+void TEST_OBSTACLES(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
+    // get robot state
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+
+    std::vector<BoundingBox> unmoveable_bounding_boxes_of_robot = getUnmoveableBoundingBoxes(robot_model, group_name, 0.05);
+    std::vector<std::vector<float>> obstacle_positions;
+    std::vector<float> obstacle_radius;
+    genSphereObstacles(20, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, obstacle_positions, obstacle_radius);
+
+    // Generate markers for the obstacles
+    visualization_msgs::msg::MarkerArray obstacle_marker_array = generate_obstacles_markers(obstacle_positions, obstacle_radius, node);
+
+    // Create a obstacle MarkerArray publisher
+    auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
+
+    // convert those bounding boxes to markers and publish them
+    visualization_msgs::msg::MarkerArray marker_array;
+    int id_counter = 0;
+
+    for (const auto& b : unmoveable_bounding_boxes_of_robot)
+    {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";  // Replace with appropriate frame if needed
+        marker.header.stamp = rclcpp::Clock().now();
+        marker.ns = "unmoveable_bounding_boxes";
+        marker.id = id_counter++;
+        marker.type = visualization_msgs::msg::Marker::CUBE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+
+        // Size of the box
+        marker.scale.x = b.x_max - b.x_min;
+        marker.scale.y = b.y_max - b.y_min;
+        marker.scale.z = b.z_max - b.z_min;
+
+        // Position and orientation
+        marker.pose.position.x = b.x;
+        marker.pose.position.y = b.y;
+        marker.pose.position.z = b.z;
+
+        tf2::Quaternion q;
+        q.setRPY(b.roll, b.pitch, b.yaw);
+        marker.pose.orientation = tf2::toMsg(q);
+
+        // Color (e.g., red with alpha)
+        marker.color.r = 1.0;
+        marker.color.g = 0.0;
+        marker.color.b = 0.0;
+        marker.color.a = 0.5;
+
+        // Lifetime and other properties
+        marker_array.markers.push_back(marker);
+    }
+
+    // visualize the robot state
+    moveit_msgs::msg::RobotState robot_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, robot_state_msg);
+
+    moveit_msgs::msg::DisplayRobotState display_robot_state;
+    display_robot_state.state = robot_state_msg;
+
+    // Create a robot state publisher
+    auto robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+    auto unmoveable_bounding_boxes_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("unmoveable_region", 1);
+
+    // Publish the message in a loop
+    while (rclcpp::ok())
+    {
+        // Publish the message
+        unmoveable_bounding_boxes_publisher->publish(marker_array);
+
+        robot_state_publisher->publish(display_robot_state);
+
+        obstacle_marker_publisher->publish(obstacle_marker_array);
+
+        rclcpp::spin_some(node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 int main(int argc, char** argv)
@@ -2328,7 +2390,7 @@ int main(int argc, char** argv)
     // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
-    // TEST_ROBOT_INFO(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_OBSTACLES(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
@@ -2346,7 +2408,7 @@ int main(int argc, char** argv)
 
     // TEST_NEAREST_NEIGHBOR(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
