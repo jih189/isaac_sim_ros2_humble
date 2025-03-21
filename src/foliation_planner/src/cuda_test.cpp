@@ -2283,19 +2283,26 @@ void TEST_OBSTACLES(const moveit::core::RobotModelPtr & robot_model, const std::
 
     // generate collision spheres
     std::vector<Sphere> collision_spheres;
-    genSphereObstacles(20, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+    genSphereObstacles(40, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
 
     // generate collision cuboids
     std::vector<BoundingBox> collision_cuboids;
-    genCuboidObstacles(20, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_cuboids);
+    genCuboidObstacles(40, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_cuboids);
+
+    // generate collisino cylinders
+    std::vector<Cylinder> collision_cylinders;
+    genCylinderObstacles(40, 0.08, 0.06, 0.1, 0.05, unmoveable_bounding_boxes_of_robot, collision_cylinders);
+
 
     // Generate markers for the obstacles
     visualization_msgs::msg::MarkerArray sphere_obstacle_marker_array = generateSpheresMarkers(collision_spheres, node);
     visualization_msgs::msg::MarkerArray cuboid_obstacle_marker_array = generateBoundingBoxesMarkers(collision_cuboids, node);
+    visualization_msgs::msg::MarkerArray cylinder_obstacle_marker_array = generateCylindersMarkers(collision_cylinders, node);
 
     // Create a obstacle MarkerArray publisher
     auto sphere_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
     auto cuboid_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cuboids", 1);
+    auto cylinder_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cylinders", 1);
 
     // convert those bounding boxes to markers and publish them
     visualization_msgs::msg::MarkerArray marker_array;
@@ -2356,6 +2363,7 @@ void TEST_OBSTACLES(const moveit::core::RobotModelPtr & robot_model, const std::
 
         sphere_obstacle_marker_publisher->publish(sphere_obstacle_marker_array);
         cuboid_obstacle_marker_publisher->publish(cuboid_obstacle_marker_array);
+        cylinder_obstacle_marker_publisher->publish(cylinder_obstacle_marker_array);
 
         rclcpp::spin_some(node);
 

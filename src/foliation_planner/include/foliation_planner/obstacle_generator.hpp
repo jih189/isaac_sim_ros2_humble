@@ -157,6 +157,20 @@ struct Sphere
     float radius;
 };
 
+struct Cylinder
+{
+    float x;
+    float y;
+    float z;
+
+    float roll;
+    float pitch;
+    float yaw;
+
+    float radius;
+    float height;
+};
+
 /**
     Generate a map of bounding boxes for each link in the robot model.
  */
@@ -559,6 +573,271 @@ visualization_msgs::msg::MarkerArray generateBoundingBoxesMarkers(
         marker.color.g = 0.5;
         marker.color.b = 0.0;
         marker.color.a = 1.0;
+
+        marker_array.markers.push_back(marker);
+    }
+
+    return marker_array;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Convert Euler angles (roll, pitch, yaw) to a rotation matrix (3x3) stored in a 2D array.
+// The rotation order is assumed to be Z (yaw) -> Y (pitch) -> X (roll).
+void eulerToRotationMatrix(float roll, float pitch, float yaw, float R[3][3]) {
+    float cosR = std::cos(roll),   sinR = std::sin(roll);
+    float cosP = std::cos(pitch),  sinP = std::sin(pitch);
+    float cosY = std::cos(yaw),    sinY = std::sin(yaw);
+
+    R[0][0] = cosY * cosP;
+    R[0][1] = cosY * sinP * sinR - sinY * cosR;
+    R[0][2] = cosY * sinP * cosR + sinY * sinR;
+    
+    R[1][0] = sinY * cosP;
+    R[1][1] = sinY * sinP * sinR + cosY * cosR;
+    R[1][2] = sinY * sinP * cosR - cosY * sinR;
+    
+    R[2][0] = -sinP;
+    R[2][1] = cosP * sinR;
+    R[2][2] = cosP * cosR;
+}
+
+// Helper function: absolute value of a float.
+inline float fabsf_inline(float a) {
+    return std::fabs(a);
+}
+
+// Test for overlap between two oriented bounding boxes (OBBs) using the Separating Axis Theorem.
+// Each box is represented by its center (3-element array), half-size (3-element array), and rotation matrix (3x3 array).
+bool OBBOverlap(const float center1[3], const float half1[3], const float R1[3][3],
+                const float center2[3], const float half2[3], const float R2[3][3])
+{
+    float R[3][3];
+    // Compute rotation matrix R = R1^T * R2.
+    for (int i = 0; i < 3; i++){
+        for (int j = 0; j < 3; j++){
+            R[i][j] = R1[0][i] * R2[0][j] +
+                      R1[1][i] * R2[1][j] +
+                      R1[2][i] * R2[2][j];
+        }
+    }
+    
+    // Compute translation vector (from box1 to box2) in world coordinates.
+    float t_world[3] = { center2[0] - center1[0],
+                         center2[1] - center1[1],
+                         center2[2] - center1[2] };
+    // Express translation vector in box1's coordinate frame.
+    float t[3];
+    for (int i = 0; i < 3; i++){
+        // Use the i-th axis of box1 (the i-th column of R1).
+        t[i] = t_world[0] * R1[0][i] +
+               t_world[1] * R1[1][i] +
+               t_world[2] * R1[2][i];
+    }
+    
+    // Precompute absolute values of R, adding a small epsilon to counter floating point errors.
+    float AbsR[3][3];
+    const float eps = 1e-6f;
+    for (int i = 0; i < 3; i++){
+        for (int j = 0; j < 3; j++){
+            AbsR[i][j] = fabsf_inline(R[i][j]) + eps;
+        }
+    }
+    
+    // Test axes L = A0, A1, A2 (box1's local axes).
+    for (int i = 0; i < 3; i++){
+        float ra = half1[i];
+        float rb = half2[0] * AbsR[i][0] + half2[1] * AbsR[i][1] + half2[2] * AbsR[i][2];
+        if (std::fabs(t[i]) > ra + rb)
+            return false;
+    }
+    
+    // Test axes L = B0, B1, B2 (box2's local axes).
+    for (int j = 0; j < 3; j++){
+        float ra = half1[0] * AbsR[0][j] + half1[1] * AbsR[1][j] + half1[2] * AbsR[2][j];
+        float rb = half2[j];
+        float t_proj = std::fabs(t[0] * R[0][j] + t[1] * R[1][j] + t[2] * R[2][j]);
+        if (t_proj > ra + rb)
+            return false;
+    }
+    
+    // Test the 9 cross-product axes: L = A_i x B_j.
+    for (int i = 0; i < 3; i++){
+        for (int j = 0; j < 3; j++){
+            int i1 = (i + 1) % 3;
+            int i2 = (i + 2) % 3;
+            int j1 = (j + 1) % 3;
+            int j2 = (j + 2) % 3;
+            float ra = half1[i1] * AbsR[i2][j] + half1[i2] * AbsR[i1][j];
+            float rb = half2[j1] * AbsR[i][j2] + half2[j2] * AbsR[i][j1];
+            float t_val = std::fabs(t[i2] * R[i1][j] - t[i1] * R[i2][j]);
+            if (t_val > ra + rb)
+                return false;
+        }
+    }
+    
+    // No separating axis found – the boxes overlap.
+    return true;
+}
+
+// Checks whether the candidate cylinder collides with any bounding box in the provided vector.
+// The cylinder is approximated as an OBB with half-sizes: (radius, radius, height/2).
+bool isCylinderCollidingWithBoundingBoxes(const Cylinder &cyl, const std::vector<BoundingBox>& boxes)
+{
+    // Cylinder's center and half-size.
+    float centerCyl[3] = { cyl.x, cyl.y, cyl.z };
+    float halfCyl[3] = { cyl.radius, cyl.radius, cyl.height / 2.0f };
+    float R_cyl[3][3];
+    eulerToRotationMatrix(cyl.roll, cyl.pitch, cyl.yaw, R_cyl);
+    
+    // For each bounding box, convert it to an OBB and test for overlap.
+    for (const auto &box : boxes)
+    {
+        float centerBox[3] = { box.x, box.y, box.z };
+        float halfBox[3] = { (box.x_max - box.x_min) / 2.0f,
+                             (box.y_max - box.y_min) / 2.0f,
+                             (box.z_max - box.z_min) / 2.0f };
+        float R_box[3][3];
+        eulerToRotationMatrix(box.roll, box.pitch, box.yaw, R_box);
+        
+        if (OBBOverlap(centerCyl, halfCyl, R_cyl, centerBox, halfBox, R_box))
+        {
+            // Collision detected.
+            return true;
+        }
+    }
+    return false;
+}
+
+
+// struct Cylinder
+// {
+//     float x;
+//     float y;
+//     float z;
+
+//     float roll;
+//     float pitch;
+//     float yaw;
+
+//     float radius;
+//     float height;
+// };
+
+void genCylinderObstacles(
+    int num_of_obstacles,
+    float max_radius,
+    float min_radius,
+    float max_height,
+    float min_height,
+    const std::vector<BoundingBox>& bounding_boxes,
+    std::vector<Cylinder>& obstacle_cylinders)
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    std::uniform_real_distribution<float> dist_x(WORKSPACE_X_MIN, WORKSPACE_X_MAX);
+    std::uniform_real_distribution<float> dist_y(WORKSPACE_Y_MIN, WORKSPACE_Y_MAX);
+    std::uniform_real_distribution<float> dist_z(WORKSPACE_Z_MIN, WORKSPACE_Z_MAX);
+    std::uniform_real_distribution<float> dist_radius(min_radius, max_radius);
+    std::uniform_real_distribution<float> dist_height(min_height, max_height);
+    std::uniform_real_distribution<float> dist_angle(-M_PI, M_PI); // roll, pitch, yaw
+
+    obstacle_cylinders.clear();
+
+    int max_attempts = 1000;
+    int attempts = 0;
+
+    while (static_cast<int>(obstacle_cylinders.size()) < num_of_obstacles && attempts < max_attempts)
+    {
+        Cylinder candidate;
+        candidate.x = dist_x(gen);
+        candidate.y = dist_y(gen);
+        candidate.z = dist_z(gen);
+        candidate.radius = dist_radius(gen);
+        candidate.height = dist_height(gen);
+        candidate.roll = dist_angle(gen);
+        candidate.pitch = dist_angle(gen);
+        candidate.yaw = dist_angle(gen);
+
+        // Combine existing boxes + previously added cylinders
+        std::vector<BoundingBox> all_boxes = bounding_boxes;
+
+        for (const auto& cyl : obstacle_cylinders)
+        {
+            BoundingBox cyl_box;
+            cyl_box.x_min = -cyl.radius;
+            cyl_box.x_max =  cyl.radius;
+            cyl_box.y_min = -cyl.radius;
+            cyl_box.y_max =  cyl.radius;
+            cyl_box.z_min = -cyl.height / 2.0f;
+            cyl_box.z_max =  cyl.height / 2.0f;
+            cyl_box.x = cyl.x;
+            cyl_box.y = cyl.y;
+            cyl_box.z = cyl.z;
+            cyl_box.roll = cyl.roll;
+            cyl_box.pitch = cyl.pitch;
+            cyl_box.yaw = cyl.yaw;
+            all_boxes.push_back(cyl_box);
+        }
+
+        if (!isCylinderCollidingWithBoundingBoxes(candidate, all_boxes))
+        {
+            obstacle_cylinders.push_back(candidate);
+        }
+
+        attempts++;
+    }
+
+    if (static_cast<int>(obstacle_cylinders.size()) < num_of_obstacles)
+    {
+        std::cout << "\033[1;31mGenerated only " << obstacle_cylinders.size()
+                  << " out of " << num_of_obstacles
+                  << " cylinders after " << max_attempts << " attempts.\033[0m" << std::endl;
+    }
+}
+
+visualization_msgs::msg::MarkerArray generateCylindersMarkers(
+    const std::vector<Cylinder>& cylinders,
+    rclcpp::Node::SharedPtr node)
+{
+    visualization_msgs::msg::MarkerArray marker_array;
+
+    for (size_t i = 0; i < cylinders.size(); ++i)
+    {
+        const auto& cyl = cylinders[i];
+
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";  // Or your custom frame
+        marker.header.stamp = node->now();
+        marker.ns = "obstacle_cylinders";
+        marker.id = static_cast<int>(i);
+        marker.type = visualization_msgs::msg::Marker::CYLINDER;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+
+        // Position (center of the cylinder)
+        marker.pose.position.x = cyl.x;
+        marker.pose.position.y = cyl.y;
+        marker.pose.position.z = cyl.z;
+
+        // Orientation (convert roll-pitch-yaw to quaternion)
+        tf2::Quaternion q;
+        q.setRPY(cyl.roll, cyl.pitch, cyl.yaw);
+        marker.pose.orientation.x = q.x();
+        marker.pose.orientation.y = q.y();
+        marker.pose.orientation.z = q.z();
+        marker.pose.orientation.w = q.w();
+
+        // Dimensions: Cylinder is along Z-axis by default in RViz
+        marker.scale.x = 2.0f * cyl.radius;  // diameter (X)
+        marker.scale.y = 2.0f * cyl.radius;  // diameter (Y)
+        marker.scale.z = cyl.height;        // height (Z)
+
+        // Color (customize as needed)
+        marker.color.r = 0.2f;
+        marker.color.g = 0.8f;
+        marker.color.b = 0.2f;
+        marker.color.a = 1.0f;
 
         marker_array.markers.push_back(marker);
     }
