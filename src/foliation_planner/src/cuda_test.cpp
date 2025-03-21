@@ -2278,16 +2278,24 @@ void TEST_OBSTACLES(const moveit::core::RobotModelPtr & robot_model, const std::
     // set robot state to default state
     robot_state->setToDefaultValues();
 
+    // find the region where the obstacles should not be placed
     std::vector<BoundingBox> unmoveable_bounding_boxes_of_robot = getUnmoveableBoundingBoxes(robot_model, group_name, 0.05);
-    std::vector<std::vector<float>> obstacle_positions;
-    std::vector<float> obstacle_radius;
-    genSphereObstacles(20, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, obstacle_positions, obstacle_radius);
+
+    // generate collision spheres
+    std::vector<Sphere> collision_spheres;
+    genSphereObstacles(20, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+
+    // generate collision cuboids
+    std::vector<BoundingBox> collision_cuboids;
+    genCuboidObstacles(20, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_cuboids);
 
     // Generate markers for the obstacles
-    visualization_msgs::msg::MarkerArray obstacle_marker_array = generate_obstacles_markers(obstacle_positions, obstacle_radius, node);
+    visualization_msgs::msg::MarkerArray sphere_obstacle_marker_array = generateSpheresMarkers(collision_spheres, node);
+    visualization_msgs::msg::MarkerArray cuboid_obstacle_marker_array = generateBoundingBoxesMarkers(collision_cuboids, node);
 
     // Create a obstacle MarkerArray publisher
-    auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
+    auto sphere_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
+    auto cuboid_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cuboids", 1);
 
     // convert those bounding boxes to markers and publish them
     visualization_msgs::msg::MarkerArray marker_array;
@@ -2346,7 +2354,8 @@ void TEST_OBSTACLES(const moveit::core::RobotModelPtr & robot_model, const std::
 
         robot_state_publisher->publish(display_robot_state);
 
-        obstacle_marker_publisher->publish(obstacle_marker_array);
+        sphere_obstacle_marker_publisher->publish(sphere_obstacle_marker_array);
+        cuboid_obstacle_marker_publisher->publish(cuboid_obstacle_marker_array);
 
         rclcpp::spin_some(node);
 

@@ -12,6 +12,9 @@
 #include <moveit/robot_model/joint_model_group.h>
 #include <geometric_shapes/shapes.h>
 
+#include <visualization_msgs/msg/marker_array.hpp>
+#include <rclcpp/rclcpp.hpp>
+
 // Workspace bounds for sampling (can be made parameters if needed)
 const float WORKSPACE_X_MIN = -0.5f;
 const float WORKSPACE_X_MAX =  1.0f;
@@ -146,6 +149,14 @@ struct BoundingBox
     float yaw;
 };
 
+struct Sphere
+{
+    float x;
+    float y;
+    float z;
+    float radius;
+};
+
 /**
     Generate a map of bounding boxes for each link in the robot model.
  */
@@ -244,38 +255,6 @@ std::vector<BoundingBox> getUnmoveableBoundingBoxes(const moveit::core::RobotMod
     return bounding_boxes_in_base_link;
 }
 
-/**
-    Check if a point is inside a bounding box of a vector of bounding boxes.
-    For each bounding box, we first need to transform the point to the bounding box frame, then check if the point is inside the bounding box.
- */
-bool isPointInsideBoundingBoxes(const Eigen::Vector3d & point, const std::vector<BoundingBox> & bounding_boxes)
-{
-    for (const auto& box : bounding_boxes)
-    {
-        // Translation of the bounding box
-        Eigen::Vector3d box_translation(box.x, box.y, box.z);
-
-        // Construct rotation matrix from roll, pitch, yaw (ZYX order)
-        Eigen::AngleAxisd roll_angle(box.roll, Eigen::Vector3d::UnitX());
-        Eigen::AngleAxisd pitch_angle(box.pitch, Eigen::Vector3d::UnitY());
-        Eigen::AngleAxisd yaw_angle(box.yaw, Eigen::Vector3d::UnitZ());
-        // Eigen::Matrix3d box_rotation = yaw_angle * pitch_angle * roll_angle;
-        Eigen::Matrix3d box_rotation = (yaw_angle * pitch_angle * roll_angle).toRotationMatrix();
-
-        // Transform the point into the bounding box's local frame
-        Eigen::Vector3d local_point = box_rotation.transpose() * (point - box_translation);
-
-        // Check if the local point lies within the AABB bounds in local frame
-        if (local_point.x() >= box.x_min && local_point.x() <= box.x_max &&
-            local_point.y() >= box.y_min && local_point.y() <= box.y_max &&
-            local_point.z() >= box.z_min && local_point.z() <= box.z_max)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool isSphereCollidingWithBoundingBoxes(const Eigen::Vector3d& center,
                                         float radius,
                                         const std::vector<BoundingBox>& bounding_boxes)
@@ -307,15 +286,14 @@ bool isSphereCollidingWithBoundingBoxes(const Eigen::Vector3d& center,
 }
 
 /**
-    Sample a number of spheres which is not in the bounding boxes of the robot model.
+    Sample a number of spheres which do not collide with the bounding boxes of the robot model.
     */
 void genSphereObstacles(
     int num_of_obstacles, 
     float max_radius, 
     float min_radius, 
     const std::vector<BoundingBox> & bounding_boxes, 
-    std::vector<std::vector<float>> & obstacle_positions,
-    std::vector<float> & obstacle_radius
+    std::vector<Sphere> & obstacle_spheres
 )
 {
     std::random_device rd;
@@ -325,33 +303,265 @@ void genSphereObstacles(
     std::uniform_real_distribution<float> dist_y(WORKSPACE_Y_MIN, WORKSPACE_Y_MAX);
     std::uniform_real_distribution<float> dist_z(WORKSPACE_Z_MIN, WORKSPACE_Z_MAX);
 
-    obstacle_positions.clear();
-    obstacle_radius.clear();
+    obstacle_spheres.clear();
+
     int max_attempts = 1000;
     int attempts = 0;
 
-    while (obstacle_positions.size() < static_cast<size_t>(num_of_obstacles) && attempts < max_attempts)
+    while (obstacle_spheres.size() < static_cast<size_t>(num_of_obstacles) && attempts < max_attempts)
     {
         Eigen::Vector3d position_candidate(dist_x(gen), dist_y(gen), dist_z(gen));
         // Random radius
         float radius_candidate = min_radius + (max_radius - min_radius) * ((float)rand() / RAND_MAX);
 
-        // Check if it's inside any bounding box
-        // if (!isPointInsideBoundingBoxes(candidate, bounding_boxes))
+        // Check if it collides with any bounding box
         if (!isSphereCollidingWithBoundingBoxes(position_candidate, radius_candidate, bounding_boxes))
         {
             std::vector<double> obstacle_position_double = {position_candidate.x(), position_candidate.y(), position_candidate.z()}; 
             // convert c from double to float
             std::vector<float> obstacle_position(obstacle_position_double.begin(), obstacle_position_double.end());
-            obstacle_positions.push_back(obstacle_position);
-            obstacle_radius.push_back(radius_candidate);
+
+            Sphere obstacle_sphere;
+            obstacle_sphere.x = (float)(position_candidate.x());
+            obstacle_sphere.y = (float)(position_candidate.y());
+            obstacle_sphere.z = (float)(position_candidate.z());
+            obstacle_sphere.radius = radius_candidate;
+
+            obstacle_spheres.push_back(obstacle_sphere);
         }
         attempts++;
     }
 
-    if (obstacle_positions.size() < static_cast<size_t>(num_of_obstacles))
+    if (static_cast<int>(obstacle_spheres.size()) < num_of_obstacles)
     {
-        std::cerr << "[genSphereObstacles] Warning: Only generated " << obstacle_positions.size()
-                  << " obstacles after " << attempts << " attempts." << std::endl;
+        // print in red
+        std::cout << "\033[1;31mFailed to generate " << num_of_obstacles << " spheres after " << max_attempts << " attempts.\033[0m" << std::endl;
     }
+}
+
+visualization_msgs::msg::MarkerArray generateSpheresMarkers(
+    const std::vector<Sphere> & spheres,
+    rclcpp::Node::SharedPtr node)
+{
+     // Create a obstacle MarkerArray message
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array;
+    for (size_t i = 0; i < spheres.size(); i++)
+    {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = node->now();
+        marker.ns = "obstacle_collision_spheres";
+        marker.id = i;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = spheres[i].x;
+        marker.pose.position.y = spheres[i].y;
+        marker.pose.position.z = spheres[i].z;
+
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 2 * spheres[i].radius;
+        marker.scale.y = 2 * spheres[i].radius;
+        marker.scale.z = 2 * spheres[i].radius;
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.5;
+        marker.color.g = 0.5;
+        marker.color.b = 0.0;
+        obstacle_collision_spheres_marker_array.markers.push_back(marker);
+    }
+    return obstacle_collision_spheres_marker_array;
+}
+
+bool isBoundingBoxesCollidingWithBoundingBoxes(
+    const BoundingBox& box1,
+    const std::vector<BoundingBox>& other_boxes)
+{
+    for (const auto& box2 : other_boxes)
+    {
+        // Build rotation matrices
+        Eigen::AngleAxisd roll1(box1.roll, Eigen::Vector3d::UnitX());
+        Eigen::AngleAxisd pitch1(box1.pitch, Eigen::Vector3d::UnitY());
+        Eigen::AngleAxisd yaw1(box1.yaw, Eigen::Vector3d::UnitZ());
+        Eigen::Matrix3d R1 = (yaw1 * pitch1 * roll1).toRotationMatrix();
+
+        Eigen::AngleAxisd roll2(box2.roll, Eigen::Vector3d::UnitX());
+        Eigen::AngleAxisd pitch2(box2.pitch, Eigen::Vector3d::UnitY());
+        Eigen::AngleAxisd yaw2(box2.yaw, Eigen::Vector3d::UnitZ());
+        Eigen::Matrix3d R2 = (yaw2 * pitch2 * roll2).toRotationMatrix();
+
+        // Half-dimensions of box1 and box2 in local frame
+        Eigen::Vector3d half1(
+            0.5 * (box1.x_max - box1.x_min),
+            0.5 * (box1.y_max - box1.y_min),
+            0.5 * (box1.z_max - box1.z_min));
+
+        Eigen::Vector3d half2(
+            0.5 * (box2.x_max - box2.x_min),
+            0.5 * (box2.y_max - box2.y_min),
+            0.5 * (box2.z_max - box2.z_min));
+
+        // Translation vector between box centers in box1's frame
+        Eigen::Vector3d t = R1.transpose() * (Eigen::Vector3d(box2.x, box2.y, box2.z) - Eigen::Vector3d(box1.x, box1.y, box1.z));
+
+        // Rotation matrix from box2 to box1 frame
+        Eigen::Matrix3d R = R1.transpose() * R2;
+
+        // Absolute value with epsilon to handle near-zero cases
+        Eigen::Matrix3d AbsR;
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+                AbsR(i, j) = std::abs(R(i, j)) + 1e-6;
+
+        // SAT: Test all 15 separating axes
+        for (int i = 0; i < 3; ++i) {
+            double ra = half1[i];
+            double rb = half2[0] * AbsR(i, 0) + half2[1] * AbsR(i, 1) + half2[2] * AbsR(i, 2);
+            if (std::abs(t[i]) > ra + rb)
+                goto no_collision;
+        }
+
+        for (int i = 0; i < 3; ++i) {
+            double ra = half1[0] * AbsR(0, i) + half1[1] * AbsR(1, i) + half1[2] * AbsR(2, i);
+            double rb = half2[i];
+            if (std::abs(t[0] * R(0, i) + t[1] * R(1, i) + t[2] * R(2, i)) > ra + rb)
+                goto no_collision;
+        }
+
+        // Cross products of axes
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                double ra = half1[(i+1)%3] * AbsR((i+2)%3, j) + half1[(i+2)%3] * AbsR((i+1)%3, j);
+                double rb = half2[(j+1)%3] * AbsR(i, (j+2)%3) + half2[(j+2)%3] * AbsR(i, (j+1)%3);
+                double dist = std::abs(t((i+2)%3) * R((i+1)%3, j) - t((i+1)%3) * R((i+2)%3, j));
+                if (dist > ra + rb)
+                    goto no_collision;
+            }
+        }
+
+        // No separating axis found → collision
+        return true;
+
+    no_collision:
+        continue;
+    }
+    return false;
+}
+
+/**
+    Sample a number of cuboid, represented as bounding box, which do not collide with the bounding boxes of the robot model.
+    */
+void genCuboidObstacles(
+    int num_of_obstacles,
+    float max_side_length,
+    float min_side_length,
+    const std::vector<BoundingBox>& bounding_boxes,
+    std::vector<BoundingBox>& obstacle_bounding_boxes)
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    std::uniform_real_distribution<float> dist_x(WORKSPACE_X_MIN, WORKSPACE_X_MAX);
+    std::uniform_real_distribution<float> dist_y(WORKSPACE_Y_MIN, WORKSPACE_Y_MAX);
+    std::uniform_real_distribution<float> dist_z(WORKSPACE_Z_MIN, WORKSPACE_Z_MAX);
+    std::uniform_real_distribution<float> dist_length(min_side_length, max_side_length);
+    std::uniform_real_distribution<float> dist_angle(-M_PI, M_PI);
+
+    obstacle_bounding_boxes.clear();
+
+    int max_attempts = 1000;
+    int attempts = 0;
+
+    while (static_cast<int>(obstacle_bounding_boxes.size()) < num_of_obstacles && attempts < max_attempts)
+    {
+        float dx = dist_length(gen);
+        float dy = dist_length(gen);
+        float dz = dist_length(gen);
+
+        BoundingBox candidate;
+        candidate.x_min = -dx / 2.0f;
+        candidate.x_max = dx / 2.0f;
+        candidate.y_min = -dy / 2.0f;
+        candidate.y_max = dy / 2.0f;
+        candidate.z_min = -dz / 2.0f;
+        candidate.z_max = dz / 2.0f;
+
+        candidate.x = dist_x(gen);
+        candidate.y = dist_y(gen);
+        candidate.z = dist_z(gen);
+        candidate.roll  = dist_angle(gen);
+        candidate.pitch = dist_angle(gen);
+        candidate.yaw   = dist_angle(gen);
+
+        std::vector<BoundingBox> existing_boxes = bounding_boxes;
+        existing_boxes.insert(existing_boxes.end(), obstacle_bounding_boxes.begin(), obstacle_bounding_boxes.end());
+
+        if (!isBoundingBoxesCollidingWithBoundingBoxes(candidate, existing_boxes))
+        {
+            obstacle_bounding_boxes.push_back(candidate);
+        }
+
+        attempts++;
+    }
+
+    if (static_cast<int>(obstacle_bounding_boxes.size()) < num_of_obstacles)
+    {
+        std::cout << "\033[1;31mGenerated only " << obstacle_bounding_boxes.size()
+                  << " out of " << num_of_obstacles
+                  << " cuboids after " << max_attempts << " attempts.\033[0m" << std::endl;
+    }
+}
+
+visualization_msgs::msg::MarkerArray generateBoundingBoxesMarkers(
+    const std::vector<BoundingBox>& boxes,
+    rclcpp::Node::SharedPtr node)
+{
+    visualization_msgs::msg::MarkerArray marker_array;
+
+    for (size_t i = 0; i < boxes.size(); ++i)
+    {
+        const auto& box = boxes[i];
+
+        // Compute dimensions
+        float dx = box.x_max - box.x_min;
+        float dy = box.y_max - box.y_min;
+        float dz = box.z_max - box.z_min;
+
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = node->now();
+        marker.ns = "obstacle_collision_boxes";
+        marker.id = static_cast<int>(i);
+        marker.type = visualization_msgs::msg::Marker::CUBE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+
+        // Center position
+        marker.pose.position.x = box.x;
+        marker.pose.position.y = box.y;
+        marker.pose.position.z = box.z;
+
+        // Orientation from RPY
+        tf2::Quaternion q;
+        q.setRPY(box.roll, box.pitch, box.yaw);
+        marker.pose.orientation.x = q.x();
+        marker.pose.orientation.y = q.y();
+        marker.pose.orientation.z = q.z();
+        marker.pose.orientation.w = q.w();
+
+        // Size
+        marker.scale.x = dx;
+        marker.scale.y = dy;
+        marker.scale.z = dz;
+
+        // Color
+        marker.color.r = 0.5;
+        marker.color.g = 0.5;
+        marker.color.b = 0.0;
+        marker.color.a = 1.0;
+
+        marker_array.markers.push_back(marker);
+    }
+
+    return marker_array;
 }
