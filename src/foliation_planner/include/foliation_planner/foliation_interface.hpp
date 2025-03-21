@@ -15,6 +15,8 @@
 // cudampl include
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
 #include <CUDAMPLib/constraints/EnvConstraintSphere.h>
+#include <CUDAMPLib/constraints/EnvConstraintCuboid.h>
+#include <CUDAMPLib/constraints/EnvConstraintCylinder.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
 #include <CUDAMPLib/constraints/TaskSpaceConstraint.h>
 #include <CUDAMPLib/constraints/BoundaryConstraint.h>
@@ -85,25 +87,19 @@ private:
 
   // Planner parameters
   float obstacle_sphere_radius_;
-  // int k_;
-  // int sample_attempts_in_each_iteration_;
-  // float max_travel_distance_;
 
+  // dof
   int dof_;
 
   // cudampl objects
   CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint_;
   std::shared_ptr<RobotInfo> robot_info_ptr_;
 
-  std::vector<Eigen::Vector3d> genPointCloudFromWorld(const collision_detection::WorldConstPtr & world);
-
-  // convert shape to point cloud
-  std::vector<Eigen::Vector3d> shapeToPointCloud(const shapes::ShapeConstPtr& shape, const Eigen::Isometry3d& pose, float resolution = 0.1);
-
   bool solve_motion_task(
     moveit::core::RobotStatePtr& robot_state,
     const moveit::core::JointModelGroup* joint_model_group, 
-    const std::vector<Eigen::Vector3d> obstacle_points,
+    const std::vector<shapes::ShapeConstPtr> obstacle_shapes,
+    const std::vector<Eigen::Affine3d> obstacle_poses,
     const std::vector<double>& start_joint_vals, std::vector<CUDAMPLib::BaseConstraintPtr> goal_constraints,
     robot_trajectory::RobotTrajectoryPtr& joint_trajectory,
     float max_planning_time);

@@ -7,8 +7,6 @@
 #include "moveit/robot_state/conversions.h"
 #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
-// #include <moveit_visual_tools/moveit_visual_tools.h>
-// #include <moveit/robot_state/joint_model_group.hpp>
 
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("foliation_example");
 
@@ -123,36 +121,36 @@ int main(int argc, char** argv)
     req.planner_id = PLANNER_ID;
 
     // Set the planning time
-    req.allowed_planning_time = 10.0; // 5 sec
+    req.allowed_planning_time = 10.0;
 
     // Get the start state
     robot_state->setJointGroupPositions(joint_model_group, start_joint_vals);
     robot_state->update();
     moveit::core::robotStateToRobotStateMsg(*robot_state, req.start_state);
 
-    // // Construct goal constraint as joint values
-    // robot_state->setJointGroupPositions(joint_model_group, goal_joint_vals);
-    // robot_state->update();
-    // moveit_msgs::msg::Constraints goal_constraint = 
-    //     kinematic_constraints::constructGoalConstraints(*robot_state, joint_model_group);
+    // Construct goal constraint as joint values
+    robot_state->setJointGroupPositions(joint_model_group, goal_joint_vals);
+    robot_state->update();
+    moveit_msgs::msg::Constraints goal_constraint = 
+        kinematic_constraints::constructGoalConstraints(*robot_state, joint_model_group);
 
-    // Construct goal constraint as pose
-    geometry_msgs::msg::PoseStamped target_pose;
-    target_pose.header.frame_id = "base_link";
-    target_pose.pose.position.x = 0.9;
-    target_pose.pose.position.y = 0.0;
-    target_pose.pose.position.z = 0.7;
+    // // Construct goal constraint as pose
+    // geometry_msgs::msg::PoseStamped target_pose;
+    // target_pose.header.frame_id = "base_link";
+    // target_pose.pose.position.x = 0.9;
+    // target_pose.pose.position.y = 0.0;
+    // target_pose.pose.position.z = 0.7;
 
-    target_pose.pose.orientation.x = 0.0;
-    target_pose.pose.orientation.y = 0.0;
-    target_pose.pose.orientation.z = 0.0;
-    target_pose.pose.orientation.w = 1.0;
+    // target_pose.pose.orientation.x = 0.0;
+    // target_pose.pose.orientation.y = 0.0;
+    // target_pose.pose.orientation.z = 0.0;
+    // target_pose.pose.orientation.w = 1.0;
 
-    std::vector<double> position_tolerance = {1000, 1000, 1000};
-    std::vector<double> orientation_tolerance = {0.01, 0.01, 0.01};
+    // std::vector<double> position_tolerance = {1000, 1000, 1000};
+    // std::vector<double> orientation_tolerance = {0.01, 0.01, 0.01};
 
-    moveit_msgs::msg::Constraints goal_constraint = kinematic_constraints::constructGoalConstraints(
-        "wrist_roll_link", target_pose, position_tolerance, orientation_tolerance);
+    // moveit_msgs::msg::Constraints goal_constraint = kinematic_constraints::constructGoalConstraints(
+    //     "wrist_roll_link", target_pose, position_tolerance, orientation_tolerance);
 
     req.goal_constraints.clear();
     req.goal_constraints.push_back(goal_constraint);
@@ -181,6 +179,8 @@ int main(int argc, char** argv)
     else
     {
         RCLCPP_INFO(foliation_example_node->get_logger(), "Could not compute plan successfully");
+
+        return 1;
     }
 
 
@@ -216,7 +216,6 @@ int main(int argc, char** argv)
 
         // sleep for 1 second
         std::this_thread::sleep_for(std::chrono::seconds(1));
-
     }
 
     // deallocate the robot_state

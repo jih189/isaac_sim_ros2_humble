@@ -1358,68 +1358,68 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     //     planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(collision_spheres[i].radius)), sphere_pose);
     // }
 
-    // // Add cuboids as obstacles to the planning scene
-    // for (size_t i = 0; i < bounding_boxes.size(); i++)
-    // {
-    //     // Get the current bounding box
-    //     BoundingBox box = bounding_boxes[i];
-
-    //     // Compute the dimensions of the cuboid
-    //     float dim_x = box.x_max - box.x_min;
-    //     float dim_y = box.y_max - box.y_min;
-    //     float dim_z = box.z_max - box.z_min;
-
-    //     // Create the Box shape using the dimensions
-    //     shapes::ShapeConstPtr box_shape(new shapes::Box(dim_x, dim_y, dim_z));
-
-    //     // Compute the center of the box in its local coordinate frame.
-    //     // Note: this center is relative to the reference point given by box.x, box.y, box.z.
-    //     float center_local_x = (box.x_min + box.x_max) / 2.0;
-    //     float center_local_y = (box.y_min + box.y_max) / 2.0;
-    //     float center_local_z = (box.z_min + box.z_max) / 2.0;
-    //     Eigen::Vector3d center_local(center_local_x, center_local_y, center_local_z);
-
-    //     // Build the rotation from roll, pitch, yaw.
-    //     Eigen::Quaterniond quat;
-    //     quat = Eigen::AngleAxisd(box.roll, Eigen::Vector3d::UnitX()) *
-    //         Eigen::AngleAxisd(box.pitch, Eigen::Vector3d::UnitY()) *
-    //         Eigen::AngleAxisd(box.yaw, Eigen::Vector3d::UnitZ());
-
-    //     // The provided pose (box.x, box.y, box.z) is not at the center,
-    //     // so compute the final translation by adding the rotated local center offset.
-    //     Eigen::Vector3d pose_translation(box.x, box.y, box.z);
-    //     Eigen::Isometry3d box_pose = Eigen::Isometry3d::Identity();
-    //     box_pose.linear() = quat.toRotationMatrix();
-    //     box_pose.translation() = pose_translation + quat * center_local;
-
-    //     // Add the box as an obstacle to the planning scene.
-    //     planning_scene->getWorldNonConst()->addToObject("obstacle_box_" + std::to_string(i),
-    //                                                     box_shape, box_pose);
-    // }
-
-    // Add cylinders as obstacles to the planning scene
-    for (size_t i = 0; i < cylinders.size(); i++)
+    // Add cuboids as obstacles to the planning scene
+    for (size_t i = 0; i < bounding_boxes.size(); i++)
     {
-        // Create an identity transformation for the cylinder pose
-        Eigen::Isometry3d cylinder_pose = Eigen::Isometry3d::Identity();
+        // Get the current bounding box
+        BoundingBox box = bounding_boxes[i];
 
-        // Set the translation using the cylinder's x, y, z coordinates
-        cylinder_pose.translation() = Eigen::Vector3d(cylinders[i].x, 
-                                                    cylinders[i].y, 
-                                                    cylinders[i].z);
+        // Compute the dimensions of the cuboid
+        float dim_x = box.x_max - box.x_min;
+        float dim_y = box.y_max - box.y_min;
+        float dim_z = box.z_max - box.z_min;
 
-        // Compute the orientation from roll, pitch, and yaw using Eigen's AngleAxis
-        Eigen::Quaterniond q = Eigen::AngleAxisd(cylinders[i].roll, Eigen::Vector3d::UnitX()) *
-                            Eigen::AngleAxisd(cylinders[i].pitch, Eigen::Vector3d::UnitY()) *
-                            Eigen::AngleAxisd(cylinders[i].yaw, Eigen::Vector3d::UnitZ());
-        cylinder_pose.rotate(q);
+        // Create the Box shape using the dimensions
+        shapes::ShapeConstPtr box_shape(new shapes::Box(dim_x, dim_y, dim_z));
 
-        // Create the cylinder shape and add it to the planning scene
-        planning_scene->getWorldNonConst()->addToObject(
-            "obstacle_cylinder_" + std::to_string(i),
-            shapes::ShapeConstPtr(new shapes::Cylinder(cylinders[i].height, cylinders[i].radius)),
-            cylinder_pose);
+        // Compute the center of the box in its local coordinate frame.
+        // Note: this center is relative to the reference point given by box.x, box.y, box.z.
+        float center_local_x = (box.x_min + box.x_max) / 2.0;
+        float center_local_y = (box.y_min + box.y_max) / 2.0;
+        float center_local_z = (box.z_min + box.z_max) / 2.0;
+        Eigen::Vector3d center_local(center_local_x, center_local_y, center_local_z);
+
+        // Build the rotation from roll, pitch, yaw.
+        Eigen::Quaterniond quat;
+        quat = Eigen::AngleAxisd(box.roll, Eigen::Vector3d::UnitX()) *
+            Eigen::AngleAxisd(box.pitch, Eigen::Vector3d::UnitY()) *
+            Eigen::AngleAxisd(box.yaw, Eigen::Vector3d::UnitZ());
+
+        // The provided pose (box.x, box.y, box.z) is not at the center,
+        // so compute the final translation by adding the rotated local center offset.
+        Eigen::Vector3d pose_translation(box.x, box.y, box.z);
+        Eigen::Isometry3d box_pose = Eigen::Isometry3d::Identity();
+        box_pose.linear() = quat.toRotationMatrix();
+        box_pose.translation() = pose_translation + quat * center_local;
+
+        // Add the box as an obstacle to the planning scene.
+        planning_scene->getWorldNonConst()->addToObject("obstacle_box_" + std::to_string(i),
+                                                        box_shape, box_pose);
     }
+
+    // // Add cylinders as obstacles to the planning scene
+    // for (size_t i = 0; i < cylinders.size(); i++)
+    // {
+    //     // Create an identity transformation for the cylinder pose
+    //     Eigen::Isometry3d cylinder_pose = Eigen::Isometry3d::Identity();
+
+    //     // Set the translation using the cylinder's x, y, z coordinates
+    //     cylinder_pose.translation() = Eigen::Vector3d(cylinders[i].x, 
+    //                                                 cylinders[i].y, 
+    //                                                 cylinders[i].z);
+
+    //     // Compute the orientation from roll, pitch, and yaw using Eigen's AngleAxis
+    //     Eigen::Quaterniond q = Eigen::AngleAxisd(cylinders[i].roll, Eigen::Vector3d::UnitX()) *
+    //                         Eigen::AngleAxisd(cylinders[i].pitch, Eigen::Vector3d::UnitY()) *
+    //                         Eigen::AngleAxisd(cylinders[i].yaw, Eigen::Vector3d::UnitZ());
+    //     cylinder_pose.rotate(q);
+
+    //     // Create the cylinder shape and add it to the planning scene
+    //     planning_scene->getWorldNonConst()->addToObject(
+    //         "obstacle_cylinder_" + std::to_string(i),
+    //         shapes::ShapeConstPtr(new shapes::Cylinder(cylinders[i].height, cylinders[i].radius)),
+    //         cylinder_pose);
+    // }
 
     // generate start and goal states
     std::vector<float> start_joint_values;
@@ -1465,7 +1465,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         bounding_boxes_max,
         bounding_boxes_min
     );
-    // constraints.push_back(env_constraint_cuboid);
+    constraints.push_back(env_constraint_cuboid);
 
     // Create obstacle constraint for cylinder
     CUDAMPLib::EnvConstraintCylinderPtr env_constraint_cylinder = std::make_shared<CUDAMPLib::EnvConstraintCylinder>(
@@ -1475,7 +1475,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         cylinders_radius,
         cylinders_height
     );
-    constraints.push_back(env_constraint_cylinder);
+    // constraints.push_back(env_constraint_cylinder);
     
     // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(

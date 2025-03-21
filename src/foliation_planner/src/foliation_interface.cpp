@@ -20,8 +20,19 @@ bool FoliationInterface::solve(
   const moveit::core::JointModelGroup* joint_model_group = planning_scene->getRobotModel()->getJointModelGroup(request.group_name);
   dof_ = joint_model_group->getVariableCount();
 
-  // Generate point cloud from world
-  std::vector<Eigen::Vector3d> obstacle_points = genPointCloudFromWorld(planning_scene->getWorld());
+  // Get shapes from the world
+  std::vector<shapes::ShapeConstPtr> obstacle_shapes;
+  std::vector<Eigen::Affine3d> obstacle_poses;
+  for (const auto& object_name : planning_scene->getWorld()->getObjectIds())
+  {
+    auto obj = planning_scene->getWorld()->getObject(object_name);
+
+    for (size_t i = 0; i < obj->shapes_.size(); ++i)
+    {
+      obstacle_shapes.push_back(obj->shapes_[i]);
+      obstacle_poses.push_back(obj->pose_ * obj->shape_poses_[i]);
+    }
+  }
 
   // Extract start state from request
   moveit::core::RobotStatePtr start_state(new moveit::core::RobotState(planning_scene->getRobotModel()));
@@ -239,7 +250,7 @@ bool FoliationInterface::solve(
   // Solve the problem
   // We need to check if the environment collision obstacles is changed or not. If so, then
   // we need to reinitialize the planner.
-  bool is_solved = solve_motion_task(start_state, joint_model_group, obstacle_points, start_joint_vals, goal_constraints, result_traj, request.allowed_planning_time);
+  bool is_solved = solve_motion_task(start_state, joint_model_group, obstacle_shapes, obstacle_poses, start_joint_vals, goal_constraints, result_traj, request.allowed_planning_time);
 
   rclcpp::Time end_time = node_->now();
 
@@ -253,6 +264,8 @@ bool FoliationInterface::solve(
     response.description_.push_back("Foliation planner");
     response.trajectory_.clear();
     response.trajectory_.push_back(result_traj);
+
+    return true;
   }
   else
   {
@@ -263,15 +276,16 @@ bool FoliationInterface::solve(
     response.description_.clear();
     response.description_.push_back("Foliation planner");
     response.trajectory_.clear();
-  }
 
-  return true;
+    return false;
+  }
 }
 
 bool FoliationInterface::solve_motion_task(
     moveit::core::RobotStatePtr& robot_state,
     const moveit::core::JointModelGroup* joint_model_group, 
-    const std::vector<Eigen::Vector3d> obstacle_points,
+    const std::vector<shapes::ShapeConstPtr> obstacle_shapes,
+    const std::vector<Eigen::Affine3d> obstacle_poses,
     const std::vector<double>& start_joint_vals, 
     std::vector<CUDAMPLib::BaseConstraintPtr> goal_constraints,
     robot_trajectory::RobotTrajectoryPtr& joint_trajectory,
@@ -280,30 +294,144 @@ bool FoliationInterface::solve_motion_task(
 {
   joint_trajectory->clear();
 
-  // Prepare collision spheres
-  std::vector<std::vector<float>> obstacle_points_float;
-  for (const auto& point : obstacle_points)
+   std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
+  // Need to classify the obstacle shapes
+  std::vector<shapes::ShapeConstPtr> obstacle_boxes;
+  std::vector<Eigen::Affine3d> obstacle_poses_boxes;
+  std::vector<shapes::ShapeConstPtr> obstacle_spheres;
+  std::vector<Eigen::Affine3d> obstacle_poses_spheres;
+  std::vector<shapes::ShapeConstPtr> obstacle_cylinders;
+  std::vector<Eigen::Affine3d> obstacle_poses_cylinders;
+
+  for (size_t i = 0; i < obstacle_shapes.size(); i++)
   {
-    obstacle_points_float.push_back({(float)point[0], (float)point[1], (float)point[2]});
+    if (obstacle_shapes[i]->type == shapes::BOX)
+    {
+      obstacle_boxes.push_back(obstacle_shapes[i]);
+      obstacle_poses_boxes.push_back(obstacle_poses[i]);
+    }
+    else if (obstacle_shapes[i]->type == shapes::SPHERE)
+    {
+      obstacle_spheres.push_back(obstacle_shapes[i]);
+      obstacle_poses_spheres.push_back(obstacle_poses[i]);
+    }
+    else if (obstacle_shapes[i]->type == shapes::CYLINDER)
+    {
+      obstacle_cylinders.push_back(obstacle_shapes[i]);
+      obstacle_poses_cylinders.push_back(obstacle_poses[i]);
+    }
   }
 
-  std::vector<float> obstacle_sphere_radius;
-  for (size_t i = 0; i < obstacle_points.size(); ++i)
+  if (obstacle_boxes.size() > 0)
   {
-    obstacle_sphere_radius.push_back(obstacle_sphere_radius_ * 2);
+    // create obstacle constraint for boxes
+    std::vector<std::vector<float>> bounding_boxes_pos; // [(x, y, z), ...]
+    std::vector<std::vector<float>> bounding_boxes_orientation_matrix; // [(r11, r12, r13, r21, r22, r23, r31, r32, r33), ...]
+    std::vector<std::vector<float>> bounding_boxes_max; // [(x_max, y_max, z_max), ...]
+    std::vector<std::vector<float>> bounding_boxes_min; // [(x_min, y_min, z_min), ...]
+
+    // for each box
+    for (size_t i = 0; i < obstacle_boxes.size(); i++)
+    {
+      // extract position
+      Eigen::Vector3d pos = obstacle_poses_boxes[i].translation();
+      bounding_boxes_pos.push_back({(float)pos[0], (float)pos[1], (float)pos[2]});
+
+      // extract orientation
+      Eigen::Matrix3d rotation_matrix = obstacle_poses_boxes[i].rotation();
+      bounding_boxes_orientation_matrix.push_back({
+        (float)rotation_matrix(0, 0), (float)rotation_matrix(0, 1), (float)rotation_matrix(0, 2),
+        (float)rotation_matrix(1, 0), (float)rotation_matrix(1, 1), (float)rotation_matrix(1, 2),
+        (float)rotation_matrix(2, 0), (float)rotation_matrix(2, 1), (float)rotation_matrix(2, 2)
+      });
+
+      // extract max and min
+      const shapes::Box* box = dynamic_cast<const shapes::Box*>(obstacle_boxes[i].get());
+      bounding_boxes_max.push_back({(float)( box->size[0] / 2), (float)( box->size[1] / 2), (float)( box->size[2] / 2)});
+      bounding_boxes_min.push_back({(float)( -1 * box->size[0] / 2), (float)(-1 * box->size[1] / 2), (float)(-1 * box->size[2] / 2)});
+    }
+
+    CUDAMPLib::EnvConstraintCuboidPtr env_constraint_box = std::make_shared<CUDAMPLib::EnvConstraintCuboid>(
+      "obstacle_box_constraint",
+      bounding_boxes_pos,
+      bounding_boxes_orientation_matrix,
+      bounding_boxes_max,
+      bounding_boxes_min
+    );
+
+    constraints.push_back(env_constraint_box);
   }
 
-  // construct environment constraint
-  CUDAMPLib::EnvConstraintSpherePtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
-    "obstacle_constraint",
-    obstacle_points_float,
-    obstacle_sphere_radius
-  );
+  if (obstacle_spheres.size() > 0)
+  {
+    // create obstacle constraint for spheres
+    std::vector<std::vector<float>> obstacle_spheres_pos; // [(x, y, z), ...]
+    std::vector<float> obstacle_spheres_radius; // [r1, r2, ...]
 
-  // create constraints
-  std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+    // for each sphere
+    for (size_t i = 0; i < obstacle_spheres.size(); i++)
+    {
+      // extract position
+      Eigen::Vector3d pos = obstacle_poses_spheres[i].translation();
+      obstacle_spheres_pos.push_back({(float)pos[0], (float)pos[1], (float)pos[2]});
+
+      // extract radius
+      const shapes::Sphere* sphere = dynamic_cast<const shapes::Sphere*>(obstacle_spheres[i].get());
+      obstacle_spheres_radius.push_back((float)sphere->radius);
+    }
+
+    CUDAMPLib::EnvConstraintSpherePtr env_constraint_sphere = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
+      "obstacle_sphere_constraint",
+      obstacle_spheres_pos,
+      obstacle_spheres_radius
+    );
+
+    constraints.push_back(env_constraint_sphere);
+  }
+
+  if (obstacle_cylinders.size() > 0)
+  {
+    // create obstacle constraint for cylinders
+    std::vector<std::vector<float>> obstacle_cylinders_pos; // [(x, y, z), ...]
+    std::vector<std::vector<float>> obstacle_cylinders_orientation_matrix; // [(r11, r12, r13, r21, r22, r23, r31, r32, r33), ...]
+    std::vector<float> obstacle_cylinders_radius; // [r1, r2, ...]
+    std::vector<float> obstacle_cylinders_height; // [h1, h2, ...]
+
+    // for each cylinder
+    for (size_t i = 0; i < obstacle_cylinders.size(); i++)
+    {
+      // extract position
+      Eigen::Vector3d pos = obstacle_poses_cylinders[i].translation();
+      obstacle_cylinders_pos.push_back({(float)pos[0], (float)pos[1], (float)pos[2]});
+
+      // extract orientation
+      Eigen::Matrix3d rotation_matrix = obstacle_poses_cylinders[i].rotation();
+      obstacle_cylinders_orientation_matrix.push_back({
+        (float)rotation_matrix(0, 0), (float)rotation_matrix(0, 1), (float)rotation_matrix(0, 2),
+        (float)rotation_matrix(1, 0), (float)rotation_matrix(1, 1), (float)rotation_matrix(1, 2),
+        (float)rotation_matrix(2, 0), (float)rotation_matrix(2, 1), (float)rotation_matrix(2, 2)
+      });
+
+      // extract radius and height
+      const shapes::Cylinder* cylinder = dynamic_cast<const shapes::Cylinder*>(obstacle_cylinders[i].get());
+      obstacle_cylinders_radius.push_back((float)cylinder->radius);
+      obstacle_cylinders_height.push_back((float)cylinder->length);
+    }
+
+    CUDAMPLib::EnvConstraintCylinderPtr env_constraint_cylinder = std::make_shared<CUDAMPLib::EnvConstraintCylinder>(
+      "obstacle_cylinder_constraint",
+      obstacle_cylinders_pos,
+      obstacle_cylinders_orientation_matrix,
+      obstacle_cylinders_radius,
+      obstacle_cylinders_height
+    );
+
+    constraints.push_back(env_constraint_cylinder);
+  }
+
+  // add self collision constraint
   constraints.push_back(self_collision_constraint_);
-  constraints.push_back(env_constraint);
 
   // create space
   CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
@@ -333,16 +461,8 @@ bool FoliationInterface::solve_motion_task(
   }
   start_joint_values_set.push_back(start_joint_vals_float);
 
-  // std::vector<std::vector<float>> goal_joint_values_set;
-  // std::vector<float> goal_joint_vals_float;
-  // for (const auto& val : goal_joint_vals)
-  // {
-  //   goal_joint_vals_float.push_back(val);
-  // }
-  // goal_joint_values_set.push_back(goal_joint_vals_float);
-
   // create space for goal region
-  goal_constraints.push_back(env_constraint);
+  // goal_constraints.push_back(env_constraint);
   goal_constraints.push_back(self_collision_constraint_);
 
   CUDAMPLib::SingleArmSpacePtr goal_region = std::make_shared<CUDAMPLib::SingleArmSpace>(
@@ -414,154 +534,31 @@ bool FoliationInterface::solve_motion_task(
       joint_trajectory->addSuffixWayPoint(std::make_shared<moveit::core::RobotState>(*robot_state), 0.1);
     }
   }
-
-  // reset the environment constraint, planner, and space
-  env_constraint.reset();
-  planner.reset();
-  single_arm_space.reset();
-  problem_task.reset();
-
-  return found_solution;
-}
-
-std::vector<Eigen::Vector3d> FoliationInterface::shapeToPointCloud(const shapes::ShapeConstPtr& shape, const Eigen::Isometry3d& pose, float resolution)
-{
-  std::vector<Eigen::Vector3d> point_cloud;
-
-  // Generate points evenly distributed on the surface of the shape using resolution
-  if (shape->type == shapes::BOX)
-  {
-    const shapes::Box* box = dynamic_cast<const shapes::Box*>(shape.get());
-    Eigen::Vector3d half_size(box->size[0] / 2, box->size[1] / 2, box->size[2] / 2);
-    
-    // X-faces: x = ±half_size.x
-    for (double y = -half_size[1]; y <= half_size[1]; y += resolution)
-    {
-      for (double z = -half_size[2]; z <= half_size[2]; z += resolution)
-      {
-        Eigen::Vector3d point1 = pose * Eigen::Vector3d(half_size[0], y, z);
-        Eigen::Vector3d point2 = pose * Eigen::Vector3d(-half_size[0], y, z);
-        point_cloud.push_back(point1);
-        point_cloud.push_back(point2);
-      }
-    }
-
-    // Y-faces: y = ±half_size.y
-    for (double x = -half_size[0]; x <= half_size[0]; x += resolution)
-    {
-      for (double z = -half_size[2]; z <= half_size[2]; z += resolution)
-      {
-        Eigen::Vector3d point1 = pose * Eigen::Vector3d(x, half_size[1], z);
-        Eigen::Vector3d point2 = pose * Eigen::Vector3d(x, -half_size[1], z);
-        point_cloud.push_back(point1);
-        point_cloud.push_back(point2);
-      }
-    }
-
-    // Z-faces: z = ±half_size.z
-    for (double x = -half_size[0]; x <= half_size[0]; x += resolution)
-    {
-      for (double y = -half_size[1]; y <= half_size[1]; y += resolution)
-      {
-        Eigen::Vector3d point1 = pose * Eigen::Vector3d(x, y, half_size[2]);
-        Eigen::Vector3d point2 = pose * Eigen::Vector3d(x, y, -half_size[2]);
-        point_cloud.push_back(point1);
-        point_cloud.push_back(point2);
-      }
-    }
-  }
-  else if (shape->type == shapes::SPHERE)
-  {
-    const shapes::Sphere* sphere = dynamic_cast<const shapes::Sphere*>(shape.get());
-    Eigen::Vector3d center = pose.translation();
-    double radius = sphere->radius;
-    for (double theta = 0; theta <= M_PI; theta += resolution)
-    {
-      for (double phi = 0; phi <= 2 * M_PI; phi += resolution)
-      {
-        Eigen::Vector3d point = center + Eigen::Vector3d(
-            radius * sin(theta) * cos(phi),
-            radius * sin(theta) * sin(phi),
-            radius * cos(theta));
-        point_cloud.push_back(point);
-      }
-    }
-  }
-  else if (shape->type == shapes::CYLINDER)
-  {
-    const shapes::Cylinder* cylinder = dynamic_cast<const shapes::Cylinder*>(shape.get());
-    Eigen::Vector3d center = pose.translation();
-    double radius = cylinder->radius;
-    double half_length = cylinder->length / 2;
-    for (double theta = 0; theta <= 2 * M_PI; theta += resolution)
-    {
-      for (double z = -half_length; z <= half_length; z += resolution)
-      {
-        Eigen::Vector3d point = center + Eigen::Vector3d(radius * cos(theta), radius * sin(theta), z);
-        point_cloud.push_back(point);
-      }
-    }
-
-    // Top face: z = half_length
-    for (double r = 0; r <= radius; r += resolution)
-    {
-      for (double theta = 0; theta <= 2 * M_PI; theta += resolution)
-      {
-        // Only add points on the boundary (i.e., when r is near the radius)
-        // Adjust the condition if you strictly want the outer edge.
-        if (fabs(r - radius) < resolution || r == 0)  // sample boundary and center
-        {
-          Eigen::Vector3d point = center + Eigen::Vector3d(r * cos(theta), r * sin(theta), half_length);
-          point_cloud.push_back(point);
-        }
-      }
-    }
-
-    // Bottom face: z = -half_length
-    for (double r = 0; r <= radius; r += resolution)
-    {
-      for (double theta = 0; theta <= 2 * M_PI; theta += resolution)
-      {
-        if (fabs(r - radius) < resolution || r == 0)
-        {
-          Eigen::Vector3d point = center + Eigen::Vector3d(r * cos(theta), r * sin(theta), -half_length);
-          point_cloud.push_back(point);
-        }
-      }
-    }
-  }
   else
   {
-    RCLCPP_ERROR(node_->get_logger(), "Shape type not supported");
+    // print error in red
+    std::cout << "\033[1;31m" << "No solution found" << "\033[0m" << std::endl;
+    std::cout << "Failure reason: " << problem_task->getFailureReason() << std::endl;
   }
 
-  return point_cloud;
-}
-
-std::vector<Eigen::Vector3d> FoliationInterface::genPointCloudFromWorld(const collision_detection::WorldConstPtr & world)
-{
-  // Generate point cloud for all obstacle shapes
-  std::vector<Eigen::Vector3d> obstacle_points;
-  for (std::string object_name : world->getObjectIds())
-  {
-    auto object_in_world = world->getObject(object_name);
-    for(size_t i = 0; i < object_in_world->shapes_.size(); ++i)
-    {
-      auto pc = shapeToPointCloud(object_in_world->shapes_[i], object_in_world->pose_ * object_in_world->shape_poses_[i], 2 * obstacle_sphere_radius_);
-      obstacle_points.insert(obstacle_points.end(), pc.begin(), pc.end());
-    }
-  }
-
-  // // create an obj file for debugging
-  // std::string obj_file_name = "/home/ros/ros2_ws/src/obstacles.obj";
-  // std::ofstream obj_file(obj_file_name);
-  // for (const auto& point : obstacle_points)
+  // // reset. Not sure is this necessary.
+  // planner.reset();
+  // single_arm_space.reset();
+  // problem_task.reset();
+  
+  // for (size_t i = 0; i < constraints.size(); i++)
   // {
-  //   obj_file << "v " << point[0] << " " << point[1] << " " << point[2] << std::endl;
+  //   constraints[i].reset();
   // }
-  // obj_file.close();
 
-  return obstacle_points;
+  // for (size_t i = 0; i < goal_constraints.size(); i++)
+  // {
+  //   goal_constraints[i].reset();
+  // }
+
+  // goal_region.reset();
+
+  return found_solution;
 }
 
 void FoliationInterface::loadPlannerConfigurations()
