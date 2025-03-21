@@ -12,7 +12,7 @@
 
 // cudampl include
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
-#include <CUDAMPLib/constraints/EnvConstraint.h>
+#include <CUDAMPLib/constraints/EnvConstraintSphere.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
 #include <CUDAMPLib/tasks/SingleArmTask.h>
 #include <CUDAMPLib/planners/RRG.h>
@@ -189,7 +189,7 @@ void Eval_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
             }
         }
         // Create obstacle constraint
-        CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+        CUDAMPLib::EnvConstraintSpherePtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
             "obstacle_constraint",
             tasks[i].obstacle_pos,
             tasks[i].radius

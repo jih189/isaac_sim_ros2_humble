@@ -14,7 +14,7 @@
 
 // cudampl include
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
-#include <CUDAMPLib/constraints/EnvConstraint.h>
+#include <CUDAMPLib/constraints/EnvConstraintSphere.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
 #include <CUDAMPLib/constraints/TaskSpaceConstraint.h>
 #include <CUDAMPLib/constraints/BoundaryConstraint.h>

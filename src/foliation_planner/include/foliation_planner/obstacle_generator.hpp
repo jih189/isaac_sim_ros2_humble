@@ -23,6 +23,99 @@ const float WORKSPACE_Y_MAX =  0.6f;
 const float WORKSPACE_Z_MIN =  0.0f;
 const float WORKSPACE_Z_MAX =  1.5f;
 
+struct BoundingBox
+{
+    float x_min;
+    float x_max;
+    float y_min;
+    float y_max;
+    float z_min;
+    float z_max;
+
+    // pose
+    float x;
+    float y;
+    float z;
+    float roll;
+    float pitch;
+    float yaw;
+};
+
+struct Sphere
+{
+    float x;
+    float y;
+    float z;
+    float radius;
+};
+
+struct Cylinder
+{
+    float x;
+    float y;
+    float z;
+
+    float roll;
+    float pitch;
+    float yaw;
+
+    float radius;
+    float height;
+};
+
+void SphereToVectors(const std::vector<Sphere> & input, std::vector<std::vector<float>> & pos_output, std::vector<float> & radius_output)
+{
+    pos_output.clear();
+    radius_output.clear();
+    for (const auto& sphere : input)
+    {
+        pos_output.push_back({sphere.x, sphere.y, sphere.z});
+        radius_output.push_back(sphere.radius);
+    }
+}
+
+std::vector<float> rpyToRotationMatrix(float roll, float pitch, float yaw) {
+    float cx = cosf(roll);
+    float sx = sinf(roll);
+    float cy = cosf(pitch);
+    float sy = sinf(pitch);
+    float cz = cosf(yaw);
+    float sz = sinf(yaw);
+
+    std::vector<float> R(9); // Row-major 3x3
+
+    // Row 0
+    R[0] = cz * cy;
+    R[1] = cz * sy * sx - sz * cx;
+    R[2] = cz * sy * cx + sz * sx;
+
+    // Row 1
+    R[3] = sz * cy;
+    R[4] = sz * sy * sx + cz * cx;
+    R[5] = sz * sy * cx - cz * sx;
+
+    // Row 2
+    R[6] = -sy;
+    R[7] = cy * sx;
+    R[8] = cy * cx;
+
+    return R;
+}
+
+void CuboidToVectors(const std::vector<BoundingBox> & input, std::vector<std::vector<float>> & pos_output, std::vector<std::vector<float>> & orientation_output, std::vector<std::vector<float>> & max_output, std::vector<std::vector<float>> & min_output)
+{
+    pos_output.clear();
+    orientation_output.clear();
+    max_output.clear();
+    min_output.clear();
+    for (const auto& cuboid : input)
+    {
+        pos_output.push_back({cuboid.x, cuboid.y, cuboid.z});
+        orientation_output.push_back(rpyToRotationMatrix(cuboid.roll, cuboid.pitch, cuboid.yaw));
+        max_output.push_back({cuboid.x_max, cuboid.y_max, cuboid.z_max});
+        min_output.push_back({cuboid.x_min, cuboid.y_min, cuboid.z_min});
+    }
+}
 
 // Recursive helper function to accumulate successor link names.
 void getSuccessorLinkNames(const urdf::LinkConstSharedPtr& link, std::vector<std::string>& successor_links)
@@ -130,46 +223,6 @@ void generate_sphere_obstacles(std::vector<std::vector<float>> & balls_pos, std:
         std::cout << "Group name is not supported!" << std::endl;
     }
 }
-
-struct BoundingBox
-{
-    float x_min;
-    float x_max;
-    float y_min;
-    float y_max;
-    float z_min;
-    float z_max;
-
-    // pose
-    float x;
-    float y;
-    float z;
-    float roll;
-    float pitch;
-    float yaw;
-};
-
-struct Sphere
-{
-    float x;
-    float y;
-    float z;
-    float radius;
-};
-
-struct Cylinder
-{
-    float x;
-    float y;
-    float z;
-
-    float roll;
-    float pitch;
-    float yaw;
-
-    float radius;
-    float height;
-};
 
 /**
     Generate a map of bounding boxes for each link in the robot model.

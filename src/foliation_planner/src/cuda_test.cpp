@@ -12,7 +12,8 @@
 
 // cudampl include
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
-#include <CUDAMPLib/constraints/EnvConstraint.h>
+#include <CUDAMPLib/constraints/EnvConstraintSphere.h>
+#include <CUDAMPLib/constraints/EnvConstraintCuboid.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
 #include <CUDAMPLib/constraints/TaskSpaceConstraint.h>
 #include <CUDAMPLib/constraints/BoundaryConstraint.h>
@@ -506,12 +507,12 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
-    CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+    CUDAMPLib::EnvConstraintSpherePtr env_constraint_sphere = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
         "obstacle_constraint",
         balls_pos,
         ball_radius
     );
-    constraints.push_back(env_constraint);
+    constraints.push_back(env_constraint_sphere);
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
@@ -603,7 +604,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
-    // CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+    // CUDAMPLib::EnvConstraintSpherePtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
     //     "obstacle_constraint",
     //     balls_pos,
     //     ball_radius
@@ -1061,7 +1062,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
-    CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+    CUDAMPLib::EnvConstraintSpherePtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
         "obstacle_constraint",
         balls_pos,
         ball_radius
@@ -1289,32 +1290,97 @@ void generateRandomStartAndGoal(
 
 void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
 {
+    /***************************** 1. Prepare Robot information **************************************************/
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
 
-    // Prepare obstacle constraint
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    robot_state->update();
+
+    /***************************** 2. Generate Obstacles **************************************************/
+
+    // find the region where the obstacles should not be placed
+    std::vector<BoundingBox> unmoveable_bounding_boxes_of_robot = getUnmoveableBoundingBoxes(robot_model, group_name, 0.05);
+
+    // create obstacles
+    std::vector<Sphere> collision_spheres;
+    genSphereObstacles(10, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+
+    std::vector<BoundingBox> bounding_boxes;
+    genCuboidObstacles(40, 0.15, 0.1, unmoveable_bounding_boxes_of_robot, bounding_boxes);
+
+    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintSphere
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    generate_sphere_obstacles(balls_pos, ball_radius, group_name, 20, 0.06);
+    SphereToVectors(collision_spheres, balls_pos, ball_radius);
+
+    std::vector<std::vector<float>> bounding_boxes_pos;
+    std::vector<std::vector<float>> bounding_boxes_orientation_matrix;
+    std::vector<std::vector<float>> bounding_boxes_max;
+    std::vector<std::vector<float>> bounding_boxes_min;
+    CuboidToVectors(bounding_boxes, bounding_boxes_pos, bounding_boxes_orientation_matrix, bounding_boxes_max, bounding_boxes_min);
+
+    // generate the markers for the obstacles
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generateSpheresMarkers(collision_spheres, node);
+    visualization_msgs::msg::MarkerArray obstacle_collision_cuboids_marker_array = generateBoundingBoxesMarkers(bounding_boxes, node);
+
+    /***************************** 3. Generate Start and Goal States **************************************************/
 
     // create planning scene
     auto world = std::make_shared<collision_detection::World>();
     auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
 
-    // add those balls to the planning scene
-    for (size_t i = 0; i < balls_pos.size(); i++)
+    // Add spheres as obstacles to the planning scene
+    for (size_t i = 0; i < collision_spheres.size(); i++)
     {
         Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
-        sphere_pose.translation() = Eigen::Vector3d(balls_pos[i][0], balls_pos[i][1], balls_pos[i][2]);
-        planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(ball_radius[i])), sphere_pose);
+        sphere_pose.translation() = Eigen::Vector3d(collision_spheres[i].x, collision_spheres[i].y, collision_spheres[i].z);
+        planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(collision_spheres[i].radius)), sphere_pose);
     }
 
-    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
-    // set robot state to default state
-    robot_state->setToDefaultValues();
-    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
-    
+    // Add cuboids as obstacles to the planning scene
+    for (size_t i = 0; i < bounding_boxes.size(); i++)
+    {
+        // Get the current bounding box
+        BoundingBox box = bounding_boxes[i];
+
+        // Compute the dimensions of the cuboid
+        float dim_x = box.x_max - box.x_min;
+        float dim_y = box.y_max - box.y_min;
+        float dim_z = box.z_max - box.z_min;
+
+        // Create the Box shape using the dimensions
+        shapes::ShapeConstPtr box_shape(new shapes::Box(dim_x, dim_y, dim_z));
+
+        // Compute the center of the box in its local coordinate frame.
+        // Note: this center is relative to the reference point given by box.x, box.y, box.z.
+        float center_local_x = (box.x_min + box.x_max) / 2.0;
+        float center_local_y = (box.y_min + box.y_max) / 2.0;
+        float center_local_z = (box.z_min + box.z_max) / 2.0;
+        Eigen::Vector3d center_local(center_local_x, center_local_y, center_local_z);
+
+        // Build the rotation from roll, pitch, yaw.
+        Eigen::Quaterniond quat;
+        quat = Eigen::AngleAxisd(box.roll, Eigen::Vector3d::UnitX()) *
+            Eigen::AngleAxisd(box.pitch, Eigen::Vector3d::UnitY()) *
+            Eigen::AngleAxisd(box.yaw, Eigen::Vector3d::UnitZ());
+
+        // The provided pose (box.x, box.y, box.z) is not at the center,
+        // so compute the final translation by adding the rotated local center offset.
+        Eigen::Vector3d pose_translation(box.x, box.y, box.z);
+        Eigen::Isometry3d box_pose = Eigen::Isometry3d::Identity();
+        box_pose.linear() = quat.toRotationMatrix();
+        box_pose.translation() = pose_translation + quat * center_local;
+
+        // Add the box as an obstacle to the planning scene.
+        planning_scene->getWorldNonConst()->addToObject("obstacle_box_" + std::to_string(i),
+                                                        box_shape, box_pose);
+    }
+
     // generate start and goal states
     std::vector<float> start_joint_values;
     std::vector<float> goal_joint_values;
@@ -1322,15 +1388,45 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     moveit_msgs::msg::RobotState goal_state_msg;
     generateRandomStartAndGoal(robot_state, joint_model_group, planning_scene, group_name, start_joint_values, goal_joint_values, start_state_msg, goal_state_msg);
 
-    // Prepare constraints
+    std::vector<std::vector<float>> start_joint_values_set;
+    start_joint_values_set.push_back(start_joint_values);
+    std::vector<std::vector<float>> goal_joint_values_set;
+    goal_joint_values_set.push_back(goal_joint_values);
+
+    // create the task from start and goal states
+    CUDAMPLib::SingleArmTaskPtr task = std::make_shared<CUDAMPLib::SingleArmTask>(
+        start_joint_values_set,
+        goal_joint_values_set
+    );
+
+    // prepare the state markers for both start and goal state to visualize later
+    moveit_msgs::msg::DisplayRobotState start_display_robot_state;
+    start_display_robot_state.state = start_state_msg;
+    moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
+    goal_display_robot_state.state = goal_state_msg;
+
+    /***************************** 4. Create Constraints For Planning **************************************************/
+
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
-    // Create obstacle constraint
-    CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+
+    // Create obstacle constraint for sphere
+    CUDAMPLib::EnvConstraintSpherePtr env_constraint_sphere = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
         "obstacle_constraint",
         balls_pos,
         ball_radius
     );
-    constraints.push_back(env_constraint);
+    // constraints.push_back(env_constraint_sphere);
+
+    // Create obstacle constraint for cuboid
+    CUDAMPLib::EnvConstraintCuboidPtr env_constraint_cuboid = std::make_shared<CUDAMPLib::EnvConstraintCuboid>(
+        "obstacle_constraint",
+        bounding_boxes_pos,
+        bounding_boxes_orientation_matrix,
+        bounding_boxes_max,
+        bounding_boxes_min
+    );
+    constraints.push_back(env_constraint_cuboid);
+    
     // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
@@ -1339,6 +1435,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_info.getSelfCollisionEnabledMap()
     );
     constraints.push_back(self_collision_constraint);
+
+    /****************************** 5. Create Space *******************************************************************/
 
     // Create space
     CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
@@ -1359,22 +1457,13 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         0.02 // resolution
     );
 
-    std::vector<std::vector<float>> start_joint_values_set;
-    start_joint_values_set.push_back(start_joint_values);
-
-    std::vector<std::vector<float>> goal_joint_values_set;
-    goal_joint_values_set.push_back(goal_joint_values);
-    // create the task
-    CUDAMPLib::SingleArmTaskPtr task = std::make_shared<CUDAMPLib::SingleArmTask>(
-        start_joint_values_set,
-        goal_joint_values_set
-    );
+    /****************************** 6. Create Planner and set planning parameters *******************************************************/
 
     // create the planner
     CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
 
+    // set planner parameters
     planner->setMaxTravelDistance(5.0);
-
     planner->setSampleAttemptsInEachIteration(10);
     
     // set the task
@@ -1384,16 +1473,17 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(5);
     CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
 
+    /****************************** 7. Solve the task ********************************************************************************/
+
     // solve the task
-    // record the time
     auto start_time = std::chrono::high_resolution_clock::now();
     planner->solve(termination_condition);
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_time = end_time - start_time;
-    // print in green
     std::cout << "\033[1;32m" << "Time taken by function: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
 
-    /************************** Debug **************************************/
+    /************************** 8. Visualize both start and goal group **************************************/
+
     // extract the start and goal group states
     CUDAMPLib::BaseStatesPtr start_group_states;
     CUDAMPLib::BaseStatesPtr goal_group_states;
@@ -1403,14 +1493,14 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     CUDAMPLib::SingleArmStatesPtr start_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(start_group_states);
     CUDAMPLib::SingleArmStatesPtr goal_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(goal_group_states);
 
-    // create color
+    // create color for start group
     std_msgs::msg::ColorRGBA color_start;
     color_start.r = 0.0;
     color_start.g = 1.0;
     color_start.b = 0.0;
     color_start.a = 0.4;
 
-    // visualize the states
+    // visualize the start group states
     visualization_msgs::msg::MarkerArray start_group_state_markers_combined;
     generate_state_markers(
         start_group_states_single_arm->getJointStatesHost(),
@@ -1422,7 +1512,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_info.getEndEffectorLinkNames()
     );
 
-    // create color
+    // create color for goal group
     std_msgs::msg::ColorRGBA color_goal;
     color_goal.r = 1.0;
     color_goal.g = 0.0;
@@ -1440,7 +1530,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         robot_info.getEndEffectorLinkNames()
     );
 
-    /************************** Debug **************************************/
+    /************************** 9. create the trajectory marker if exists **************************************/
 
     moveit_msgs::msg::DisplayTrajectory display_trajectory;
     moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
@@ -1473,30 +1563,18 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         std::cout << "\033[1;31m" << "Task not solved" << "\033[0m" << std::endl;
     }
 
-    /************************************* prepare publishers ******************************************* */
+    /************************************* 10. prepare publishers ******************************************* */
 
     // Create a start robot state publisher
     auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
-    // Create a goal robot state publisher
     auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
-    auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
-    std::shared_ptr<rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>> display_publisher =
-        node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
-
+    auto sphere_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
+    auto cuboid_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cuboids", 1);
+    auto display_publisher = node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
     auto start_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("start_group_states", 1);
     auto goal_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("goal_group_states", 1);
-
-    // Create a DisplayRobotState message
-    moveit_msgs::msg::DisplayRobotState start_display_robot_state;
-    start_display_robot_state.state = start_state_msg;
-
-    // Create a DisplayRobotState message
-    moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
-    goal_display_robot_state.state = goal_state_msg;
-
-    // Create a obstacle MarkerArray message
-    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generate_obstacles_markers(balls_pos, ball_radius, node);
-    std::cout << "publishing start and goal robot state" << std::endl;
+    
+    /************************************ 11. loop for visulize ************************************************************/
 
     // Publish the message in a loop
     while (rclcpp::ok())
@@ -1504,7 +1582,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         // Publish the message
         start_robot_state_publisher->publish(start_display_robot_state);
         goal_robot_state_publisher->publish(goal_display_robot_state);
-        obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
+        sphere_obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
+        cuboid_obstacle_marker_publisher->publish(obstacle_collision_cuboids_marker_array);
         start_group_states_publisher->publish(start_group_state_markers_combined);
         goal_group_states_publisher->publish(goal_group_state_markers_combined);
 
@@ -2407,7 +2486,7 @@ int main(int argc, char** argv)
     // cuda_test_node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     // RCLCPP_INFO(cuda_test_node->get_logger(), "collision_spheres_file_path: %s", collision_spheres_file_path.c_str());
 
-    TEST_OBSTACLES(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_OBSTACLES(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_FORWARD(kinematic_model, GROUP_NAME, cuda_test_node);
 
@@ -2425,7 +2504,7 @@ int main(int argc, char** argv)
 
     // TEST_NEAREST_NEIGHBOR(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

@@ -10,20 +10,20 @@
 
 namespace CUDAMPLib
 {
-    class EnvConstraint : public BaseConstraint
+    class EnvConstraintSphere : public BaseConstraint
     {
         public:
             /**
-                * @brief Construct a new Env Constraint object
-                * @param env_collision_spheres_pos The positions of the environment collision spheres in the base_link frame.
-                * @param env_collision_spheres_radius The radii of the environment collision spheres.
+                @brief Construct a new Env Constraint object
+                @param env_collision_spheres_pos The positions of the environment collision spheres in the base_link frame.
+                @param env_collision_spheres_radius The radii of the environment collision spheres.
              */
-            EnvConstraint(
+            EnvConstraintSphere(
                 const std::string& constraint_name,
                 const std::vector<std::vector<float>>& env_collision_spheres_pos,
                 const std::vector<float>& env_collision_spheres_radius
             );
-            ~EnvConstraint() override;
+            ~EnvConstraintSphere() override;
 
             void computeCost(BaseStatesPtr states) override;
             
@@ -33,5 +33,5 @@ namespace CUDAMPLib
             float *d_env_collision_spheres_radius;
     };
 
-    typedef std::shared_ptr<EnvConstraint> EnvConstraintPtr;
+    typedef std::shared_ptr<EnvConstraintSphere> EnvConstraintSpherePtr;
 } // namespace CUDAMPLibs

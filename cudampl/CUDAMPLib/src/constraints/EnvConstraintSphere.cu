@@ -1,10 +1,10 @@
-#include <constraints/EnvConstraint.h>
+#include <constraints/EnvConstraintSphere.h>
 
 #include <chrono>
 
 namespace CUDAMPLib{
 
-    EnvConstraint::EnvConstraint(
+    EnvConstraintSphere::EnvConstraintSphere(
         const std::string& constraint_name,
         const std::vector<std::vector<float>>& env_collision_spheres_pos,
         const std::vector<float>& env_collision_spheres_radius
@@ -26,7 +26,7 @@ namespace CUDAMPLib{
         cudaMemcpy(d_env_collision_spheres_radius, env_collision_spheres_radius.data(), env_collision_spheres_radius_bytes, cudaMemcpyHostToDevice);
     }
 
-    EnvConstraint::~EnvConstraint()
+    EnvConstraintSphere::~EnvConstraintSphere()
     {
         cudaFree(d_env_collision_spheres_pos_in_base_link);
         cudaFree(d_env_collision_spheres_radius);
@@ -116,7 +116,7 @@ namespace CUDAMPLib{
         }
     }
 
-    void EnvConstraint::computeCost(BaseStatesPtr states)
+    void EnvConstraintSphere::computeCost(BaseStatesPtr states)
     {
         // Cast the state and space information.
         SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
@@ -149,8 +149,5 @@ namespace CUDAMPLib{
             num_of_env_collision_spheres,              // assumed to be defined/available
             d_cost_of_current_constraint
         );
-
-        // // Wait for the kernel to finish.
-        // CUDA_CHECK(cudaDeviceSynchronize());
     }
 } // namespace CUDAMPLib

@@ -294,7 +294,7 @@ bool FoliationInterface::solve_motion_task(
   }
 
   // construct environment constraint
-  CUDAMPLib::EnvConstraintPtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraint>(
+  CUDAMPLib::EnvConstraintSpherePtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
     "obstacle_constraint",
     obstacle_points_float,
     obstacle_sphere_radius
