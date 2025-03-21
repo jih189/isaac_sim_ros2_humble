@@ -14,6 +14,7 @@
 #include <CUDAMPLib/spaces/SingleArmSpace.h>
 #include <CUDAMPLib/constraints/EnvConstraintSphere.h>
 #include <CUDAMPLib/constraints/EnvConstraintCuboid.h>
+#include <CUDAMPLib/constraints/EnvConstraintCylinder.h>
 #include <CUDAMPLib/constraints/SelfCollisionConstraint.h>
 #include <CUDAMPLib/constraints/TaskSpaceConstraint.h>
 #include <CUDAMPLib/constraints/BoundaryConstraint.h>
@@ -1306,27 +1307,42 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     // find the region where the obstacles should not be placed
     std::vector<BoundingBox> unmoveable_bounding_boxes_of_robot = getUnmoveableBoundingBoxes(robot_model, group_name, 0.05);
 
-    // create obstacles
+    // create obstacles for spheres
     std::vector<Sphere> collision_spheres;
     genSphereObstacles(10, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
 
+    // create obstacles for cuboids
     std::vector<BoundingBox> bounding_boxes;
     genCuboidObstacles(40, 0.15, 0.1, unmoveable_bounding_boxes_of_robot, bounding_boxes);
+
+    // create obstacles for cylinders
+    std::vector<Cylinder> cylinders;
+    genCylinderObstacles(40, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
+
 
     // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintSphere
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
     SphereToVectors(collision_spheres, balls_pos, ball_radius);
 
+    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintCuboid
     std::vector<std::vector<float>> bounding_boxes_pos;
     std::vector<std::vector<float>> bounding_boxes_orientation_matrix;
     std::vector<std::vector<float>> bounding_boxes_max;
     std::vector<std::vector<float>> bounding_boxes_min;
     CuboidToVectors(bounding_boxes, bounding_boxes_pos, bounding_boxes_orientation_matrix, bounding_boxes_max, bounding_boxes_min);
 
+    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintCylinder
+    std::vector<std::vector<float>> cylinders_pos;
+    std::vector<std::vector<float>> cylinders_orientation_matrix;
+    std::vector<float> cylinders_radius;
+    std::vector<float> cylinders_height;
+    CylinderToVectors(cylinders, cylinders_pos, cylinders_orientation_matrix, cylinders_radius, cylinders_height);
+
     // generate the markers for the obstacles
     visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generateSpheresMarkers(collision_spheres, node);
     visualization_msgs::msg::MarkerArray obstacle_collision_cuboids_marker_array = generateBoundingBoxesMarkers(bounding_boxes, node);
+    visualization_msgs::msg::MarkerArray obstacle_collision_cylinders_marker_array = generateCylindersMarkers(cylinders, node);
 
     /***************************** 3. Generate Start and Goal States **************************************************/
 
@@ -1334,51 +1350,75 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     auto world = std::make_shared<collision_detection::World>();
     auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
 
-    // Add spheres as obstacles to the planning scene
-    for (size_t i = 0; i < collision_spheres.size(); i++)
+    // // Add spheres as obstacles to the planning scene
+    // for (size_t i = 0; i < collision_spheres.size(); i++)
+    // {
+    //     Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
+    //     sphere_pose.translation() = Eigen::Vector3d(collision_spheres[i].x, collision_spheres[i].y, collision_spheres[i].z);
+    //     planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(collision_spheres[i].radius)), sphere_pose);
+    // }
+
+    // // Add cuboids as obstacles to the planning scene
+    // for (size_t i = 0; i < bounding_boxes.size(); i++)
+    // {
+    //     // Get the current bounding box
+    //     BoundingBox box = bounding_boxes[i];
+
+    //     // Compute the dimensions of the cuboid
+    //     float dim_x = box.x_max - box.x_min;
+    //     float dim_y = box.y_max - box.y_min;
+    //     float dim_z = box.z_max - box.z_min;
+
+    //     // Create the Box shape using the dimensions
+    //     shapes::ShapeConstPtr box_shape(new shapes::Box(dim_x, dim_y, dim_z));
+
+    //     // Compute the center of the box in its local coordinate frame.
+    //     // Note: this center is relative to the reference point given by box.x, box.y, box.z.
+    //     float center_local_x = (box.x_min + box.x_max) / 2.0;
+    //     float center_local_y = (box.y_min + box.y_max) / 2.0;
+    //     float center_local_z = (box.z_min + box.z_max) / 2.0;
+    //     Eigen::Vector3d center_local(center_local_x, center_local_y, center_local_z);
+
+    //     // Build the rotation from roll, pitch, yaw.
+    //     Eigen::Quaterniond quat;
+    //     quat = Eigen::AngleAxisd(box.roll, Eigen::Vector3d::UnitX()) *
+    //         Eigen::AngleAxisd(box.pitch, Eigen::Vector3d::UnitY()) *
+    //         Eigen::AngleAxisd(box.yaw, Eigen::Vector3d::UnitZ());
+
+    //     // The provided pose (box.x, box.y, box.z) is not at the center,
+    //     // so compute the final translation by adding the rotated local center offset.
+    //     Eigen::Vector3d pose_translation(box.x, box.y, box.z);
+    //     Eigen::Isometry3d box_pose = Eigen::Isometry3d::Identity();
+    //     box_pose.linear() = quat.toRotationMatrix();
+    //     box_pose.translation() = pose_translation + quat * center_local;
+
+    //     // Add the box as an obstacle to the planning scene.
+    //     planning_scene->getWorldNonConst()->addToObject("obstacle_box_" + std::to_string(i),
+    //                                                     box_shape, box_pose);
+    // }
+
+    // Add cylinders as obstacles to the planning scene
+    for (size_t i = 0; i < cylinders.size(); i++)
     {
-        Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
-        sphere_pose.translation() = Eigen::Vector3d(collision_spheres[i].x, collision_spheres[i].y, collision_spheres[i].z);
-        planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(collision_spheres[i].radius)), sphere_pose);
-    }
+        // Create an identity transformation for the cylinder pose
+        Eigen::Isometry3d cylinder_pose = Eigen::Isometry3d::Identity();
 
-    // Add cuboids as obstacles to the planning scene
-    for (size_t i = 0; i < bounding_boxes.size(); i++)
-    {
-        // Get the current bounding box
-        BoundingBox box = bounding_boxes[i];
+        // Set the translation using the cylinder's x, y, z coordinates
+        cylinder_pose.translation() = Eigen::Vector3d(cylinders[i].x, 
+                                                    cylinders[i].y, 
+                                                    cylinders[i].z);
 
-        // Compute the dimensions of the cuboid
-        float dim_x = box.x_max - box.x_min;
-        float dim_y = box.y_max - box.y_min;
-        float dim_z = box.z_max - box.z_min;
+        // Compute the orientation from roll, pitch, and yaw using Eigen's AngleAxis
+        Eigen::Quaterniond q = Eigen::AngleAxisd(cylinders[i].roll, Eigen::Vector3d::UnitX()) *
+                            Eigen::AngleAxisd(cylinders[i].pitch, Eigen::Vector3d::UnitY()) *
+                            Eigen::AngleAxisd(cylinders[i].yaw, Eigen::Vector3d::UnitZ());
+        cylinder_pose.rotate(q);
 
-        // Create the Box shape using the dimensions
-        shapes::ShapeConstPtr box_shape(new shapes::Box(dim_x, dim_y, dim_z));
-
-        // Compute the center of the box in its local coordinate frame.
-        // Note: this center is relative to the reference point given by box.x, box.y, box.z.
-        float center_local_x = (box.x_min + box.x_max) / 2.0;
-        float center_local_y = (box.y_min + box.y_max) / 2.0;
-        float center_local_z = (box.z_min + box.z_max) / 2.0;
-        Eigen::Vector3d center_local(center_local_x, center_local_y, center_local_z);
-
-        // Build the rotation from roll, pitch, yaw.
-        Eigen::Quaterniond quat;
-        quat = Eigen::AngleAxisd(box.roll, Eigen::Vector3d::UnitX()) *
-            Eigen::AngleAxisd(box.pitch, Eigen::Vector3d::UnitY()) *
-            Eigen::AngleAxisd(box.yaw, Eigen::Vector3d::UnitZ());
-
-        // The provided pose (box.x, box.y, box.z) is not at the center,
-        // so compute the final translation by adding the rotated local center offset.
-        Eigen::Vector3d pose_translation(box.x, box.y, box.z);
-        Eigen::Isometry3d box_pose = Eigen::Isometry3d::Identity();
-        box_pose.linear() = quat.toRotationMatrix();
-        box_pose.translation() = pose_translation + quat * center_local;
-
-        // Add the box as an obstacle to the planning scene.
-        planning_scene->getWorldNonConst()->addToObject("obstacle_box_" + std::to_string(i),
-                                                        box_shape, box_pose);
+        // Create the cylinder shape and add it to the planning scene
+        planning_scene->getWorldNonConst()->addToObject(
+            "obstacle_cylinder_" + std::to_string(i),
+            shapes::ShapeConstPtr(new shapes::Cylinder(cylinders[i].height, cylinders[i].radius)),
+            cylinder_pose);
     }
 
     // generate start and goal states
@@ -1425,7 +1465,17 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         bounding_boxes_max,
         bounding_boxes_min
     );
-    constraints.push_back(env_constraint_cuboid);
+    // constraints.push_back(env_constraint_cuboid);
+
+    // Create obstacle constraint for cylinder
+    CUDAMPLib::EnvConstraintCylinderPtr env_constraint_cylinder = std::make_shared<CUDAMPLib::EnvConstraintCylinder>(
+        "obstacle_constraint",
+        cylinders_pos,
+        cylinders_orientation_matrix,
+        cylinders_radius,
+        cylinders_height
+    );
+    constraints.push_back(env_constraint_cylinder);
     
     // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
@@ -1573,6 +1623,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
     auto sphere_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
     auto cuboid_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cuboids", 1);
+    auto cylinder_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cylinders", 1);
     auto display_publisher = node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
     auto start_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("start_group_states", 1);
     auto goal_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("goal_group_states", 1);
@@ -1587,6 +1638,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         goal_robot_state_publisher->publish(goal_display_robot_state);
         sphere_obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
         cuboid_obstacle_marker_publisher->publish(obstacle_collision_cuboids_marker_array);
+        cylinder_obstacle_marker_publisher->publish(obstacle_collision_cylinders_marker_array);
         start_group_states_publisher->publish(start_group_state_markers_combined);
         goal_group_states_publisher->publish(goal_group_state_markers_combined);
 

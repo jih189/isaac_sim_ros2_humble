@@ -117,6 +117,21 @@ void CuboidToVectors(const std::vector<BoundingBox> & input, std::vector<std::ve
     }
 }
 
+void CylinderToVectors(const std::vector<Cylinder> & input, std::vector<std::vector<float>> & pos_output, std::vector<std::vector<float>> & orientation_output, std::vector<float> & radius_output, std::vector<float> & height_output)
+{
+    pos_output.clear();
+    orientation_output.clear();
+    radius_output.clear();
+    height_output.clear();
+    for (const auto& cylinder : input)
+    {
+        pos_output.push_back({cylinder.x, cylinder.y, cylinder.z});
+        orientation_output.push_back(rpyToRotationMatrix(cylinder.roll, cylinder.pitch, cylinder.yaw));
+        radius_output.push_back(cylinder.radius);
+        height_output.push_back(cylinder.height);
+    }
+}
+
 // Recursive helper function to accumulate successor link names.
 void getSuccessorLinkNames(const urdf::LinkConstSharedPtr& link, std::vector<std::string>& successor_links)
 {
@@ -761,21 +776,6 @@ bool isCylinderCollidingWithBoundingBoxes(const Cylinder &cyl, const std::vector
     }
     return false;
 }
-
-
-// struct Cylinder
-// {
-//     float x;
-//     float y;
-//     float z;
-
-//     float roll;
-//     float pitch;
-//     float yaw;
-
-//     float radius;
-//     float height;
-// };
 
 void genCylinderObstacles(
     int num_of_obstacles,

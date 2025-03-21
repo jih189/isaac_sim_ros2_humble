@@ -12,7 +12,7 @@ namespace CUDAMPLib {
     // The inverse pose is computed as T⁻¹ = [ Rᵀ, -Rᵀ * t; 0 0 0 1 ].
     std::vector<float> computeInversePoseMatrix(const std::vector<float>& pos, const std::vector<float>& orientation) {
         // Ensure pos has 3 and orientation has 9 elements.
-        std::vector<float> inv(16, 0.0f);
+        std::vector<float> inv(12, 0.0f);
         // Extract the rotation matrix R from orientation (row-major)
         float r00 = orientation[0], r01 = orientation[1], r02 = orientation[2];
         float r10 = orientation[3], r11 = orientation[4], r12 = orientation[5];
@@ -29,8 +29,7 @@ namespace CUDAMPLib {
         inv[3]  = - (t00 * pos[0] + t01 * pos[1] + t02 * pos[2]);
         inv[7]  = - (t10 * pos[0] + t11 * pos[1] + t12 * pos[2]);
         inv[11] = - (t20 * pos[0] + t21 * pos[1] + t22 * pos[2]);
-        // Set the bottom row for homogeneous coordinates
-        inv[12] = 0.0f; inv[13] = 0.0f; inv[14] = 0.0f; inv[15] = 1.0f;
+        // we do not need the last row [0 0 0 1] for our 4x4 matrix
         return inv;
     }
 
@@ -46,24 +45,26 @@ namespace CUDAMPLib {
         num_of_env_collision_cuboids = env_collision_cuboid_pos.size();
 
         // Precompute the inverse pose matrices for each cuboid.
-        // Each cuboid's inverse pose is a 4x4 matrix (16 floats).
-        std::vector<float> inv_pose_matrices;
-        inv_pose_matrices.reserve(num_of_env_collision_cuboids * 16);
+        // Each cuboid's inverse pose is a 4x4 matrix (16 floats), but we only store the first 12 elements.
+        std::vector<float> h_inverse_pose_matrices;
+        h_inverse_pose_matrices.reserve(num_of_env_collision_cuboids * 12);
         for (int i = 0; i < num_of_env_collision_cuboids; i++) {
             // Compute the inverse pose matrix from the cuboid's position and orientation.
-            std::vector<float> inv = computeInversePoseMatrix(env_collision_cuboid_pos[i], env_collision_cuboid_orientation[i]);
-            inv_pose_matrices.insert(inv_pose_matrices.end(), inv.begin(), inv.end());
+            std::vector<float> invMat = computeInversePoseMatrix(env_collision_cuboid_pos[i], env_collision_cuboid_orientation[i]);
+            for (int j = 0; j < 12; j++) {
+                h_inverse_pose_matrices[i * 12 + j] = invMat[j];
+            }
         }
 
         // Allocate device memory for inverse pose matrices and cuboid extents.
-        size_t inv_pose_bytes = static_cast<size_t>(num_of_env_collision_cuboids) * sizeof(float) * 16;
+        size_t inv_pose_bytes = static_cast<size_t>(num_of_env_collision_cuboids) * sizeof(float) * 12;
         size_t extents_bytes = static_cast<size_t>(num_of_env_collision_cuboids) * sizeof(float) * 3;
         cudaMalloc(&d_env_collision_cuboids_inverse_pose_matrix_in_base_link, inv_pose_bytes);
         cudaMalloc(&d_env_collision_cuboids_max, extents_bytes);
         cudaMalloc(&d_env_collision_cuboids_min, extents_bytes);
 
         // Copy the computed inverse pose matrices to the device.
-        cudaMemcpy(d_env_collision_cuboids_inverse_pose_matrix_in_base_link, inv_pose_matrices.data(), inv_pose_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_env_collision_cuboids_inverse_pose_matrix_in_base_link, h_inverse_pose_matrices.data(), inv_pose_bytes, cudaMemcpyHostToDevice);
 
         // Flatten the max and min extents and copy them to the device.
         std::vector<float> flattened_max = floatVectorFlatten(env_collision_cuboid_max);
@@ -85,7 +86,7 @@ namespace CUDAMPLib {
         const float* __restrict__ d_self_collision_spheres_radius,            // [num_self_collision_spheres]
         int num_of_self_collision_spheres,
         int num_of_configurations,
-        const float* __restrict__ d_env_collision_cuboids_inverse_pose_matrix, // [num_cuboids x 16]
+        const float* __restrict__ d_env_collision_cuboids_inverse_pose_matrix, // [num_cuboids x 12]
         const float* __restrict__ d_env_collision_cuboids_min,                 // [num_cuboids x 3]
         const float* __restrict__ d_env_collision_cuboids_max,                 // [num_cuboids x 3]
         int num_of_env_collision_cuboids,
@@ -111,7 +112,7 @@ namespace CUDAMPLib {
             float sphere_z = d_self_collision_spheres_pos_in_base_link[pos_index + 2];
             float sphere_radius = d_self_collision_spheres_radius[self_idx];
 
-            int mat_index = cuboid_idx * 16;
+            int mat_index = cuboid_idx * 12;
             float m0 = d_env_collision_cuboids_inverse_pose_matrix[mat_index + 0];
             float m1 = d_env_collision_cuboids_inverse_pose_matrix[mat_index + 1];
             float m2 = d_env_collision_cuboids_inverse_pose_matrix[mat_index + 2];
