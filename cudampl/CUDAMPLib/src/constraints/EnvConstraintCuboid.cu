@@ -3,9 +3,6 @@
 #include <cstdio> // for printf
 #include <vector>
 
-// Assumed to be defined elsewhere; flattens a vector of vector<float> into a contiguous std::vector<float>
-extern std::vector<float> floatVectorFlatten(const std::vector<std::vector<float>>& vec);
-
 namespace CUDAMPLib {
 
     // Helper function: computes the inverse pose matrix for a cuboid.

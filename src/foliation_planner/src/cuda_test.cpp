@@ -1561,6 +1561,9 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     {
         // print "Task not solved" in red color
         std::cout << "\033[1;31m" << "Task not solved" << "\033[0m" << std::endl;
+
+        // print the failure reason
+        std::cout << "Failure reason: " << task->getFailureReason() << std::endl;
     }
 
     /************************************* 10. prepare publishers ******************************************* */
