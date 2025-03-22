@@ -1,240 +1,40 @@
-////////////////////////////////////////////////////////////////
-// EnvConstraintSphere.h
-///////////////////////////////////////////////////////////////
 
-#pragma once
+std::vector<std::string> joint_names = joint_model_group->getJointModelNames();
+// help me load the joint values from request.yaml based on the joint names.
+// start values is under the start state
+// goal values is under the goal constraints
 
-#pragma nv_diag_suppress 20012
-#pragma nv_diag_suppress 20014
-
-#include <base/Constraint.h>
-#include <states/SingleArmStates.h>
-#include <util.h>
-#include <cuda_runtime.h>
-
-namespace CUDAMPLib
-{
-    class EnvConstraintSphere : public BaseConstraint
-    {
-        public:
-            /**
-                @brief Construct a new Env Constraint object
-                @param env_collision_spheres_pos The positions of the environment collision spheres in the base_link frame.
-                @param env_collision_spheres_radius The radii of the environment collision spheres.
-             */
-            EnvConstraintSphere(
-                const std::string& constraint_name,
-                const std::vector<std::vector<float>>& env_collision_spheres_pos,
-                const std::vector<float>& env_collision_spheres_radius
-            );
-            ~EnvConstraintSphere() override;
-
-            void computeCost(BaseStatesPtr states) override;
-            
-        private:
-            int num_of_env_collision_spheres;
-            float *d_env_collision_spheres_pos_in_base_link;
-            float *d_env_collision_spheres_radius;
-    };
-
-    typedef std::shared_ptr<EnvConstraintSphere> EnvConstraintSpherePtr;
-} // namespace CUDAMPLibs
-
-////////////////////////////////////////////////////////////////
-// EnvConstraintSphere.cu
-///////////////////////////////////////////////////////////////
-#include <constraints/EnvConstraintSphere.h>
-
-#include <chrono>
-
-namespace CUDAMPLib{
-
-    EnvConstraintSphere::EnvConstraintSphere(
-        const std::string& constraint_name,
-        const std::vector<std::vector<float>>& env_collision_spheres_pos,
-        const std::vector<float>& env_collision_spheres_radius
-    )
-    : BaseConstraint(constraint_name, false) // This constraint is not projectable.
-    {
-        // Prepare the cuda memory for the collision cost
-        num_of_env_collision_spheres = env_collision_spheres_pos.size();
-
-        // Allocate memory for the environment collision spheres
-        size_t env_collision_spheres_pos_bytes = (size_t)num_of_env_collision_spheres * sizeof(float) * 3;
-        size_t env_collision_spheres_radius_bytes = (size_t)num_of_env_collision_spheres * sizeof(float);
-
-        cudaMalloc(&d_env_collision_spheres_pos_in_base_link, env_collision_spheres_pos_bytes);
-        cudaMalloc(&d_env_collision_spheres_radius, env_collision_spheres_radius_bytes);
-
-        // Copy the environment collision spheres to the device
-        cudaMemcpy(d_env_collision_spheres_pos_in_base_link, floatVectorFlatten(env_collision_spheres_pos).data(), env_collision_spheres_pos_bytes, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_env_collision_spheres_radius, env_collision_spheres_radius.data(), env_collision_spheres_radius_bytes, cudaMemcpyHostToDevice);
-    }
-
-    EnvConstraintSphere::~EnvConstraintSphere()
-    {
-        cudaFree(d_env_collision_spheres_pos_in_base_link);
-        cudaFree(d_env_collision_spheres_radius);
-    }
-
-    __global__ void computeAndSumCollisionCostKernel(
-        const float* __restrict__ d_self_collision_spheres_pos_in_base_link, // [num_configurations x num_self_collision_spheres x 3]
-        const float* __restrict__ d_self_collision_spheres_radius,            // [num_self_collision_spheres]
-        int num_of_self_collision_spheres,
-        int num_of_configurations,
-        const float* __restrict__ d_obstacle_sphere_pos_in_base_link,         // [num_of_obstacle_collision_spheres x 3]
-        const float* __restrict__ d_obstacle_sphere_radius,                   // [num_of_obstacle_collision_spheres]
-        int num_of_obstacle_collision_spheres,
-        float* d_cost                                                         // [num_configurations]
-    )
-    {
-        extern __shared__ float sdata[];
-
-        // Each block handles one configuration (state)
-        int state_index = blockIdx.x;
-        if (state_index >= num_of_configurations)
-            return;
-
-        int tid = threadIdx.x;
-        int totalPairs = num_of_self_collision_spheres * num_of_obstacle_collision_spheres;
-        float localSum = 0.0f;
-
-        // Process pairs in a strided loop across all self/obstacle sphere pairs.
-        for (int pairIdx = tid; pairIdx < totalPairs; pairIdx += blockDim.x)
-        {
-            // Decode indices.
-            int self_idx = pairIdx / num_of_obstacle_collision_spheres;
-            int obs_idx  = pairIdx % num_of_obstacle_collision_spheres;
-
-            // Compute the base index for the self-collision sphere position for this configuration.
-            int pos_index = state_index * num_of_self_collision_spheres * 3 + self_idx * 3;
-            float self_x = d_self_collision_spheres_pos_in_base_link[pos_index + 0];
-            float self_y = d_self_collision_spheres_pos_in_base_link[pos_index + 1];
-            float self_z = d_self_collision_spheres_pos_in_base_link[pos_index + 2];
-            float self_radius = d_self_collision_spheres_radius[self_idx];
-
-            // Load the obstacle sphere's position and radius.
-            int obs_pos_index = obs_idx * 3;
-            float obs_x = d_obstacle_sphere_pos_in_base_link[obs_pos_index + 0];
-            float obs_y = d_obstacle_sphere_pos_in_base_link[obs_pos_index + 1];
-            float obs_z = d_obstacle_sphere_pos_in_base_link[obs_pos_index + 2];
-            float obs_radius = d_obstacle_sphere_radius[obs_idx];
-
-            // Compute squared distance between sphere centers.
-            float diff_x = self_x - obs_x;
-            float diff_y = self_y - obs_y;
-            float diff_z = self_z - obs_z;
-            float dist_sq = diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
-
-            float sum_radii = self_radius + obs_radius;
-            float sum_radii_sq = sum_radii * sum_radii;
-            float cost = 0.0f;
-
-            // Only compute the square root if spheres overlap.
-            if (dist_sq < sum_radii_sq)
-            {
-                float distance = sqrtf(dist_sq);
-                cost = fmaxf(0.0f, sum_radii - distance);
-            }
-
-            localSum += cost;
-        }
-
-        // Store the partial sum in shared memory.
-        sdata[tid] = localSum;
-        __syncthreads();
-
-        // Reduction in shared memory.
-        for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
-        {
-            if (tid < s)
-            {
-                sdata[tid] += sdata[tid + s];
-            }
-            __syncthreads();
-        }
-
-        // Write the final summed cost for this configuration.
-        if (tid == 0)
-        {
-            d_cost[state_index] = sdata[0];
-        }
-    }
-
-    void EnvConstraintSphere::computeCost(BaseStatesPtr states)
-    {
-        // Cast the state and space information.
-        SingleArmSpaceInfoPtr space_info = std::static_pointer_cast<SingleArmSpaceInfo>(states->getSpaceInfo());
-        SingleArmStatesPtr single_arm_states = std::static_pointer_cast<SingleArmStates>(states);
-
-        // Retrieve the cost location for this constraint.
-        int constraint_index = getConstraintIndex(space_info);
-        if (constraint_index == -1)
-        {
-            printf("Constraint %s is not found in the space\n", this->constraint_name.c_str());
-            return;
-        }
-
-        // Pointer to the cost buffer for the current constraint.
-        float* d_cost_of_current_constraint = &(single_arm_states->getCostsCuda()[single_arm_states->getNumOfStates() * constraint_index]);
-
-        // Setup kernel launch parameters.
-        int threadsPerBlock = 256;
-        int blocksPerGrid = single_arm_states->getNumOfStates(); // one block per configuration
-        size_t sharedMemSize = threadsPerBlock * sizeof(float);
-
-        // Launch the combined kernel.
-        computeAndSumCollisionCostKernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(
-            single_arm_states->getSelfCollisionSpheresPosInBaseLinkCuda(),
-            space_info->d_self_collision_spheres_radius,
-            space_info->num_of_self_collision_spheres,
-            single_arm_states->getNumOfStates(),
-            d_env_collision_spheres_pos_in_base_link,  // assumed to be defined/available
-            d_env_collision_spheres_radius,            // assumed to be defined/available
-            num_of_env_collision_spheres,              // assumed to be defined/available
-            d_cost_of_current_constraint
-        );
-    }
-} // namespace CUDAMPLib
-
-
-
-
-
-
-
-
-
-
-
-struct Sphere
-{
-    float x;
-    float y;
-    float z;
-    float radius;
-};
-
-// Add spheres as obstacles to the planning scene
-for (size_t i = 0; i < collision_spheres.size(); i++)
-{
-    Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
-    sphere_pose.translation() = Eigen::Vector3d(collision_spheres[i].x, collision_spheres[i].y, collision_spheres[i].z);
-    planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(collision_spheres[i].radius)), sphere_pose);
-}
-
-struct Cylinder
-{
-    float x;
-    float y;
-    float z;
-
-    float roll;
-    float pitch;
-    float yaw;
-
-    float radius;
-    float height;
-};
-
-// Give me the code to add cylinder as obstacles to the planning scene
+/////////////////////////////////// request.yaml ////////////////////////////////////////////////////////
+goal_constraints:
+  - joint_constraints:
+      - joint_name: torso_lift_joint
+        position: 0.05580749394926036
+      - joint_name: shoulder_pan_joint
+        position: 0.2319594187719277
+      - joint_name: shoulder_lift_joint
+        position: -0.7632272745271215
+      - position: 0.7273950815863892
+        joint_name: upperarm_roll_joint
+      - joint_name: elbow_flex_joint
+        position: 1.421938462868271
+      - joint_name: forearm_roll_joint
+        position: 2.57193125373631
+      - joint_name: wrist_flex_joint
+        position: 0.4549567580598895
+      - joint_name: wrist_roll_joint
+        position: -3.141592599877235
+planner_id: BKPIECEGood
+group_name: arm_with_torso
+num_planning_attempts: 2
+allowed_planning_time: 60
+max_velocity_scaling_factor: 0
+max_acceleration_scaling_factor: 0
+workspace_parameters:
+  header:
+    frame_id: ""
+  min_corner: [-1, -1, -1]
+  max_corner: [1, 1, 1]
+start_state:
+  joint_state:
+    name: [l_wheel_joint, r_wheel_joint, torso_lift_joint, bellows_joint, head_pan_joint, head_tilt_joint, shoulder_pan_joint, shoulder_lift_joint, upperarm_roll_joint, elbow_flex_joint, forearm_roll_joint, wrist_flex_joint, wrist_roll_joint, l_gripper_finger_joint, r_gripper_finger_joint]
+    position: [0, 0, 0.1, 0.05, 0, 0, 1.32, 1.4, -0.2, 1.72, 0, 1.66, 0, 0.05, 0.05]

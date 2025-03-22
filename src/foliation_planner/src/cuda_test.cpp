@@ -31,6 +31,7 @@
 
 #include "foliation_planner/robot_info.hpp"
 #include "foliation_planner/obstacle_generator.hpp"
+#include "foliation_planner/MPM_helper.hpp"
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <tf2/LinearMath/Quaternion.h>
@@ -39,6 +40,10 @@
 // include for time
 #include <chrono>
 #include <limits>
+#include <yaml-cpp/yaml.h>
+#include <iostream>
+#include <sstream>
+#include <iomanip>
 
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
@@ -181,11 +186,11 @@ void generate_state_markers(
     }
 }
 
-void TEST_JACOBIAN(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_JACOBIAN(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     // create moveit robot state
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
@@ -308,11 +313,11 @@ void TEST_JACOBIAN(const moveit::core::RobotModelPtr & robot_model, const std::s
 /**
     Use moveit to compute the forward kinematics
  */
-void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     // create moveit robot state
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
@@ -438,11 +443,11 @@ void TEST_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
 
 }
 
-void EVAL_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void EVAL_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     // create moveit robot state
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
@@ -490,11 +495,11 @@ void EVAL_FORWARD(const moveit::core::RobotModelPtr & robot_model, const std::st
     std::cout << "\033[1;32m" << "Time taken by forward kinematics: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
 }
 
-void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
@@ -591,11 +596,11 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     // printf("\033[1;32m" "Time taken by checkMotions: %f seconds" "\033[0m \n", elapsed_time_check_motions.count());
 }
 
-void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
@@ -729,11 +734,11 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     robot_state.reset();
 }
 
-void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
@@ -851,11 +856,11 @@ void TEST_TASK_WITH_GOAL_REGION(const moveit::core::RobotModelPtr & robot_model,
 /**
     Test filter states
  */
-void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
@@ -910,11 +915,11 @@ void TEST_FILTER_STATES(const moveit::core::RobotModelPtr & robot_model, const s
 }
 
 
-void TEST_NEAREST_NEIGHBOR(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_NEAREST_NEIGHBOR(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
@@ -1046,11 +1051,11 @@ void TEST_NEAREST_NEIGHBOR(const moveit::core::RobotModelPtr & robot_model, cons
     Create a CUDAMPLib::SingleArmSpace and sample a set of states.
     Then, we will check the feasibility of the states and visualize the collision spheres in rviz.
  */
-void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     // set robot state to default state
@@ -1289,12 +1294,12 @@ void generateRandomStartAndGoal(
     std::cout << std::endl;
 }
 
-void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     /***************************** 1. Prepare Robot information **************************************************/
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
@@ -1657,11 +1662,11 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     robot_state.reset();
 }
 
-void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     // Prepare obstacle constraint
     std::vector<std::vector<float>> balls_pos;
@@ -1861,11 +1866,11 @@ void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::strin
     is ensuring the end effector is horizontal to the ground. It first randomly generate two states satisfying the task space constraint,
     then use the CUDAMPLib::RRG to plan a path between them, and the path must satisfy the task space constraint as well.
  */
-void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     // set robot state to default state
@@ -2138,11 +2143,11 @@ void TEST_CONSTRAINED_MOTION_PLANNING(const moveit::core::RobotModelPtr & robot_
     robot_state.reset();
 }
 
-void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
     // set robot state to default state
@@ -2383,29 +2388,141 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
     }
 }
 
-// struct BoundingBox
-// {
-//     float x_min;
-//     float x_max;
-//     float y_min;
-//     float y_max;
-//     float z_min;
-//     float z_max;
 
-//     // pose
-//     float x;
-//     float y;
-//     float z;
-//     float roll;
-//     float pitch;
-//     float yaw;
-// };
+void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node::SharedPtr node)
+{
+    int task_index = 33;
+    std::ostringstream oss;
+    // Set the width to 5 and fill with '0'
+    oss << std::setw(4) << std::setfill('0') << task_index;
+    std::string task_index_str = oss.str();
 
-void TEST_OBSTACLES(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node, bool debug = false)
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    
+    std::string problem_dir = "/home/ros/problems/bookshelf_small_fetch";
+    std::string robot_config_file = problem_dir + "/config.yaml";
+
+    // load the robot config
+    YAML::Node config = YAML::LoadFile(robot_config_file);
+
+    // load the group name
+    std::string planning_group = config["planning_group"].as<std::string>();
+    std::cout << "Planning Group: " << planning_group << std::endl;
+
+    RobotInfo robot_info(robot_model, planning_group, collision_spheres_file_path);
+
+    // get the joint model
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(planning_group);
+    std::vector<std::string> joint_names = joint_model_group->getJointModelNames();
+
+    // print the joint names of this joint model group
+    std::cout << "Joint names: ";
+    for (const auto& joint_name : joint_names)
+    {
+        std::cout << joint_name << " ";
+    }
+
+    // print default values from robot info
+    std::cout << "\nDefault joint values: ";
+    for (const auto& default_value : robot_info.getDefaultJointValues())
+    {
+        std::cout << default_value << " ";
+    }
+    std::cout << std::endl;
+
+    //////////////////////////// 1. Load the scene objects ////////////////////////////
+
+    // std::string scene_file = problem_dir + "/scene0001.yaml";
+    std::string scene_file = problem_dir + "/scene" + task_index_str + ".yaml"; // with padding
+
+    // load the scene
+    std::vector<BoundingBox> boxes;
+    std::vector<Cylinder> cylinders;
+    std::vector<Sphere> spheres;
+
+    if (loadSceneObjects(scene_file, boxes, cylinders, spheres)) {
+        std::cout << "Loaded " << boxes.size() << " boxes" << std::endl;
+        std::cout << "Loaded " << cylinders.size() << " cylinders" << std::endl;
+        std::cout << "Loaded " << spheres.size() << " spheres" << std::endl;
+    }
+
+    // generate markers
+    visualization_msgs::msg::MarkerArray box_markers = generateBoundingBoxesMarkers(boxes, node);
+    visualization_msgs::msg::MarkerArray cylinder_markers = generateCylindersMarkers(cylinders, node);
+    visualization_msgs::msg::MarkerArray sphere_markers = generateSpheresMarkers(spheres, node);
+
+    // combine the markers
+    visualization_msgs::msg::MarkerArray combined_markers;
+    combined_markers.markers.insert(combined_markers.markers.end(), box_markers.markers.begin(), box_markers.markers.end());
+    combined_markers.markers.insert(combined_markers.markers.end(), cylinder_markers.markers.begin(), cylinder_markers.markers.end());
+    combined_markers.markers.insert(combined_markers.markers.end(), sphere_markers.markers.begin(), sphere_markers.markers.end());
+    ///////////////////////////// 2. Load start and goal ////////////////////////////////////////////////////////
+
+    std::string request_file = problem_dir + "/request" + task_index_str + ".yaml";
+
+    // load the start and goal
+    std::vector<double> start_joint_values;
+    std::vector<double> goal_joint_values;
+
+    YAML::Node request_config = YAML::LoadFile(request_file);
+    loadJointValues(request_config, joint_names, start_joint_values, goal_joint_values);
+
+    // Print the joint values in the same order as joint_names.
+    for (size_t i = 0; i < joint_names.size(); ++i)
+    {
+        std::cout << "Joint: " << joint_names[i] 
+                  << "  start: " << start_joint_values[i] 
+                  << "  goal: " << goal_joint_values[i] << std::endl;
+    }
+
+    // Prepare robot state for start and goal to visualize
+    robot_state->setJointGroupPositions(joint_model_group, start_joint_values);
+    moveit_msgs::msg::RobotState start_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
+
+    robot_state->setJointGroupPositions(joint_model_group, goal_joint_values);
+    moveit_msgs::msg::RobotState goal_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, goal_state_msg);
+
+    // Create a DisplayRobotState message
+    moveit_msgs::msg::DisplayRobotState start_display_robot_state;
+    start_display_robot_state.state = start_state_msg;
+
+    moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
+    goal_display_robot_state.state = goal_state_msg;
+
+
+    //////////////////////
+
+    // Create marker publishers
+    auto marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("scene_objects", 1);
+    auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
+    auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+
+    // Publish the message in a loop
+    while (rclcpp::ok())
+    {
+        // Publish the message
+        marker_publisher->publish(combined_markers);
+        start_robot_state_publisher->publish(start_display_robot_state);
+        goal_robot_state_publisher->publish(goal_display_robot_state);
+
+        rclcpp::spin_some(node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+}
+
+void TEST_OBSTACLES(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path, debug);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
 
     // get robot state
     moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
@@ -2559,7 +2676,7 @@ int main(int argc, char** argv)
 
     // TEST_NEAREST_NEIGHBOR(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 
@@ -2568,6 +2685,8 @@ int main(int argc, char** argv)
     // TEST_CHECK_CONSTRAINED_MOTION(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    TEST_EVAL_MBM(kinematic_model, cuda_test_node);
 
     // list ros parameters
     // RCLCPP_INFO(cuda_test_node->get_logger(), "List all parameters");

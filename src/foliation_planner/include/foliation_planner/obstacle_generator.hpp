@@ -14,6 +14,7 @@
 
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <yaml-cpp/yaml.h>
 
 // Workspace bounds for sampling (can be made parameters if needed)
 const float WORKSPACE_X_MIN = -0.5f;
@@ -648,8 +649,6 @@ visualization_msgs::msg::MarkerArray generateBoundingBoxesMarkers(
     return marker_array;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 // Convert Euler angles (roll, pitch, yaw) to a rotation matrix (3x3) stored in a 2D array.
 // The rotation order is assumed to be Z (yaw) -> Y (pitch) -> X (roll).
 void eulerToRotationMatrix(float roll, float pitch, float yaw, float R[3][3]) {
@@ -896,4 +895,82 @@ visualization_msgs::msg::MarkerArray generateCylindersMarkers(
     }
 
     return marker_array;
+}
+
+void quaternionToRPY(double qx, double qy, double qz, double qw,
+                     float& roll, float& pitch, float& yaw) {
+    double sinr_cosp = 2.0 * (qw * qx + qy * qz);
+    double cosr_cosp = 1.0 - 2.0 * (qx * qx + qy * qy);
+    roll = std::atan2(sinr_cosp, cosr_cosp);
+
+    double sinp = 2.0 * (qw * qy - qz * qx);
+    pitch = (std::abs(sinp) >= 1) ? std::copysign(M_PI / 2.0, sinp) : std::asin(sinp);
+
+    double siny_cosp = 2.0 * (qw * qz + qx * qy);
+    double cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz);
+    yaw = std::atan2(siny_cosp, cosy_cosp);
+}
+
+bool loadSceneObjects(const std::string& yaml_path,
+                      std::vector<BoundingBox>& boxes,
+                      std::vector<Cylinder>& cylinders,
+                      std::vector<Sphere>& spheres) {
+    try {
+        YAML::Node scene = YAML::LoadFile(yaml_path);
+        const auto& objects = scene["world"]["collision_objects"];
+
+        for (const auto& obj : objects) {
+            std::string type = obj["primitives"][0]["type"].as<std::string>();
+            auto dimensions = obj["primitives"][0]["dimensions"].as<std::vector<double>>();
+            auto pos = obj["primitive_poses"][0]["position"].as<std::vector<double>>();
+            auto quat = obj["primitive_poses"][0]["orientation"].as<std::vector<double>>();
+
+            float roll, pitch, yaw;
+            quaternionToRPY(quat[0], quat[1], quat[2], quat[3], roll, pitch, yaw);
+
+            if (type == "cylinder") {
+                Cylinder cyl;
+                cyl.height = dimensions[0];
+                cyl.radius = dimensions[1];
+                cyl.x = pos[0];
+                cyl.y = pos[1];
+                cyl.z = pos[2];
+                cyl.roll = roll;
+                cyl.pitch = pitch;
+                cyl.yaw = yaw;
+                cylinders.push_back(cyl);
+            } else if (type == "box") {
+                BoundingBox box;
+                float dx = dimensions[0] / 2.0;
+                float dy = dimensions[1] / 2.0;
+                float dz = dimensions[2] / 2.0;
+                box.x_min = -dx;
+                box.x_max = dx;
+                box.y_min = -dy;
+                box.y_max = dy;
+                box.z_min = -dz;
+                box.z_max = dz;
+                box.x = pos[0];
+                box.y = pos[1];
+                box.z = pos[2];
+                box.roll = roll;
+                box.pitch = pitch;
+                box.yaw = yaw;
+                boxes.push_back(box);
+            } else if (type == "sphere") {
+                Sphere sph;
+                sph.radius = dimensions[0];
+                sph.x = pos[0];
+                sph.y = pos[1];
+                sph.z = pos[2];
+                spheres.push_back(sph);
+            }
+        }
+
+        return true;
+
+    } catch (const YAML::Exception& e) {
+        std::cerr << "Error loading scene YAML: " << e.what() << std::endl;
+        return false;
+    }
 }

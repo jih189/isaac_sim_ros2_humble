@@ -10,7 +10,7 @@ A class which take robot model and generate robot information for cudampl.
 class RobotInfo
 {
     public:
-    RobotInfo(const moveit::core::RobotModelConstPtr& robot_model, const std::string & group_name, const std::string & collision_spheres_file_path, bool debug = false)
+    RobotInfo(const moveit::core::RobotModelConstPtr& robot_model, const std::string & group_name, const std::string & collision_spheres_file_path)
     {
         // Initialize all variables
         joint_types.clear();
@@ -93,18 +93,10 @@ class RobotInfo
         // Ready the input to kin_forward
         for (const auto& link_name : link_names)
         {
-            if (debug)
-            {
-                std::cout << "link name: " << link_name << std::endl;
-            }
-            
-            // print its parent link name
             const moveit::core::LinkModel* link_model = robot_model->getLinkModel(link_name);
             if (link_model->getParentLinkModel() != nullptr) // if it is not the root link
             {
                 std::string parent_link_name = link_model->getParentLinkModel()->getName();
-                if (debug)
-                    std::cout << "Parent Link name: " << parent_link_name << std::endl;
 
                 // find the index of parent_link_name in the link_names
                 int parent_link_index = -1;
@@ -120,11 +112,6 @@ class RobotInfo
                 
                 // find joint name to its parent link
                 const moveit::core::JointModel* joint_model = link_model->getParentJointModel();
-                if (debug)
-                {
-                    std::cout << "Joint name: " << joint_model->getName() << std::endl;
-                    std::cout << "Joint type: " << joint_model->getType() << std::endl;
-                }
                 joint_name_to_parent_link.push_back(joint_model->getName());
                 joint_types.push_back(joint_model->getType());
 
@@ -134,8 +121,6 @@ class RobotInfo
                     joint_axes.push_back(revolute_joint_model->getAxis());
                     default_joint_values.push_back((float)default_joint_values_double[non_fixed_joint_index]);
                     non_fixed_joint_index++;
-                    if (debug)
-                        std::cout << "Joint axis: " << revolute_joint_model->getAxis().transpose() << std::endl;
                 }
                 else if (joint_model->getType() == moveit::core::JointModel::PRISMATIC)
                 {
@@ -143,15 +128,11 @@ class RobotInfo
                     joint_axes.push_back(prismatic_joint_model->getAxis());
                     default_joint_values.push_back((float)default_joint_values_double[non_fixed_joint_index]);
                     non_fixed_joint_index++;
-                    if (debug)
-                        std::cout << "Joint axis: " << prismatic_joint_model->getAxis().transpose() << std::endl;
                 }
                 else
                 {
                     joint_axes.push_back(Eigen::Vector3d::Zero());
                     default_joint_values.push_back(0.0);
-                    if (debug)
-                        std::cout << "Joint axis: " << Eigen::Vector3d::Zero().transpose() << std::endl;
                 }
 
                 // get joint origin transform
@@ -166,8 +147,6 @@ class RobotInfo
                 default_joint_values.push_back(0.0);
                 link_maps.push_back(-1);
             }
-            if (debug)
-                std::cout << " ===================================== " << std::endl;
         }
     
         const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
@@ -221,7 +200,7 @@ class RobotInfo
         }
     }
 
-    RobotInfo(const moveit::core::RobotModelPtr& robot_model, const std::string & group_name, const std::string & collision_spheres_file_path, bool debug = false)
+    RobotInfo(const moveit::core::RobotModelPtr& robot_model, const std::string & group_name, const std::string & collision_spheres_file_path)
     {
 
         // Initialize all variables
@@ -305,18 +284,10 @@ class RobotInfo
         // Ready the input to kin_forward
         for (const auto& link_name : link_names)
         {
-            if (debug)
-            {
-                std::cout << "link name: " << link_name << std::endl;
-            }
-            
-            // print its parent link name
             const moveit::core::LinkModel* link_model = robot_model->getLinkModel(link_name);
             if (link_model->getParentLinkModel() != nullptr) // if it is not the root link
             {
                 std::string parent_link_name = link_model->getParentLinkModel()->getName();
-                if (debug)
-                    std::cout << "Parent Link name: " << parent_link_name << std::endl;
 
                 // find the index of parent_link_name in the link_names
                 int parent_link_index = -1;
@@ -332,11 +303,7 @@ class RobotInfo
                 
                 // find joint name to its parent link
                 const moveit::core::JointModel* joint_model = link_model->getParentJointModel();
-                if (debug)
-                {
-                    std::cout << "Joint name: " << joint_model->getName() << std::endl;
-                    std::cout << "Joint type: " << joint_model->getType() << std::endl;
-                }
+
                 joint_name_to_parent_link.push_back(joint_model->getName());
                 joint_types.push_back(joint_model->getType());
 
@@ -346,8 +313,6 @@ class RobotInfo
                     joint_axes.push_back(revolute_joint_model->getAxis());
                     default_joint_values.push_back((float)default_joint_values_double[non_fixed_joint_index]);
                     non_fixed_joint_index++;
-                    if (debug)
-                        std::cout << "Joint axis: " << revolute_joint_model->getAxis().transpose() << std::endl;
                 }
                 else if (joint_model->getType() == moveit::core::JointModel::PRISMATIC)
                 {
@@ -355,15 +320,11 @@ class RobotInfo
                     joint_axes.push_back(prismatic_joint_model->getAxis());
                     default_joint_values.push_back((float)default_joint_values_double[non_fixed_joint_index]);
                     non_fixed_joint_index++;
-                    if (debug)
-                        std::cout << "Joint axis: " << prismatic_joint_model->getAxis().transpose() << std::endl;
                 }
                 else
                 {
                     joint_axes.push_back(Eigen::Vector3d::Zero());
                     default_joint_values.push_back(0.0);
-                    if (debug)
-                        std::cout << "Joint axis: " << Eigen::Vector3d::Zero().transpose() << std::endl;
                 }
 
                 // get joint origin transform
@@ -378,8 +339,6 @@ class RobotInfo
                 default_joint_values.push_back(0.0);
                 link_maps.push_back(-1);
             }
-            if (debug)
-                std::cout << " ===================================== " << std::endl;
         }
     
         const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
@@ -431,16 +390,6 @@ class RobotInfo
                 upper_bounds.push_back(0.0);
             }
         }
-
-        // std::vector<double> default_joint_values_double;
-        // // get default joint values
-        // robot_model->getVariableDefaultPositions(default_joint_values_double);
-
-        // // for (size_t i = 0; i < default_joint_values_double.size(); i++)
-        // // {
-        // //     // default_joint_values.push_back((float)default_joint_values_double[i]);
-        // //     default_joint_values.push_back((float)i);
-        // // }
     }
 
     bool loadCollisionSpheres(const std::string & collision_spheres_file_path)
