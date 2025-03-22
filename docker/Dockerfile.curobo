@@ -45,3 +45,9 @@ RUN mkdir -p /home/$USERNAME/cudampl
 
 # create a directory for curobo scripts
 RUN mkdir -p /home/$USERNAME/curobo_scripts
+
+# create a directory for pRRTC
+RUN mkdir -p /home/$USERNAME/pRRTC
+
+# create a directory for problems
+RUN mkdir -p /home/$USERNAME/problems
