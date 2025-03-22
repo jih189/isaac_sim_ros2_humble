@@ -589,7 +589,7 @@
       </geometry>
     </collision>
   </link>
-  <joint name="bellows_joint" type="fixed">
+  <joint name="bellows_joint" type="prismatic">
     <origin rpy="0 0 0" xyz="0 0 0" />
     <parent link="torso_lift_link" />
     <child link="bellows_link" />

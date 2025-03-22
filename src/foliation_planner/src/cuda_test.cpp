@@ -2391,17 +2391,14 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
 
 void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node::SharedPtr node)
 {
+    /////////////////////////////// Setup ////////////////////////////////////////
     int task_index = 33;
     std::ostringstream oss;
     // Set the width to 5 and fill with '0'
     oss << std::setw(4) << std::setfill('0') << task_index;
     std::string task_index_str = oss.str();
-
-    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
-
-    std::string collision_spheres_file_path;
-    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
-    
+   
+    // Load problem dir
     std::string problem_dir = "/home/ros/problems/bookshelf_small_fetch";
     std::string robot_config_file = problem_dir + "/config.yaml";
 
@@ -2412,28 +2409,14 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
     std::string planning_group = config["planning_group"].as<std::string>();
     std::cout << "Planning Group: " << planning_group << std::endl;
 
-    RobotInfo robot_info(robot_model, planning_group, collision_spheres_file_path);
+    //////////////////////////////// Load robot model ////////////////////////////////////////
 
-    // get the joint model
+    // Load robot model
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(planning_group);
     std::vector<std::string> joint_names = joint_model_group->getJointModelNames();
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
 
-    // print the joint names of this joint model group
-    std::cout << "Joint names: ";
-    for (const auto& joint_name : joint_names)
-    {
-        std::cout << joint_name << " ";
-    }
-
-    // print default values from robot info
-    std::cout << "\nDefault joint values: ";
-    for (const auto& default_value : robot_info.getDefaultJointValues())
-    {
-        std::cout << default_value << " ";
-    }
-    std::cout << std::endl;
-
-    //////////////////////////// 1. Load the scene objects ////////////////////////////
+    //////////////////////////// Load the scene objects ////////////////////////////
 
     // std::string scene_file = problem_dir + "/scene0001.yaml";
     std::string scene_file = problem_dir + "/scene" + task_index_str + ".yaml"; // with padding
@@ -2459,7 +2442,7 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
     combined_markers.markers.insert(combined_markers.markers.end(), box_markers.markers.begin(), box_markers.markers.end());
     combined_markers.markers.insert(combined_markers.markers.end(), cylinder_markers.markers.begin(), cylinder_markers.markers.end());
     combined_markers.markers.insert(combined_markers.markers.end(), sphere_markers.markers.begin(), sphere_markers.markers.end());
-    ///////////////////////////// 2. Load start and goal ////////////////////////////////////////////////////////
+    ///////////////////////////// Load start and goal ////////////////////////////////////////////////////////
 
     std::string request_file = problem_dir + "/request" + task_index_str + ".yaml";
 
@@ -2471,12 +2454,25 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
     loadJointValues(request_config, joint_names, start_joint_values, goal_joint_values);
 
     // Print the joint values in the same order as joint_names.
+    std::cout << "Task information:" << std::endl;
     for (size_t i = 0; i < joint_names.size(); ++i)
     {
         std::cout << "Joint: " << joint_names[i] 
                   << "  start: " << start_joint_values[i] 
                   << "  goal: " << goal_joint_values[i] << std::endl;
     }
+
+    // use the start state is the default state
+    std::map<std::string, double> default_map = loadStartStateJointState(request_config);
+    std::map<std::string, float> default_map_float;
+    // convert double to float
+    for (const auto& pair : default_map)
+    {
+        default_map_float[pair.first] = static_cast<float>(pair.second);
+    }
+
+    // set robot_state with default map
+    robot_state->setVariablePositions(default_map);
 
     // Prepare robot state for start and goal to visualize
     robot_state->setJointGroupPositions(joint_model_group, start_joint_values);
@@ -2494,6 +2490,11 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
     moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
     goal_display_robot_state.state = goal_state_msg;
 
+    ////////////////////////// Prepare robot info /////////////////////////////////////
+
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, planning_group, collision_spheres_file_path, default_map_float);
 
     //////////////////////
 

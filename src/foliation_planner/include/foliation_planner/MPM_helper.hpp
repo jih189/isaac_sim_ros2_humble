@@ -62,3 +62,32 @@ void loadJointValues(const YAML::Node &root,
         }
     }
 }
+
+
+// Function to load the joint state from a YAML file into a map
+std::map<std::string, double> loadStartStateJointState(const YAML::Node &config) {
+    
+    // Check if the expected nodes exist
+    if (!config["start_state"] || !config["start_state"]["joint_state"]) {
+        throw std::runtime_error("YAML does not contain 'start_state' or 'joint_state' node.");
+    }
+    
+    YAML::Node jointState = config["start_state"]["joint_state"];
+    YAML::Node names = jointState["name"];
+    YAML::Node positions = jointState["position"];
+
+    // Validate the presence and size of the name and position lists
+    if (!names || !positions || names.size() != positions.size()) {
+        throw std::runtime_error("Invalid YAML format: missing or mismatched 'name' and 'position' lists.");
+    }
+    
+    // Create the map by pairing each joint name with its corresponding position
+    std::map<std::string, double> jointMap;
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        std::string jointName = names[i].as<std::string>();
+        double pos = positions[i].as<double>();
+        jointMap[jointName] = pos;
+    }
+    
+    return jointMap;
+}

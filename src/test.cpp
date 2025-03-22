@@ -1,8 +1,5 @@
 
-std::vector<std::string> joint_names = joint_model_group->getJointModelNames();
-// help me load the joint values from request.yaml based on the joint names.
-// start values is under the start state
-// goal values is under the goal constraints
+// Help me to load the start state's joint_state into map in c++. That is, create a function to read yaml data and return a map of joint names to their positions.
 
 /////////////////////////////////// request.yaml ////////////////////////////////////////////////////////
 goal_constraints:
