@@ -2496,12 +2496,214 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
     node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
     RobotInfo robot_info(robot_model, planning_group, collision_spheres_file_path, default_map_float);
 
-    //////////////////////
+    ////////////////////// Create space /////////////////////////////////////////////////////
 
-    // Create marker publishers
+    // Prepare constraints
+    std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
+
+    // Create self collision constraint
+    CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
+        "self_collision_constraint",
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getSelfCollisionEnabledMap()
+    );
+    constraints.push_back(self_collision_constraint);
+
+    if (!boxes.empty())
+    {
+        std::vector<std::vector<float>> collision_box_pos;
+        std::vector<std::vector<float>> collision_box_orientations;
+        std::vector<std::vector<float>> collision_box_max;
+        std::vector<std::vector<float>> collision_box_min;
+        CuboidToVectors(boxes, collision_box_pos, collision_box_orientations, collision_box_max, collision_box_min);
+        CUDAMPLib::EnvConstraintCuboidPtr environment_collision_constraint_cuboid = std::make_shared<CUDAMPLib::EnvConstraintCuboid>(
+            "environment_collision_constraint_cuboid",
+            collision_box_pos,
+            collision_box_orientations,
+            collision_box_max,
+            collision_box_min
+        );
+        constraints.push_back(environment_collision_constraint_cuboid);
+    }
+
+    if (!cylinders.empty())
+    {
+        std::vector<std::vector<float>> collision_cylinder_pos;
+        std::vector<std::vector<float>> collision_cylinder_orientations;
+        std::vector<float> collision_cylinder_radius;
+        std::vector<float> collision_cylinder_height;
+        CylinderToVectors(cylinders, collision_cylinder_pos, collision_cylinder_orientations, collision_cylinder_radius, collision_cylinder_height);
+        CUDAMPLib::EnvConstraintCylinderPtr environment_collision_constraint_cylinder = std::make_shared<CUDAMPLib::EnvConstraintCylinder>(
+            "environment_collision_constraint_cylinder",
+            collision_cylinder_pos,
+            collision_cylinder_orientations,
+            collision_cylinder_radius,
+            collision_cylinder_height
+        );
+        constraints.push_back(environment_collision_constraint_cylinder);
+    }
+
+    if (!spheres.empty())
+    {
+        std::vector<std::vector<float>> collision_sphere_pos;
+        std::vector<float> collision_sphere_radius;
+        SphereToVectors(spheres, collision_sphere_pos, collision_sphere_radius);
+        CUDAMPLib::EnvConstraintSpherePtr environment_collision_constraint_sphere = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
+            "environment_collision_constraint_sphere",
+            collision_sphere_pos,
+            collision_sphere_radius
+        );
+        constraints.push_back(environment_collision_constraint_sphere);
+    }
+
+    // Create space
+    CUDAMPLib::SingleArmSpacePtr single_arm_space = std::make_shared<CUDAMPLib::SingleArmSpace>(
+        robot_info.getDimension(),
+        constraints,
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPos(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames(),
+        0.02 // resolution
+    );
+
+    ///////////////////////////////////////// create the task /////////////////////////////////////
+
+    std::vector<std::vector<float>> start_joint_values_set;
+    // convert start_joint_values to float
+    std::vector<float> start_joint_values_float;
+    for(size_t i = 0; i < start_joint_values.size(); i++)
+    {
+        start_joint_values_float.push_back((float)start_joint_values[i]);
+    }
+    start_joint_values_set.push_back(start_joint_values_float);
+    std::vector<std::vector<float>> goal_joint_values_set;
+    // convert goal_joint_values to float
+    std::vector<float> goal_joint_values_float;
+    for(size_t i = 0; i < goal_joint_values.size(); i++)
+    {
+        goal_joint_values_float.push_back((float)goal_joint_values[i]);
+    }
+    goal_joint_values_set.push_back(goal_joint_values_float);
+
+    // create the task
+    CUDAMPLib::SingleArmTaskPtr task = std::make_shared<CUDAMPLib::SingleArmTask>(
+        start_joint_values_set,
+        goal_joint_values_set
+    );
+
+    // create the planner
+
+    CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
+    planner->setMaxTravelDistance(5.0);
+    planner->setSampleAttemptsInEachIteration(100);
+    // set the task
+    planner->setMotionTask(task);
+    CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(20.0);
+
+    planner->solve(termination_condition);
+
+    /************************** Visualize both start and goal group **************************************/
+
+    // extract the start and goal group states
+    CUDAMPLib::BaseStatesPtr start_group_states;
+    CUDAMPLib::BaseStatesPtr goal_group_states;
+    planner->getStartAndGoalGroupStates(start_group_states, goal_group_states);
+
+    // static_pointer_cast to SingleArmStates
+    CUDAMPLib::SingleArmStatesPtr start_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(start_group_states);
+    CUDAMPLib::SingleArmStatesPtr goal_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(goal_group_states);
+
+    // create color for start group
+    std_msgs::msg::ColorRGBA color_start;
+    color_start.r = 0.0;
+    color_start.g = 1.0;
+    color_start.b = 0.0;
+    color_start.a = 0.4;
+
+    // visualize the start group states
+    visualization_msgs::msg::MarkerArray start_group_state_markers_combined;
+    generate_state_markers(
+        start_group_states_single_arm->getJointStatesHost(),
+        joint_model_group,
+        robot_state,
+        "start_group",
+        color_start,
+        start_group_state_markers_combined,
+        robot_info.getEndEffectorLinkNames()
+    );
+
+    // create color for goal group
+    std_msgs::msg::ColorRGBA color_goal;
+    color_goal.r = 1.0;
+    color_goal.g = 0.0;
+    color_goal.b = 0.0;
+    color_goal.a = 0.4;
+
+    visualization_msgs::msg::MarkerArray goal_group_state_markers_combined;
+    generate_state_markers(
+        goal_group_states_single_arm->getJointStatesHost(),
+        joint_model_group,
+        robot_state,
+        "goal_group",
+        color_goal,
+        goal_group_state_markers_combined,
+        robot_info.getEndEffectorLinkNames()
+    );
+
+    ////////////////////////////////////// Visualize path //////////////////////////////////////
+
+    moveit_msgs::msg::DisplayTrajectory display_trajectory;
+    moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
+    auto solution_robot_trajectory = robot_trajectory::RobotTrajectory(robot_model, joint_model_group);
+
+    if (task->hasSolution())
+    {
+        // print "Task solved" in green color
+        std::cout << "\033[1;32m" << "Task solved" << "\033[0m" << std::endl;
+
+        std::vector<std::vector<float>> solution_path = task->getSolution();
+
+        // generate robot trajectory msg
+        for (size_t i = 0; i < solution_path.size(); i++)
+        {
+            // convert solution_path[i] to double vector
+            std::vector<double> solution_path_i_double = std::vector<double>(solution_path[i].begin(), solution_path[i].end());
+            robot_state->setJointGroupPositions(joint_model_group, solution_path_i_double);
+            solution_robot_trajectory.addSuffixWayPoint(*robot_state, 1.0);
+        }
+        // Create a DisplayTrajectory message
+        solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
+
+        display_trajectory.trajectory_start = start_state_msg;
+        display_trajectory.trajectory.push_back(robot_trajectory_msg);
+    }
+    else
+    {
+        // print "Task not solved" in red color
+        std::cout << "\033[1;31m" << "Task not solved" << "\033[0m" << std::endl;
+
+        // print the failure reason
+        std::cout << "Failure reason: " << task->getFailureReason() << std::endl;
+    }
+
+    //////////////////////////////////////// Publish the markers ////////////////////////////////////////
+
     auto marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("scene_objects", 1);
     auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
     auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+    auto start_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("start_group_states", 1);
+    auto goal_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("goal_group_states", 1);
+    auto display_publisher = node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
 
     // Publish the message in a loop
     while (rclcpp::ok())
@@ -2510,6 +2712,12 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
         marker_publisher->publish(combined_markers);
         start_robot_state_publisher->publish(start_display_robot_state);
         goal_robot_state_publisher->publish(goal_display_robot_state);
+        start_group_states_publisher->publish(start_group_state_markers_combined);
+        goal_group_states_publisher->publish(goal_group_state_markers_combined);
+        if (task->hasSolution())
+        {
+            display_publisher->publish(display_trajectory);
+        }
 
         rclcpp::spin_some(node);
 
