@@ -26,6 +26,8 @@ find_package(CUDA REQUIRED)
 include_directories(${CUDA_INCLUDE_DIRS})
 link_directories(${CUDA_LIBRARY_DIRS})
 
+find_package(yaml-cpp REQUIRED)
+
 
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -v")
 # set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")  # enable cuda-gdb
@@ -78,5 +80,30 @@ target_link_libraries(single_mbm
 )
 
 target_compile_options(single_mbm PRIVATE
+    -Wno-c++11-narrowing
+)
+
+### test
+add_executable(test
+    scripts/test.cpp
+    src/planning/pRRTC.cu
+)
+
+target_include_directories(test
+    PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/vamp/src/impl
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/_deps/nigh-src/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/_deps/pdqsort-src
+)
+
+target_link_libraries(test
+    PRIVATE
+    nlohmann_json::nlohmann_json
+    Eigen3::Eigen
+    yaml-cpp
+)
+
+target_compile_options(test PRIVATE
     -Wno-c++11-narrowing
 )
