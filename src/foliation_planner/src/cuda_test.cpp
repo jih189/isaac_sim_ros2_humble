@@ -2573,7 +2573,7 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
         robot_info.getUpperBounds(),
         robot_info.getDefaultJointValues(),
         robot_info.getLinkNames(),
-        0.02 // resolution
+        0.2 // resolution
     );
 
     ///////////////////////////////////////// create the task /////////////////////////////////////
@@ -2610,7 +2610,12 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
     planner->setMotionTask(task);
     CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(20.0);
 
+    auto start_time = std::chrono::high_resolution_clock::now();
     planner->solve(termination_condition);
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_time = end_time - start_time;
+    // print in green
+    std::cout << "\033[1;32m" << "Time taken by function: " << elapsed_time.count() << " seconds" << "\033[0m" << std::endl;
 
     /************************** Visualize both start and goal group **************************************/
 
@@ -2718,6 +2723,185 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
         {
             display_publisher->publish(display_trajectory);
         }
+
+        rclcpp::spin_some(node);
+
+        // sleep for 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+}
+
+void VIS_RESULT_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node::SharedPtr node)
+{
+    //////////////////////////// Load Result /////////////////////////////////////
+    std::string result_file = "/home/ros/pRRTC/build/path.txt";
+
+    std::ifstream
+    infile(result_file);
+    std::string line;
+    std::vector<std::vector<double>> result_path;
+    // get the first line which is the task index
+    std::getline(infile, line);
+    // get the task index as int
+    int task_index = std::stoi(line);
+    while (std::getline(infile, line))
+    {
+        std::istringstream iss(line);
+        std::vector<double> joint_values;
+        double value;
+        while (iss >> value)
+        {
+            joint_values.push_back(value);
+        }
+        result_path.push_back(joint_values);
+    }
+
+    // print the result path
+    std::cout << "Result path: " << std::endl;
+    for (size_t i = 0; i < result_path.size(); i++)
+    {
+        for (size_t j = 0; j < result_path[i].size(); j++)
+        {
+            std::cout << result_path[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    /////////////////////////////// Setup ////////////////////////////////////////
+    // int task_index = 33;
+    std::ostringstream oss;
+    // Set the width to 5 and fill with '0'
+    oss << std::setw(4) << std::setfill('0') << task_index;
+    std::string task_index_str = oss.str();
+   
+    // Load problem dir
+    std::string problem_dir = "/home/ros/problems/bookshelf_small_fetch";
+    std::string robot_config_file = problem_dir + "/config.yaml";
+
+    // load the robot config
+    YAML::Node config = YAML::LoadFile(robot_config_file);
+
+    // load the group name
+    std::string planning_group = config["planning_group"].as<std::string>();
+    std::cout << "Planning Group: " << planning_group << std::endl;
+
+    //////////////////////////////// Load robot model ////////////////////////////////////////
+
+    // Load robot model
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(planning_group);
+    std::vector<std::string> joint_names = joint_model_group->getJointModelNames();
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+
+    //////////////////////////// Load the scene objects ////////////////////////////
+
+    // std::string scene_file = problem_dir + "/scene0001.yaml";
+    std::string scene_file = problem_dir + "/scene" + task_index_str + ".yaml"; // with padding
+
+    // load the scene
+    std::vector<BoundingBox> boxes;
+    std::vector<Cylinder> cylinders;
+    std::vector<Sphere> spheres;
+
+    if (loadSceneObjects(scene_file, boxes, cylinders, spheres)) {
+        std::cout << "Loaded " << boxes.size() << " boxes" << std::endl;
+        std::cout << "Loaded " << cylinders.size() << " cylinders" << std::endl;
+        std::cout << "Loaded " << spheres.size() << " spheres" << std::endl;
+    }
+
+    // generate markers
+    visualization_msgs::msg::MarkerArray box_markers = generateBoundingBoxesMarkers(boxes, node);
+    visualization_msgs::msg::MarkerArray cylinder_markers = generateCylindersMarkers(cylinders, node);
+    visualization_msgs::msg::MarkerArray sphere_markers = generateSpheresMarkers(spheres, node);
+
+    // combine the markers
+    visualization_msgs::msg::MarkerArray combined_markers;
+    combined_markers.markers.insert(combined_markers.markers.end(), box_markers.markers.begin(), box_markers.markers.end());
+    combined_markers.markers.insert(combined_markers.markers.end(), cylinder_markers.markers.begin(), cylinder_markers.markers.end());
+    combined_markers.markers.insert(combined_markers.markers.end(), sphere_markers.markers.begin(), sphere_markers.markers.end());
+    ///////////////////////////// Load start and goal ////////////////////////////////////////////////////////
+
+    std::string request_file = problem_dir + "/request" + task_index_str + ".yaml";
+
+    // load the start and goal
+    std::vector<double> start_joint_values;
+    std::vector<double> goal_joint_values;
+
+    YAML::Node request_config = YAML::LoadFile(request_file);
+    loadJointValues(request_config, joint_names, start_joint_values, goal_joint_values);
+
+    // Print the joint values in the same order as joint_names.
+    std::cout << "Task information:" << std::endl;
+    for (size_t i = 0; i < joint_names.size(); ++i)
+    {
+        std::cout << "Joint: " << joint_names[i] 
+                  << "  start: " << start_joint_values[i] 
+                  << "  goal: " << goal_joint_values[i] << std::endl;
+    }
+
+    // use the start state is the default state
+    std::map<std::string, double> default_map = loadStartStateJointState(request_config);
+    std::map<std::string, float> default_map_float;
+    // convert double to float
+    for (const auto& pair : default_map)
+    {
+        default_map_float[pair.first] = static_cast<float>(pair.second);
+    }
+
+    // set robot_state with default map
+    robot_state->setVariablePositions(default_map);
+
+    // Prepare robot state for start and goal to visualize
+    robot_state->setJointGroupPositions(joint_model_group, start_joint_values);
+    moveit_msgs::msg::RobotState start_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, start_state_msg);
+
+    robot_state->setJointGroupPositions(joint_model_group, goal_joint_values);
+    moveit_msgs::msg::RobotState goal_state_msg;
+    moveit::core::robotStateToRobotStateMsg(*robot_state, goal_state_msg);
+
+    // Create a DisplayRobotState message
+    moveit_msgs::msg::DisplayRobotState start_display_robot_state;
+    start_display_robot_state.state = start_state_msg;
+
+    moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
+    goal_display_robot_state.state = goal_state_msg;
+
+
+
+    // ////////////////////////////////////// Visualize path //////////////////////////////////////
+
+    moveit_msgs::msg::DisplayTrajectory display_trajectory;
+    moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
+    auto solution_robot_trajectory = robot_trajectory::RobotTrajectory(robot_model, joint_model_group);
+
+    for (size_t i = 0; i < result_path.size(); i++)
+    {
+        robot_state->setJointGroupPositions(joint_model_group, result_path[i]);
+        solution_robot_trajectory.addSuffixWayPoint(*robot_state, 1.0);
+    }
+    // Create a DisplayTrajectory message
+    solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
+
+    display_trajectory.trajectory_start = start_state_msg;
+    display_trajectory.trajectory.push_back(robot_trajectory_msg);
+
+    // //////////////////////////////////////// Publish the markers ////////////////////////////////////////
+
+    auto marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("scene_objects", 1);
+    auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
+    auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+    auto display_publisher = node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
+
+    // Publish the message in a loop
+    while (rclcpp::ok())
+    {
+        // Publish the message
+        marker_publisher->publish(combined_markers);
+        start_robot_state_publisher->publish(start_display_robot_state);
+        goal_robot_state_publisher->publish(goal_display_robot_state);
+
+        display_publisher->publish(display_trajectory);
 
         rclcpp::spin_some(node);
 
@@ -2896,6 +3080,8 @@ int main(int argc, char** argv)
     // TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
 
     TEST_EVAL_MBM(kinematic_model, cuda_test_node);
+
+    // VIS_RESULT_MBM(kinematic_model, cuda_test_node);
 
     // list ros parameters
     // RCLCPP_INFO(cuda_test_node->get_logger(), "List all parameters");

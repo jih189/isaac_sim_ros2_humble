@@ -136,9 +136,11 @@ Environment<float> load_environment(const YAML::Node &scene)
 }
 
 void loadStartAndGoal(const YAML::Node &config,
+                      std::vector<std::string>& joint_names,
                       std::map<std::string, double>& start,
                       std::map<std::string, double>& goal)
 {
+    joint_names.clear();
     // ====== Extract start state ======
     // Expecting structure: start_state -> joint_state -> { name: [...], position: [...] }
     YAML::Node jointState = config["start_state"]["joint_state"];
@@ -180,6 +182,7 @@ void loadStartAndGoal(const YAML::Node &config,
             std::string jointName = jointConstraint["joint_name"].as<std::string>();
             double position = jointConstraint["position"].as<double>();
             goal[jointName] = position;
+            joint_names.push_back(jointName);
         }
     }
 }
@@ -189,7 +192,7 @@ int main(int argc, char* argv[]) {
     std::string problem_dir = "/home/ros/problems";
     std::string problem_name = "bookshelf_small";
     std::string robot_name = "fetch";
-    int problem_idx = 1;
+    int problem_idx = 33;
     std::ostringstream oss;
     // Set the width to 5 and fill with '0'
     oss << std::setw(4) << std::setfill('0') << problem_idx;
@@ -203,8 +206,8 @@ int main(int argc, char* argv[]) {
     // load the file with yaml
     YAML::Node scene = YAML::LoadFile(scene_path);
 
-    // Environment env = load_environment(scene);
-    Environment<float> env{};
+    Environment env = load_environment(scene);
+    // Environment<float> env{};
 
     // load the request
     std::string request_name = "request" + task_index_str + ".yaml";
@@ -215,22 +218,28 @@ int main(int argc, char* argv[]) {
     // load the file with yaml
     YAML::Node request = YAML::LoadFile(request_path);
 
+    std::vector<std::string> joint_names;
     std::map<std::string, double> start;
     std::map<std::string, double> goal;
-    loadStartAndGoal(request, start, goal);
+    loadStartAndGoal(request, joint_names, start, goal);
+
+    // print joint_names
+    std::cout << "joint_names: ";
+    for (const auto& name : joint_names) {
+        std::cout << name << " ";
+    }
+    std::cout << std::endl;
 
     // convert goal to vector
     std::vector<float> goal_vector;
-    for (const auto& [key, value] : goal) {
-        goal_vector.push_back((float)value);
+    for (std::string j : joint_names) {
+        goal_vector.push_back((float)(goal[j]));
     }
 
     // convert start to vector but only the key where goal has
     std::vector<float> start_vector;
-    for (const auto& [key, value] : goal) {
-        if (start.find(key) != start.end()) {
-            start_vector.push_back((float)(start[key]));
-        }
+    for (std::string j : joint_names) {
+        start_vector.push_back((float)(start[j]));
     }
 
     // print start_vector and goal_vector
@@ -262,7 +271,7 @@ int main(int argc, char* argv[]) {
     // Define the settings for the pRRTC planner
     struct pRRTC_settings settings;
     settings.num_new_configs = 512;
-    settings.max_iters = 10;
+    settings.max_iters = 1000000;
     settings.granularity = 64;
     settings.range = 0.5;
     settings.balance = 2;
@@ -279,8 +288,38 @@ int main(int argc, char* argv[]) {
     // run the planner
     auto result = pRRTC::solve<ppln::robots::Fetch>(startConfig, goalConfigs, env, settings);
 
+    int dim = 8;
+    std::vector<std::vector<float>> path;
     for (auto& cfg: result.path) {
-        print_cfg<ppln::robots::Fetch>(cfg);
+        // print_cfg<ppln::robots::Fetch>(cfg);
+        std::vector<float> cfg_vector;
+        for (int i = 0; i < dim; ++i) {
+            cfg_vector.push_back(cfg[i]);
+        }
+        path.push_back(cfg_vector);
+    }
+    std::cout << "path: " << std::endl;
+    for (const auto& cfg : path) {
+        for (const auto& val : cfg) {
+            std::cout << val << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    // save path into a file
+    std::ofstream path_file("path.txt");
+    if (path_file.is_open()) {
+        // save the problem index at the first line
+        path_file << problem_idx << "\n";
+        for (const auto& cfg : path) {
+            for (const auto& val : cfg) {
+                path_file << val << " ";
+            }
+            path_file << "\n";
+        }
+        path_file.close();
+    } else {
+        std::cout << "Unable to open file to save the path." << std::endl;
     }
 
     if (not result.solved) {
