@@ -233,6 +233,9 @@ namespace CUDAMPLib
 
         // reset the termination condition
         termination_condition->reset();
+
+        float start_group_max_travel_distance = max_travel_distance_;
+        float goal_group_max_travel_distance = max_travel_distance_;
         
         // main loop
         for(int t = 0 ; t < 1000000; t++)
@@ -274,7 +277,16 @@ namespace CUDAMPLib
             }
 
             // constraint the sampled states to be within the max travel distance of their nearest neighbors
-            state_manager->interpolateToStates(states, nearest_neighbors_index_for_each_sampled_state, max_travel_distance_);
+            if(t % 2 == 0)
+            {
+                // constraint the sampled states to be within the max travel distance of their nearest neighbors in the start group
+                state_manager->interpolateToStates(states, nearest_neighbors_index_for_each_sampled_state, start_group_max_travel_distance);
+            }
+            else
+            {
+                // constraint the sampled states to be within the max travel distance of their nearest neighbors in the goal group
+                state_manager->interpolateToStates(states, nearest_neighbors_index_for_each_sampled_state, goal_group_max_travel_distance);
+            }
 
             // update the states
             states->update();
@@ -322,28 +334,17 @@ namespace CUDAMPLib
             // calculate costs and check the feasibility of motion between the states pairs.
             std::vector<bool> motion_feasibility;
             std::vector<float> motion_costs;
-            bool check_motions_feasiblity = space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
+            space_->checkMotions(motion_states_1, motion_states_2, motion_feasibility, motion_costs);
 
             // clear the states
             motion_states_1.reset();
             motion_states_2.reset();
 
-            if (!check_motions_feasiblity)
-            {
-                // print in red color
-                printf("\033[1;31m failed to check motions \033[0m \n");
-
-                // clear the states
-                states.reset();
-
-                // throw an error
-                throw std::runtime_error("failed to check motions");
-            }
-
             // determine which sampled states can be added to the graph.
-            std::vector<bool> can_connect(states->getNumOfStates(), false);
-            std::vector<std::vector<int>> feasible_neighbors_indexs_of_added_states;
-            std::vector<std::vector<float>> feasible_neighbors_costs_of_added_states;
+            std::vector<bool> can_connect(states->getNumOfStates(), false); // indicate if the state can connect to any of its neighbors
+            std::vector<std::vector<int>> feasible_neighbors_indexs_of_added_states; // the indexs of the neighbors of the each added states
+            std::vector<std::vector<float>> feasible_neighbors_costs_of_added_states; // the costs of the neighbors of the each added states
+            std::vector<int> num_of_connection_to_groups(group_number, 0); // the number of connections to each group
             for(int i = 0; i < states->getNumOfStates(); i++)
             {
                 std::vector<int> feasible_neighbors_indexs_of_added_states_i;
@@ -356,6 +357,7 @@ namespace CUDAMPLib
                         can_connect[i] = true;
                         feasible_neighbors_indexs_of_added_states_i.push_back(indexs_in_manager[j * states->getNumOfStates() + i]);
                         feasible_neighbors_costs_of_added_states_i.push_back(motion_costs[j * states->getNumOfStates() + i]);
+                        num_of_connection_to_groups[j]++;
                     }
                 }
 
@@ -367,17 +369,42 @@ namespace CUDAMPLib
                     feasible_neighbors_costs_of_added_states.push_back(feasible_neighbors_costs_of_added_states_i);
                 }
             }
+;
+            if (t % 2 == 0)
+            {
+                if (num_of_connection_to_groups[0] == 0)
+                {
+                    // if there is no connection to the start group, we reduce the max travel distance for the next iteration
+                    start_group_max_travel_distance = start_group_max_travel_distance * 0.5 > 0.1 ? start_group_max_travel_distance * 0.5 : 0.1;
+                    t++;
+                    continue;
+                }
+                else{
+                    // if there is connection to the start group, we reset the max travel distance for the next iteration
+                    start_group_max_travel_distance = max_travel_distance_;
+                }
+            }
+            else
+            {
+                if (num_of_connection_to_groups[1] == 0)
+                {
+                    // if there is no connection to the goal group, we reduce the max travel distance for the next iteration
+                    goal_group_max_travel_distance = goal_group_max_travel_distance * 0.5 > 0.1 ? goal_group_max_travel_distance * 0.5 : 0.1;
+                    t++;
+                    continue;
+                }
+                else{
+                    // if there is connection to the goal group, we reset the max travel distance for the next iteration
+                    goal_group_max_travel_distance = max_travel_distance_;
+                }
+            }
+
 
             // remove the states can not connect to any neighbors
             states->filterStates(can_connect);
 
             // add the states to the manager and get their indexs in the manager
             std::vector<int> indexs_of_new_state_in_manager = state_manager->add_states(states);
-
-            if(indexs_of_new_state_in_manager.size() != feasible_neighbors_indexs_of_added_states.size())
-            {
-                throw std::runtime_error("indexs_of_new_state_in_manager.size() != neighbors_index_actual.size()");
-            }
 
             // add the states to the graph
             for(size_t i = 0; i < indexs_of_new_state_in_manager.size(); i++)
