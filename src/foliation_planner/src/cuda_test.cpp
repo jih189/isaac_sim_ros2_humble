@@ -2392,7 +2392,7 @@ void TEST_CHECK_CONSTRAINED_MOTION(const moveit::core::RobotModelPtr & robot_mod
 void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node::SharedPtr node)
 {
     /////////////////////////////// Setup ////////////////////////////////////////
-    int task_index = 33;
+    int task_index = 2;
     std::ostringstream oss;
     // Set the width to 5 and fill with '0'
     oss << std::setw(4) << std::setfill('0') << task_index;
@@ -2573,7 +2573,7 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
         robot_info.getUpperBounds(),
         robot_info.getDefaultJointValues(),
         robot_info.getLinkNames(),
-        0.2 // resolution
+        0.05 // resolution
     );
 
     ///////////////////////////////////////// create the task /////////////////////////////////////
@@ -2604,7 +2604,7 @@ void TEST_EVAL_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Node
     // create the planner
 
     CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
-    planner->setMaxTravelDistance(5.0);
+    planner->setMaxTravelDistance(1.0);
     planner->setSampleAttemptsInEachIteration(100);
     // set the task
     planner->setMotionTask(task);
@@ -2892,6 +2892,9 @@ void VIS_RESULT_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Nod
     auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
     auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
     auto display_publisher = node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
+    auto cylinder_markers_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("cylinder_markers", 1);
+    auto sphere_markers_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("sphere_markers", 1);
+    auto box_markers_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("box_markers", 1);
 
     // Publish the message in a loop
     while (rclcpp::ok())
@@ -2900,6 +2903,9 @@ void VIS_RESULT_MBM(const moveit::core::RobotModelPtr & robot_model, rclcpp::Nod
         marker_publisher->publish(combined_markers);
         start_robot_state_publisher->publish(start_display_robot_state);
         goal_robot_state_publisher->publish(goal_display_robot_state);
+        cylinder_markers_publisher->publish(cylinder_markers);
+        sphere_markers_publisher->publish(sphere_markers);
+        box_markers_publisher->publish(box_markers);
 
         display_publisher->publish(display_trajectory);
 

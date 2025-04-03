@@ -70,7 +70,7 @@ Environment<float> load_environment(const YAML::Node &scene)
                     float length = dims[0];
                     float radius = dims[1];
                     // Use the cylinder factory using center-based construction.
-                    cylinders.push_back(
+                    capsules.push_back(
                         factory::cylinder::center::eigen_rot(position, orientation, radius, length)
                     );
                 }
@@ -192,7 +192,7 @@ int main(int argc, char* argv[]) {
     std::string problem_dir = "/home/ros/problems";
     std::string problem_name = "bookshelf_small";
     std::string robot_name = "fetch";
-    int problem_idx = 33;
+    int problem_idx = 2;
     std::ostringstream oss;
     // Set the width to 5 and fill with '0'
     oss << std::setw(4) << std::setfill('0') << problem_idx;
