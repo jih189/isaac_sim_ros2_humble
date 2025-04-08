@@ -176,30 +176,13 @@ namespace CUDAMPLib
                 @brief Get the costs in host memory. Usually used for debugging.
                 @return The costs in host memory, and the size is [num_of_states_ * num_of_constraints].
              */
-            std::vector<std::vector<float>> getCostsHost() {
-
-                std::vector<std::vector<float>> costs_host(num_of_states_, std::vector<float>(space_info->num_of_constraints, 0.0));
-                std::vector<float> costs_host_flatten(num_of_states_ * space_info->num_of_constraints, 0.0);
-                cudaMemcpy(costs_host_flatten.data(), d_costs, num_of_states_ * space_info->num_of_constraints * sizeof(float), cudaMemcpyDeviceToHost);
-
-                for (int i = 0; i < num_of_states_; i++) {
-                    for (int j = 0; j < space_info->num_of_constraints; j++) {
-                        costs_host[i][j] = costs_host_flatten[j * num_of_states_ + i];
-                    }
-                }
-
-                return costs_host;
-            }
+            std::vector<std::vector<float>> getCostsHost();
 
             /**
                 @brief Get the total costs in host memory. Usually used for debugging.
                 @return The total costs in host memory, and the size is [num_of_states_].
              */
-            std::vector<float> getTotalCostsHost() {
-                std::vector<float> total_costs_host(num_of_states_, 0.0);
-                cudaMemcpy(total_costs_host.data(), d_total_costs, num_of_states_ * sizeof(float), cudaMemcpyDeviceToHost);
-                return total_costs_host;
-            }
+            std::vector<float> getTotalCostsHost();
 
             /**
                 @brief Update the states. This function should be implemented in the derived class.

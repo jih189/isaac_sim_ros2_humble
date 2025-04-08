@@ -62,4 +62,25 @@ namespace CUDAMPLib{
         );
     }
 
+    std::vector<std::vector<float>> BaseStates::getCostsHost()
+    {
+        std::vector<std::vector<float>> costs_host(num_of_states_, std::vector<float>(space_info->num_of_constraints, 0.0));
+        std::vector<float> costs_host_flatten(num_of_states_ * space_info->num_of_constraints, 0.0);
+        cudaMemcpy(costs_host_flatten.data(), d_costs, num_of_states_ * space_info->num_of_constraints * sizeof(float), cudaMemcpyDeviceToHost);
+
+        for (int i = 0; i < num_of_states_; i++) {
+            for (int j = 0; j < space_info->num_of_constraints; j++) {
+                costs_host[i][j] = costs_host_flatten[j * num_of_states_ + i];
+            }
+        }
+
+        return costs_host;
+    }
+
+    std::vector<float> BaseStates::getTotalCostsHost() {
+        std::vector<float> total_costs_host(num_of_states_, 0.0);
+        cudaMemcpy(total_costs_host.data(), d_total_costs, num_of_states_ * sizeof(float), cudaMemcpyDeviceToHost);
+        return total_costs_host;
+    }
+
 } // namespace CUDAMPLib

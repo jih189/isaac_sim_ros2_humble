@@ -514,7 +514,7 @@ void TEST_COLLISION(const moveit::core::RobotModelPtr & robot_model, const std::
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
     CUDAMPLib::EnvConstraintSpherePtr env_constraint_sphere = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
-        "obstacle_constraint",
+        "sphere_obstacle_constraint",
         balls_pos,
         ball_radius
     );
@@ -611,7 +611,7 @@ void TEST_CONSTRAINT_PROJECT(const moveit::core::RobotModelPtr & robot_model, co
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
     // CUDAMPLib::EnvConstraintSpherePtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
-    //     "obstacle_constraint",
+    //     "sphere_obstacle_constraint",
     //     balls_pos,
     //     ball_radius
     // );
@@ -1069,15 +1069,15 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     // create obstacles for spheres
     std::vector<Sphere> collision_spheres;
-    genSphereObstacles(10, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+    genSphereObstacles(20, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
 
     // create obstacles for cuboids
     std::vector<BoundingBox> bounding_boxes;
-    genCuboidObstacles(10, 0.3, 0.05, unmoveable_bounding_boxes_of_robot, bounding_boxes);
+    genCuboidObstacles(20, 0.3, 0.05, unmoveable_bounding_boxes_of_robot, bounding_boxes);
 
     // create obstacles for cylinders
     std::vector<Cylinder> cylinders;
-    genCylinderObstacles(10, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
+    genCylinderObstacles(20, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
 
 
     // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintSphere
@@ -1111,7 +1111,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     // Create obstacle constraint for sphere
     CUDAMPLib::EnvConstraintSpherePtr env_constraint_sphere = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
-        "obstacle_constraint",
+        "sphere_obstacle_constraint",
         balls_pos,
         ball_radius
     );
@@ -1119,7 +1119,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     // Create obstacle constraint for cuboid
     CUDAMPLib::EnvConstraintCuboidPtr env_constraint_cuboid = std::make_shared<CUDAMPLib::EnvConstraintCuboid>(
-        "obstacle_constraint",
+        "cuboid_bstacle_constraint",
         bounding_boxes_pos,
         bounding_boxes_orientation_matrix,
         bounding_boxes_max,
@@ -1129,7 +1129,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     // Create obstacle constraint for cylinder
     CUDAMPLib::EnvConstraintCylinderPtr env_constraint_cylinder = std::make_shared<CUDAMPLib::EnvConstraintCylinder>(
-        "obstacle_constraint",
+        "cylinder_obstacle_constraint",
         cylinders_pos,
         cylinders_orientation_matrix,
         cylinders_radius,
@@ -1166,7 +1166,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
     );
 
     // sample a set of states
-    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(40));
+    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(20));
     sampled_states->update();
 
     std::vector<bool> state_feasibility;
@@ -1531,7 +1531,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // Create obstacle constraint for sphere
     CUDAMPLib::EnvConstraintSpherePtr env_constraint_sphere = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
-        "obstacle_constraint",
+        "sphere_obstacle_constraint",
         balls_pos,
         ball_radius
     );
@@ -1539,7 +1539,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // Create obstacle constraint for cuboid
     CUDAMPLib::EnvConstraintCuboidPtr env_constraint_cuboid = std::make_shared<CUDAMPLib::EnvConstraintCuboid>(
-        "obstacle_constraint",
+        "cuboid_obstacle_constraint",
         bounding_boxes_pos,
         bounding_boxes_orientation_matrix,
         bounding_boxes_max,
@@ -1549,7 +1549,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // Create obstacle constraint for cylinder
     CUDAMPLib::EnvConstraintCylinderPtr env_constraint_cylinder = std::make_shared<CUDAMPLib::EnvConstraintCylinder>(
-        "obstacle_constraint",
+        "cylinder_obstacle_constraint",
         cylinders_pos,
         cylinders_orientation_matrix,
         cylinders_radius,
