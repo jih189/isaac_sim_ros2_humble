@@ -1062,18 +1062,82 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
     robot_state->setToDefaultValues();
     const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
 
+    /***************************** Generate Obstacles **************************************************/
+
+    // find the region where the obstacles should not be placed
+    std::vector<BoundingBox> unmoveable_bounding_boxes_of_robot = getUnmoveableBoundingBoxes(robot_model, group_name, 0.05);
+
+    // create obstacles for spheres
+    std::vector<Sphere> collision_spheres;
+    genSphereObstacles(10, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+
+    // create obstacles for cuboids
+    std::vector<BoundingBox> bounding_boxes;
+    genCuboidObstacles(10, 0.3, 0.05, unmoveable_bounding_boxes_of_robot, bounding_boxes);
+
+    // create obstacles for cylinders
+    std::vector<Cylinder> cylinders;
+    genCylinderObstacles(10, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
+
+
+    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintSphere
     std::vector<std::vector<float>> balls_pos;
     std::vector<float> ball_radius;
-    generate_sphere_obstacles(balls_pos, ball_radius, group_name, 20, 0.06);
+    SphereToVectors(collision_spheres, balls_pos, ball_radius);
+
+    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintCuboid
+    std::vector<std::vector<float>> bounding_boxes_pos;
+    std::vector<std::vector<float>> bounding_boxes_orientation_matrix;
+    std::vector<std::vector<float>> bounding_boxes_max;
+    std::vector<std::vector<float>> bounding_boxes_min;
+    CuboidToVectors(bounding_boxes, bounding_boxes_pos, bounding_boxes_orientation_matrix, bounding_boxes_max, bounding_boxes_min);
+
+    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintCylinder
+    std::vector<std::vector<float>> cylinders_pos;
+    std::vector<std::vector<float>> cylinders_orientation_matrix;
+    std::vector<float> cylinders_radius;
+    std::vector<float> cylinders_height;
+    CylinderToVectors(cylinders, cylinders_pos, cylinders_orientation_matrix, cylinders_radius, cylinders_height);
+
+    // generate the markers for the obstacles
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generateSpheresMarkers(collision_spheres, node);
+    visualization_msgs::msg::MarkerArray obstacle_collision_cuboids_marker_array = generateBoundingBoxesMarkers(bounding_boxes, node);
+    visualization_msgs::msg::MarkerArray obstacle_collision_cylinders_marker_array = generateCylindersMarkers(cylinders, node);
+
+
+    /********************** Generate env constraint ********************************/
 
     std::vector<CUDAMPLib::BaseConstraintPtr> constraints;
 
-    CUDAMPLib::EnvConstraintSpherePtr env_constraint = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
+    // Create obstacle constraint for sphere
+    CUDAMPLib::EnvConstraintSpherePtr env_constraint_sphere = std::make_shared<CUDAMPLib::EnvConstraintSphere>(
         "obstacle_constraint",
         balls_pos,
         ball_radius
     );
-    constraints.push_back(env_constraint);
+    constraints.push_back(env_constraint_sphere);
+
+    // Create obstacle constraint for cuboid
+    CUDAMPLib::EnvConstraintCuboidPtr env_constraint_cuboid = std::make_shared<CUDAMPLib::EnvConstraintCuboid>(
+        "obstacle_constraint",
+        bounding_boxes_pos,
+        bounding_boxes_orientation_matrix,
+        bounding_boxes_max,
+        bounding_boxes_min
+    );
+    constraints.push_back(env_constraint_cuboid);
+
+    // Create obstacle constraint for cylinder
+    CUDAMPLib::EnvConstraintCylinderPtr env_constraint_cylinder = std::make_shared<CUDAMPLib::EnvConstraintCylinder>(
+        "obstacle_constraint",
+        cylinders_pos,
+        cylinders_orientation_matrix,
+        cylinders_radius,
+        cylinders_height
+    );
+    constraints.push_back(env_constraint_cylinder);
+
+    /*******************************************************************************/
 
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
         "self_collision_constraint",
@@ -1102,7 +1166,7 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
     );
 
     // sample a set of states
-    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(20));
+    CUDAMPLib::SingleArmStatesPtr sampled_states = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(single_arm_space->sample(40));
     sampled_states->update();
 
     std::vector<bool> state_feasibility;
@@ -1118,25 +1182,12 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
         display_links_names.push_back(end_effector_link);
     }
 
-    std::vector<visualization_msgs::msg::MarkerArray> sample_group_state_markers;
+    std::vector<visualization_msgs::msg::MarkerArray> success_sample_group_state_markers;
+    std::vector<visualization_msgs::msg::MarkerArray> fail_sample_group_state_markers;
 
     std::vector<std::vector<float>> states_joint_values = sampled_states->getJointStatesFullHost();
     for (size_t i = 0; i < states_joint_values.size(); i++)
     {
-        // for (size_t j = 0; j < states_joint_values[i].size(); j++)
-        // {
-        //     std::cout << states_joint_values[i][j] << " ";
-        // }
-
-        // if (state_feasibility[i])
-        // {
-        //     std::cout << " feasible" << std::endl;
-        // }
-        // else
-        // {
-        //     std::cout << " infeasible" << std::endl;
-        // }
-
         std::vector<double> states_joint_values_i_double;
         for (size_t j = 0; j < states_joint_values[i].size(); j++)
         {
@@ -1159,6 +1210,9 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
             color.g = 1.0;
             color.b = 0.0;
             color.a = 0.4;
+            const std::string sample_group_ns = "success_sampled_group";
+            robot_state->getRobotMarkers(robot_marker, display_links_names, color, sample_group_ns, rclcpp::Duration::from_seconds(0));
+            success_sample_group_state_markers.push_back(robot_marker);
         }
         else
         {
@@ -1166,24 +1220,39 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
             color.g = 0.0;
             color.b = 0.0;
             color.a = 0.4;
+            const std::string sample_group_ns = "fail_sampled_group";
+            robot_state->getRobotMarkers(robot_marker, display_links_names, color, sample_group_ns, rclcpp::Duration::from_seconds(0));
+            fail_sample_group_state_markers.push_back(robot_marker);
         }
-        const std::string sample_group_ns = "sampled_group";
-        robot_state->getRobotMarkers(robot_marker, display_links_names, color, sample_group_ns, rclcpp::Duration::from_seconds(0));
-        sample_group_state_markers.push_back(robot_marker);
+        
     }
 
-    visualization_msgs::msg::MarkerArray sample_group_state_markers_combined;
-    for (size_t i = 0; i < sample_group_state_markers.size(); i++)
+    visualization_msgs::msg::MarkerArray success_sample_group_state_markers_combined;
+    for (size_t i = 0; i < success_sample_group_state_markers.size(); i++)
     {
-        sample_group_state_markers_combined.markers.insert(
-            sample_group_state_markers_combined.markers.end(), 
-            sample_group_state_markers[i].markers.begin(), sample_group_state_markers[i].markers.end());
+        success_sample_group_state_markers_combined.markers.insert(
+            success_sample_group_state_markers_combined.markers.end(), 
+            success_sample_group_state_markers[i].markers.begin(), success_sample_group_state_markers[i].markers.end());
     }
 
     // update the id
-    for (size_t i = 0; i < sample_group_state_markers_combined.markers.size(); i++)
+    for (size_t i = 0; i < success_sample_group_state_markers_combined.markers.size(); i++)
     {
-        sample_group_state_markers_combined.markers[i].id = i;
+        success_sample_group_state_markers_combined.markers[i].id = i;
+    }
+
+    visualization_msgs::msg::MarkerArray fail_sample_group_state_markers_combined;
+    for (size_t i = 0; i < fail_sample_group_state_markers.size(); i++)
+    {
+        fail_sample_group_state_markers_combined.markers.insert(
+            fail_sample_group_state_markers_combined.markers.end(), 
+            fail_sample_group_state_markers[i].markers.begin(), fail_sample_group_state_markers[i].markers.end());
+    }
+
+    // update the id
+    for (size_t i = 0; i < fail_sample_group_state_markers_combined.markers.size(); i++)
+    {
+        fail_sample_group_state_markers_combined.markers[i].id = i;
     }
 
     std::vector<std::vector<std::vector<float>>> self_collision_spheres_pos =  sampled_states->getSelfCollisionSpheresPosInBaseLinkHost();
@@ -1194,24 +1263,28 @@ void TEST_COLLISION_AND_VIS(const moveit::core::RobotModelPtr & robot_model, con
 
     // Create marker publisher
     auto self_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("self_collision_spheres", 1);
-    auto obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
-    auto sample_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("sample_group_states", 1);
+    auto sphere_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
+    auto cuboid_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cuboids", 1);
+    auto cylinder_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cylinders", 1);
+    auto success_sample_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("success_sample_group_states", 1);
+    auto fail_sample_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("fail_sample_group_states", 1);
     // Create a self MarkerArray message
     visualization_msgs::msg::MarkerArray robot_collision_spheres_marker_array = generate_self_collision_markers(
         collision_spheres_pos_of_selected_config,
         robot_info.getCollisionSpheresRadius(),
         node
     );
-    // Create a obstacle MarkerArray message
-    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generate_obstacles_markers(balls_pos, ball_radius, node);
 
     // use loop to publish the trajectory
     while (rclcpp::ok())
     {
         // Publish the message
         self_marker_publisher->publish(robot_collision_spheres_marker_array);
-        obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
-        sample_group_states_publisher->publish(sample_group_state_markers_combined);
+        success_sample_group_states_publisher->publish(success_sample_group_state_markers_combined);
+        fail_sample_group_states_publisher->publish(fail_sample_group_state_markers_combined);
+        sphere_obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
+        cuboid_obstacle_marker_publisher->publish(obstacle_collision_cuboids_marker_array);
+        cylinder_obstacle_marker_publisher->publish(obstacle_collision_cylinders_marker_array);
         
         rclcpp::spin_some(node);
 
@@ -1314,15 +1387,15 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // create obstacles for spheres
     std::vector<Sphere> collision_spheres;
-    genSphereObstacles(10, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+    genSphereObstacles(8, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
 
     // create obstacles for cuboids
     std::vector<BoundingBox> bounding_boxes;
-    genCuboidObstacles(40, 0.15, 0.1, unmoveable_bounding_boxes_of_robot, bounding_boxes);
+    genCuboidObstacles(8, 0.15, 0.1, unmoveable_bounding_boxes_of_robot, bounding_boxes);
 
     // create obstacles for cylinders
     std::vector<Cylinder> cylinders;
-    genCylinderObstacles(40, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
+    genCylinderObstacles(8, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
 
 
     // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintSphere
@@ -1355,13 +1428,13 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     auto world = std::make_shared<collision_detection::World>();
     auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
 
-    // // Add spheres as obstacles to the planning scene
-    // for (size_t i = 0; i < collision_spheres.size(); i++)
-    // {
-    //     Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
-    //     sphere_pose.translation() = Eigen::Vector3d(collision_spheres[i].x, collision_spheres[i].y, collision_spheres[i].z);
-    //     planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(collision_spheres[i].radius)), sphere_pose);
-    // }
+    // Add spheres as obstacles to the planning scene
+    for (size_t i = 0; i < collision_spheres.size(); i++)
+    {
+        Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
+        sphere_pose.translation() = Eigen::Vector3d(collision_spheres[i].x, collision_spheres[i].y, collision_spheres[i].z);
+        planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(collision_spheres[i].radius)), sphere_pose);
+    }
 
     // Add cuboids as obstacles to the planning scene
     for (size_t i = 0; i < bounding_boxes.size(); i++)
@@ -1402,29 +1475,29 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
                                                         box_shape, box_pose);
     }
 
-    // // Add cylinders as obstacles to the planning scene
-    // for (size_t i = 0; i < cylinders.size(); i++)
-    // {
-    //     // Create an identity transformation for the cylinder pose
-    //     Eigen::Isometry3d cylinder_pose = Eigen::Isometry3d::Identity();
+    // Add cylinders as obstacles to the planning scene
+    for (size_t i = 0; i < cylinders.size(); i++)
+    {
+        // Create an identity transformation for the cylinder pose
+        Eigen::Isometry3d cylinder_pose = Eigen::Isometry3d::Identity();
 
-    //     // Set the translation using the cylinder's x, y, z coordinates
-    //     cylinder_pose.translation() = Eigen::Vector3d(cylinders[i].x, 
-    //                                                 cylinders[i].y, 
-    //                                                 cylinders[i].z);
+        // Set the translation using the cylinder's x, y, z coordinates
+        cylinder_pose.translation() = Eigen::Vector3d(cylinders[i].x, 
+                                                    cylinders[i].y, 
+                                                    cylinders[i].z);
 
-    //     // Compute the orientation from roll, pitch, and yaw using Eigen's AngleAxis
-    //     Eigen::Quaterniond q = Eigen::AngleAxisd(cylinders[i].roll, Eigen::Vector3d::UnitX()) *
-    //                         Eigen::AngleAxisd(cylinders[i].pitch, Eigen::Vector3d::UnitY()) *
-    //                         Eigen::AngleAxisd(cylinders[i].yaw, Eigen::Vector3d::UnitZ());
-    //     cylinder_pose.rotate(q);
+        // Compute the orientation from roll, pitch, and yaw using Eigen's AngleAxis
+        Eigen::Quaterniond q = Eigen::AngleAxisd(cylinders[i].roll, Eigen::Vector3d::UnitX()) *
+                            Eigen::AngleAxisd(cylinders[i].pitch, Eigen::Vector3d::UnitY()) *
+                            Eigen::AngleAxisd(cylinders[i].yaw, Eigen::Vector3d::UnitZ());
+        cylinder_pose.rotate(q);
 
-    //     // Create the cylinder shape and add it to the planning scene
-    //     planning_scene->getWorldNonConst()->addToObject(
-    //         "obstacle_cylinder_" + std::to_string(i),
-    //         shapes::ShapeConstPtr(new shapes::Cylinder(cylinders[i].height, cylinders[i].radius)),
-    //         cylinder_pose);
-    // }
+        // Create the cylinder shape and add it to the planning scene
+        planning_scene->getWorldNonConst()->addToObject(
+            "obstacle_cylinder_" + std::to_string(i),
+            shapes::ShapeConstPtr(new shapes::Cylinder(cylinders[i].height, cylinders[i].radius)),
+            cylinder_pose);
+    }
 
     // generate start and goal states
     std::vector<float> start_joint_values;
@@ -1432,6 +1505,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     moveit_msgs::msg::RobotState start_state_msg;
     moveit_msgs::msg::RobotState goal_state_msg;
     generateRandomStartAndGoal(robot_state, joint_model_group, planning_scene, group_name, start_joint_values, goal_joint_values, start_state_msg, goal_state_msg);
+
+    std::cout << ">>>>>>>>>>> Generate random start and goal: Done" << std::endl;
 
     std::vector<std::vector<float>> start_joint_values_set;
     start_joint_values_set.push_back(start_joint_values);
@@ -1460,7 +1535,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         balls_pos,
         ball_radius
     );
-    // constraints.push_back(env_constraint_sphere);
+    constraints.push_back(env_constraint_sphere);
 
     // Create obstacle constraint for cuboid
     CUDAMPLib::EnvConstraintCuboidPtr env_constraint_cuboid = std::make_shared<CUDAMPLib::EnvConstraintCuboid>(
@@ -1480,7 +1555,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         cylinders_radius,
         cylinders_height
     );
-    // constraints.push_back(env_constraint_cylinder);
+    constraints.push_back(env_constraint_cylinder);
     
     // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(
@@ -1525,8 +1600,8 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     planner->setMotionTask(task);
 
     // create termination condition
-    // CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(5);
-    CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
+    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(10);
+    // CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
 
     /****************************** 7. Solve the task ********************************************************************************/
 
@@ -3071,7 +3146,7 @@ int main(int argc, char** argv)
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_NEAREST_NEIGHBOR(kinematic_model, GROUP_NAME, cuda_test_node);
 
@@ -3085,7 +3160,7 @@ int main(int argc, char** argv)
 
     // TEST_FILTER_STATES(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_EVAL_MBM(kinematic_model, cuda_test_node);
+    // TEST_EVAL_MBM(kinematic_model, cuda_test_node);
 
     // VIS_RESULT_MBM(kinematic_model, cuda_test_node);
 
