@@ -10,8 +10,8 @@ namespace CUDAMPLib
             SingleArmTask(const std::vector<std::vector<float>>& start_joint_values, const std::vector<std::vector<float>>& goal_joint_values);
             SingleArmTask(const std::vector<std::vector<float>>& start_joint_values, const BaseSpacePtr& goal_region, int goal_config_sampling_attempts=50);
             ~SingleArmTask();
-            std::vector<std::vector<float>> getStartStatesVector();
-            std::vector<std::vector<float>> getGoalStatesVector();
+            std::vector<std::vector<float>> getStartStatesVector() override;
+            std::vector<std::vector<float>> getGoalStatesVector() override;
             BaseStatesPtr getStartStates(BaseSpacePtr space) override;
             BaseStatesPtr getGoalStates(BaseSpacePtr space) override;
             void setSolution(const BaseStatesPtr& solution, BaseSpacePtr space) override;

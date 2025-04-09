@@ -47,6 +47,8 @@ namespace CUDAMPLib
 
             BaseStatesPtr sample(int num_of_config) override;
 
+            void sampleConfigurations(float * d_configurations, int num_of_config) override;
+
             bool checkMotions(
                 const BaseStatesPtr & states1, 
                 const BaseStatesPtr & states2, 

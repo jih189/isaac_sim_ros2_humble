@@ -20,6 +20,7 @@
 #include <CUDAMPLib/constraints/BoundaryConstraint.h>
 #include <CUDAMPLib/tasks/SingleArmTask.h>
 #include <CUDAMPLib/planners/RRG.h>
+#include <CUDAMPLib/planners/cRRTC.h>
 #include <CUDAMPLib/termination/StepTermination.h>
 #include <CUDAMPLib/termination/TimeoutTermination.h>
 
@@ -1387,15 +1388,15 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     // create obstacles for spheres
     std::vector<Sphere> collision_spheres;
-    genSphereObstacles(8, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+    genSphereObstacles(1, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
 
     // create obstacles for cuboids
     std::vector<BoundingBox> bounding_boxes;
-    genCuboidObstacles(8, 0.15, 0.1, unmoveable_bounding_boxes_of_robot, bounding_boxes);
+    genCuboidObstacles(1, 0.05, 0.05, unmoveable_bounding_boxes_of_robot, bounding_boxes);
 
     // create obstacles for cylinders
     std::vector<Cylinder> cylinders;
-    genCylinderObstacles(8, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
+    genCylinderObstacles(1, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
 
 
     // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintSphere
@@ -1589,18 +1590,29 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     /****************************** 6. Create Planner and set planning parameters *******************************************************/
 
-    // create the planner
-    CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
+    // // create the planner
+    // CUDAMPLib::RRGPtr planner = std::make_shared<CUDAMPLib::RRG>(single_arm_space);
 
-    // set planner parameters
-    planner->setMaxTravelDistance(5.0);
-    planner->setSampleAttemptsInEachIteration(10);
+    // // set planner parameters
+    // planner->setMaxTravelDistance(5.0);
+    // planner->setSampleAttemptsInEachIteration(30);
     
+    // // set the task
+    // planner->setMotionTask(task);
+
+    // // create termination condition
+    // // CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(10);
+    // CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
+
+    /*********************************************************************************************************************************** */
+    // create the planner
+    CUDAMPLib::cRRTCPtr planner = std::make_shared<CUDAMPLib::cRRTC>(single_arm_space);
+
     // set the task
     planner->setMotionTask(task);
 
     // create termination condition
-    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(10);
+    CUDAMPLib::StepTerminationPtr termination_condition = std::make_shared<CUDAMPLib::StepTermination>(1);
     // CUDAMPLib::TimeoutTerminationPtr termination_condition = std::make_shared<CUDAMPLib::TimeoutTermination>(10.0);
 
     /****************************** 7. Solve the task ********************************************************************************/
@@ -1614,124 +1626,124 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
 
     /************************** 8. Visualize both start and goal group **************************************/
 
-    // extract the start and goal group states
-    CUDAMPLib::BaseStatesPtr start_group_states;
-    CUDAMPLib::BaseStatesPtr goal_group_states;
-    planner->getStartAndGoalGroupStates(start_group_states, goal_group_states);
+    // // extract the start and goal group states
+    // CUDAMPLib::BaseStatesPtr start_group_states;
+    // CUDAMPLib::BaseStatesPtr goal_group_states;
+    // planner->getStartAndGoalGroupStates(start_group_states, goal_group_states);
 
-    // static_pointer_cast to SingleArmStates
-    CUDAMPLib::SingleArmStatesPtr start_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(start_group_states);
-    CUDAMPLib::SingleArmStatesPtr goal_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(goal_group_states);
+    // // static_pointer_cast to SingleArmStates
+    // CUDAMPLib::SingleArmStatesPtr start_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(start_group_states);
+    // CUDAMPLib::SingleArmStatesPtr goal_group_states_single_arm = std::static_pointer_cast<CUDAMPLib::SingleArmStates>(goal_group_states);
 
-    // create color for start group
-    std_msgs::msg::ColorRGBA color_start;
-    color_start.r = 0.0;
-    color_start.g = 1.0;
-    color_start.b = 0.0;
-    color_start.a = 0.4;
+    // // create color for start group
+    // std_msgs::msg::ColorRGBA color_start;
+    // color_start.r = 0.0;
+    // color_start.g = 1.0;
+    // color_start.b = 0.0;
+    // color_start.a = 0.4;
 
-    // visualize the start group states
-    visualization_msgs::msg::MarkerArray start_group_state_markers_combined;
-    generate_state_markers(
-        start_group_states_single_arm->getJointStatesHost(),
-        joint_model_group,
-        robot_state,
-        "start_group",
-        color_start,
-        start_group_state_markers_combined,
-        robot_info.getEndEffectorLinkNames()
-    );
+    // // visualize the start group states
+    // visualization_msgs::msg::MarkerArray start_group_state_markers_combined;
+    // generate_state_markers(
+    //     start_group_states_single_arm->getJointStatesHost(),
+    //     joint_model_group,
+    //     robot_state,
+    //     "start_group",
+    //     color_start,
+    //     start_group_state_markers_combined,
+    //     robot_info.getEndEffectorLinkNames()
+    // );
 
-    // create color for goal group
-    std_msgs::msg::ColorRGBA color_goal;
-    color_goal.r = 1.0;
-    color_goal.g = 0.0;
-    color_goal.b = 0.0;
-    color_goal.a = 0.4;
+    // // create color for goal group
+    // std_msgs::msg::ColorRGBA color_goal;
+    // color_goal.r = 1.0;
+    // color_goal.g = 0.0;
+    // color_goal.b = 0.0;
+    // color_goal.a = 0.4;
 
-    visualization_msgs::msg::MarkerArray goal_group_state_markers_combined;
-    generate_state_markers(
-        goal_group_states_single_arm->getJointStatesHost(),
-        joint_model_group,
-        robot_state,
-        "goal_group",
-        color_goal,
-        goal_group_state_markers_combined,
-        robot_info.getEndEffectorLinkNames()
-    );
+    // visualization_msgs::msg::MarkerArray goal_group_state_markers_combined;
+    // generate_state_markers(
+    //     goal_group_states_single_arm->getJointStatesHost(),
+    //     joint_model_group,
+    //     robot_state,
+    //     "goal_group",
+    //     color_goal,
+    //     goal_group_state_markers_combined,
+    //     robot_info.getEndEffectorLinkNames()
+    // );
 
-    /************************** 9. create the trajectory marker if exists **************************************/
+    // /************************** 9. create the trajectory marker if exists **************************************/
 
-    moveit_msgs::msg::DisplayTrajectory display_trajectory;
-    moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
-    auto solution_robot_trajectory = robot_trajectory::RobotTrajectory(robot_model, joint_model_group);
+    // moveit_msgs::msg::DisplayTrajectory display_trajectory;
+    // moveit_msgs::msg::RobotTrajectory robot_trajectory_msg;
+    // auto solution_robot_trajectory = robot_trajectory::RobotTrajectory(robot_model, joint_model_group);
 
-    if (task->hasSolution())
-    {
-        // print "Task solved" in green color
-        std::cout << "\033[1;32m" << "Task solved" << "\033[0m" << std::endl;
+    // if (task->hasSolution())
+    // {
+    //     // print "Task solved" in green color
+    //     std::cout << "\033[1;32m" << "Task solved" << "\033[0m" << std::endl;
 
-        std::vector<std::vector<float>> solution_path = task->getSolution();
+    //     std::vector<std::vector<float>> solution_path = task->getSolution();
 
-        // generate robot trajectory msg
-        for (size_t i = 0; i < solution_path.size(); i++)
-        {
-            // convert solution_path[i] to double vector
-            std::vector<double> solution_path_i_double = std::vector<double>(solution_path[i].begin(), solution_path[i].end());
-            robot_state->setJointGroupPositions(joint_model_group, solution_path_i_double);
-            solution_robot_trajectory.addSuffixWayPoint(*robot_state, 1.0);
-        }
-        // Create a DisplayTrajectory message
-        solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
+    //     // generate robot trajectory msg
+    //     for (size_t i = 0; i < solution_path.size(); i++)
+    //     {
+    //         // convert solution_path[i] to double vector
+    //         std::vector<double> solution_path_i_double = std::vector<double>(solution_path[i].begin(), solution_path[i].end());
+    //         robot_state->setJointGroupPositions(joint_model_group, solution_path_i_double);
+    //         solution_robot_trajectory.addSuffixWayPoint(*robot_state, 1.0);
+    //     }
+    //     // Create a DisplayTrajectory message
+    //     solution_robot_trajectory.getRobotTrajectoryMsg(robot_trajectory_msg);
 
-        display_trajectory.trajectory_start = start_state_msg;
-        display_trajectory.trajectory.push_back(robot_trajectory_msg);
-    }
-    else
-    {
-        // print "Task not solved" in red color
-        std::cout << "\033[1;31m" << "Task not solved" << "\033[0m" << std::endl;
+    //     display_trajectory.trajectory_start = start_state_msg;
+    //     display_trajectory.trajectory.push_back(robot_trajectory_msg);
+    // }
+    // else
+    // {
+    //     // print "Task not solved" in red color
+    //     std::cout << "\033[1;31m" << "Task not solved" << "\033[0m" << std::endl;
 
-        // print the failure reason
-        std::cout << "Failure reason: " << task->getFailureReason() << std::endl;
-    }
+    //     // print the failure reason
+    //     std::cout << "Failure reason: " << task->getFailureReason() << std::endl;
+    // }
 
-    /************************************* 10. prepare publishers ******************************************* */
+    // /************************************* 10. prepare publishers ******************************************* */
 
-    // Create a start robot state publisher
-    auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
-    auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
-    auto sphere_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
-    auto cuboid_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cuboids", 1);
-    auto cylinder_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cylinders", 1);
-    auto display_publisher = node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
-    auto start_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("start_group_states", 1);
-    auto goal_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("goal_group_states", 1);
+    // // Create a start robot state publisher
+    // auto start_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("start_robot_state", 1);
+    // auto goal_robot_state_publisher = node->create_publisher<moveit_msgs::msg::DisplayRobotState>("goal_robot_state", 1);
+    // auto sphere_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_spheres", 1);
+    // auto cuboid_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cuboids", 1);
+    // auto cylinder_obstacle_marker_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("obstacle_collision_cylinders", 1);
+    // auto display_publisher = node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
+    // auto start_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("start_group_states", 1);
+    // auto goal_group_states_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>("goal_group_states", 1);
     
-    /************************************ 11. loop for visulize ************************************************************/
+    // /************************************ 11. loop for visulize ************************************************************/
 
-    // Publish the message in a loop
-    while (rclcpp::ok())
-    {
-        // Publish the message
-        start_robot_state_publisher->publish(start_display_robot_state);
-        goal_robot_state_publisher->publish(goal_display_robot_state);
-        sphere_obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
-        cuboid_obstacle_marker_publisher->publish(obstacle_collision_cuboids_marker_array);
-        cylinder_obstacle_marker_publisher->publish(obstacle_collision_cylinders_marker_array);
-        start_group_states_publisher->publish(start_group_state_markers_combined);
-        goal_group_states_publisher->publish(goal_group_state_markers_combined);
+    // // Publish the message in a loop
+    // while (rclcpp::ok())
+    // {
+    //     // Publish the message
+    //     start_robot_state_publisher->publish(start_display_robot_state);
+    //     goal_robot_state_publisher->publish(goal_display_robot_state);
+    //     sphere_obstacle_marker_publisher->publish(obstacle_collision_spheres_marker_array);
+    //     cuboid_obstacle_marker_publisher->publish(obstacle_collision_cuboids_marker_array);
+    //     cylinder_obstacle_marker_publisher->publish(obstacle_collision_cylinders_marker_array);
+    //     start_group_states_publisher->publish(start_group_state_markers_combined);
+    //     goal_group_states_publisher->publish(goal_group_state_markers_combined);
 
-        if (task->hasSolution())
-        {
-            display_publisher->publish(display_trajectory);
-        }
+    //     if (task->hasSolution())
+    //     {
+    //         display_publisher->publish(display_trajectory);
+    //     }
         
-        rclcpp::spin_some(node);
+    //     rclcpp::spin_some(node);
 
-        // sleep for 1 second
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
+    //     // sleep for 1 second
+    //     std::this_thread::sleep_for(std::chrono::seconds(1));
+    // }
 
     // clear the robot state
     robot_state.reset();
@@ -3146,11 +3158,11 @@ int main(int argc, char** argv)
 
     // TEST_COLLISION(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_COLLISION_AND_VIS(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_NEAREST_NEIGHBOR(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

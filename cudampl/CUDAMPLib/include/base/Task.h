@@ -25,6 +25,16 @@ namespace CUDAMPLib
             virtual BaseStatesPtr getGoalStates(BaseSpacePtr space) = 0;
 
             /**
+                @brief Get the start states vector.
+             */
+            virtual std::vector<std::vector<float>> getStartStatesVector() = 0;
+
+            /**
+                @brief Get the goal states vector.
+             */
+            virtual std::vector<std::vector<float>> getGoalStatesVector() = 0;
+
+            /**
                 @brief Set the solution.
                 @param solution The solution.
                 @param space The space.

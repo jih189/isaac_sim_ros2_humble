@@ -35,6 +35,16 @@ namespace CUDAMPLib
             virtual BaseStatesPtr sample(int num_of_config) = 0;
 
             /**
+                @brief Sample only configurations for active joints.
+                @param d_configurations The configurations to sample.
+                @param num_of_config The number of configurations to sample.
+             */
+            virtual void sampleConfigurations(
+                float * d_configurations,
+                int num_of_config
+            ) = 0;
+
+            /**
                 @brief Given two sets of states, check the feasibility of motions between them.
                 @param states1 The first set of states.
                 @param states2 The second set of states.

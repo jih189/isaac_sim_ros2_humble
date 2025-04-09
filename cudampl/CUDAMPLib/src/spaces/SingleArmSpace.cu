@@ -315,6 +315,87 @@ namespace CUDAMPLib {
         return sampled_states;
     }
 
+    __global__ void sample_configuration_kernel(
+        curandState_t * d_random_state,
+        float * d_sampled_configurations,
+        int num_of_config,
+        int num_of_dim,
+        float * d_lower_bound,
+        float * d_upper_bound
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_config * num_of_dim) return;
+
+        int joint_idx = idx % num_of_dim;
+
+        curandState_t local_state = d_random_state[idx];
+        d_sampled_configurations[idx] = curand_uniform(&local_state) * (d_upper_bound[joint_idx] - d_lower_bound[joint_idx]) + d_lower_bound[joint_idx];
+    }
+
+    void SingleArmSpace::sampleConfigurations(float * d_configurations, int num_of_config)
+    {
+        std::vector<float> upper_bound_host;
+        std::vector<float> lower_bound_host;
+
+        float * d_lower_bound_in_sample_configurations;
+        float * d_upper_bound_in_sample_configurations;
+
+        // allocate device memory for lower and upper bound
+        size_t d_bound_bytes = dim * sizeof(float);
+
+        cudaMalloc(&d_lower_bound_in_sample_configurations, d_bound_bytes);
+        cudaMalloc(&d_upper_bound_in_sample_configurations, d_bound_bytes);
+
+        // print active joint map
+        for (size_t i = 0; i < active_joint_map_.size(); i++)
+        {
+            if (active_joint_map_[i])
+            {
+                // copy the upper and lower bound to host
+                upper_bound_host.push_back(upper_bound[i]);
+                lower_bound_host.push_back(lower_bound[i]);
+            }
+        }
+
+        // copy the upper and lower bound to device
+        cudaMemcpy(d_lower_bound_in_sample_configurations, lower_bound_host.data(), d_bound_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_upper_bound_in_sample_configurations, upper_bound_host.data(), d_bound_bytes, cudaMemcpyHostToDevice);
+
+        curandState * d_random_state;
+        size_t d_random_state_bytes = num_of_config * dim * sizeof(curandState);
+        auto allocate_result = cudaMalloc(&d_random_state, d_random_state_bytes);
+        if (allocate_result != cudaSuccess)
+        {
+            // print in red
+            std::cerr << "\033[31m" << "Failed to allocate device memory for random state. Perhaps, the num_of_config is too large." << "\033[0m" << std::endl;
+        }
+
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_config * dim + threadsPerBlock - 1) / threadsPerBlock;
+
+        unsigned long seed = dist(gen);
+        initCurand<<<blocksPerGrid, threadsPerBlock>>>(d_random_state, seed, num_of_config * dim);
+
+        // call kernel
+        sample_configuration_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            d_random_state, 
+            d_configurations, 
+            num_of_config, 
+            dim,
+            d_lower_bound_in_sample_configurations, 
+            d_upper_bound_in_sample_configurations
+        );
+
+        // wait for the kernel to finish
+        cudaDeviceSynchronize();
+
+        // free device memory
+        cudaFree(d_random_state);
+        cudaFree(d_lower_bound_in_sample_configurations);
+        cudaFree(d_upper_bound_in_sample_configurations);
+    }
+
     BaseStatesPtr SingleArmSpace::createStatesFromVectorFull(const std::vector<std::vector<float>>& joint_values)
     {
         size_t num_of_config = joint_values.size();
