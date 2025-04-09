@@ -33,11 +33,8 @@ namespace CUDAMPLib
             // device memory
             float* d_start_tree_configurations_;
             int* d_start_tree_parent_indexs_;
-            int* d_start_tree_size_;
-
             float* d_goal_tree_configurations_;
             int* d_goal_tree_parent_indexs_;
-            int* d_goal_tree_size_;
 
             float * d_sampled_configurations_;
 
