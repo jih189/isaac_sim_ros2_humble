@@ -18,7 +18,13 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
     __shared__ int localGoalTreeCounter;
     __shared__ float partial_distance_cost_from_nn[32];
     __shared__ int partial_nn_index[32];
-    __shared__ float local_sampled_configurations[7];
+    __shared__ float local_sampled_configuration[7];
+    __shared__ float local_parent_configuration[7];
+    __shared__ float local_delta_motion[7];
+    __shared__ int local_parent_index;
+    __shared__ float local_nearest_neighbor_distance;
+    __shared__ float local_motion_configurations[224]; 
+    __shared__ int motion_step;
     const int tid = threadIdx.x;
     // run for loop with max_interations_ iterations
     for (int i = 0; i < 1; i++) {
@@ -61,7 +67,7 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
         }
         // Load the sampled configuration into shared memory
         if (tid < 7) {
-            local_sampled_configurations[tid] = d_sampled_configurations[localSampledCounter * 7 + tid];
+            local_sampled_configuration[tid] = d_sampled_configurations[localSampledCounter * 7 + tid];
         }
         __syncthreads();
 
@@ -69,22 +75,22 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
 
         float best_dist = FLT_MAX;
         int best_index = -1;
-        for (int j = 0; j < localTargetTreeCounter; j += blockDim.x){
+        for (int j = tid; j < localTargetTreeCounter; j += blockDim.x){
             float dist = 0.0f;
             float diff = 0.0f;
-            diff = tree_to_expand[j * 7 + 0] - local_sampled_configurations[0];
+            diff = tree_to_expand[j * 7 + 0] - local_sampled_configuration[0];
             dist += diff * diff;
-            diff = tree_to_expand[j * 7 + 1] - local_sampled_configurations[1];
+            diff = tree_to_expand[j * 7 + 1] - local_sampled_configuration[1];
             dist += diff * diff;
-            diff = tree_to_expand[j * 7 + 2] - local_sampled_configurations[2];
+            diff = tree_to_expand[j * 7 + 2] - local_sampled_configuration[2];
             dist += diff * diff;
-            diff = tree_to_expand[j * 7 + 3] - local_sampled_configurations[3];
+            diff = tree_to_expand[j * 7 + 3] - local_sampled_configuration[3];
             dist += diff * diff;
-            diff = tree_to_expand[j * 7 + 4] - local_sampled_configurations[4];
+            diff = tree_to_expand[j * 7 + 4] - local_sampled_configuration[4];
             dist += diff * diff;
-            diff = tree_to_expand[j * 7 + 5] - local_sampled_configurations[5];
+            diff = tree_to_expand[j * 7 + 5] - local_sampled_configuration[5];
             dist += diff * diff;
-            diff = tree_to_expand[j * 7 + 6] - local_sampled_configurations[6];
+            diff = tree_to_expand[j * 7 + 6] - local_sampled_configuration[6];
             dist += diff * diff;
 
             if (dist < best_dist) {
@@ -111,11 +117,40 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
 
         // After the reduction, thread 0 has the overall nearest neighbor's index and its squared distance.
         if (tid == 0) {
-            float nearest_dist = sqrtf(partial_distance_cost_from_nn[0]);
-            int nearest_idx = partial_nn_index[0];
-            printf("Nearest neighbor index: %d, Euclidean distance: %f\n", nearest_idx, nearest_dist);
+            local_nearest_neighbor_distance = sqrtf(partial_distance_cost_from_nn[0]);
+            local_parent_index = partial_nn_index[0];
+            motion_step = min((int)(local_nearest_neighbor_distance / 0.020000), 32);
+            printf("Nearest neighbor index: %d, Euclidean distance: %f motion step: %d \n ", local_parent_index, local_nearest_neighbor_distance, motion_step);
+        }
+        __syncthreads();
+        // Calculate the delta motion from the nearest configuration to the sampled configuration
+        if (tid < 7) {
+            local_parent_configuration[tid] = tree_to_expand[local_parent_index * 7 + tid];
+            local_delta_motion[tid] = (local_sampled_configuration[tid] - local_parent_configuration[tid]) / local_nearest_neighbor_distance * 0.020000;
         }
 
+        __syncthreads();
+        // interpolate the new configuration from the nearest configuration and the sampled configuration
+        for (int j = tid; j < 7 * motion_step; j += blockDim.x) {
+            int state_ind_in_motion = j / 7;
+            int joint_ind_in_state = j % 7;
+            local_motion_configurations[j] = local_parent_configuration[joint_ind_in_state] + local_delta_motion[joint_ind_in_state] * state_ind_in_motion;
+        }
+        __syncthreads();
+        // print the intermediate configurations for debugging
+        if (tid == 0) {
+            for (int j = 0; j < motion_step; j++) {
+                printf("Intermediate configuration %d: ", j);
+                printf("%f ", local_motion_configurations[j * 7 + 0]);
+                printf("%f ", local_motion_configurations[j * 7 + 1]);
+                printf("%f ", local_motion_configurations[j * 7 + 2]);
+                printf("%f ", local_motion_configurations[j * 7 + 3]);
+                printf("%f ", local_motion_configurations[j * 7 + 4]);
+                printf("%f ", local_motion_configurations[j * 7 + 5]);
+                printf("%f ", local_motion_configurations[j * 7 + 6]);
+                printf("\n");
+             }
+        }
     }
 
 }

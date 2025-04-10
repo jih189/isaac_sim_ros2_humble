@@ -18,6 +18,9 @@ namespace CUDAMPLib
         num_of_threads_per_motion_ = 32;
         dim_ = space->getDim();
 
+        step_resolution_ = 0.02f;
+        max_step_ = 32;
+
         size_t configuration_memory_bytes = max_interations_ * dim_ * sizeof(float);
         size_t parent_indexs_memory_bytes = max_interations_ * sizeof(int);
 
@@ -177,7 +180,13 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
     kernel_code += "    __shared__ int localGoalTreeCounter;\n";
     kernel_code += "    __shared__ float partial_distance_cost_from_nn[" + std::to_string(num_of_threads_per_motion_) + "];\n";
     kernel_code += "    __shared__ int partial_nn_index[" + std::to_string(num_of_threads_per_motion_) + "];\n";
-    kernel_code += "    __shared__ float local_sampled_configurations[" + std::to_string(dim_) + "];\n";
+    kernel_code += "    __shared__ float local_sampled_configuration[" + std::to_string(dim_) + "];\n";
+    kernel_code += "    __shared__ float local_parent_configuration[" + std::to_string(dim_) + "];\n";
+    kernel_code += "    __shared__ float local_delta_motion[" + std::to_string(dim_) + "];\n";
+    kernel_code += "    __shared__ int local_parent_index;\n";
+    kernel_code += "    __shared__ float local_nearest_neighbor_distance;\n";
+    kernel_code += "    __shared__ float local_motion_configurations[" + std::to_string(dim_ * max_step_) + "]; \n";
+    kernel_code += "    __shared__ int motion_step;\n";
     kernel_code += "    const int tid = threadIdx.x;\n";
     kernel_code += "    // run for loop with max_interations_ iterations\n";
     kernel_code += "    for (int i = 0; i < " + std::to_string(max_interations_) + "; i++) {\n";
@@ -221,7 +230,7 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
 
         kernel_code += "        // Load the sampled configuration into shared memory\n";
         kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
-        kernel_code += "            local_sampled_configurations[tid] = d_sampled_configurations[localSampledCounter * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "            local_sampled_configuration[tid] = d_sampled_configurations[localSampledCounter * " + std::to_string(dim_) + " + tid];\n";
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n";
 
@@ -230,13 +239,13 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
 
         float best_dist = FLT_MAX;
         int best_index = -1;
-        for (int j = 0; j < localTargetTreeCounter; j += blockDim.x){
+        for (int j = tid; j < localTargetTreeCounter; j += blockDim.x){
             float dist = 0.0f;
             float diff = 0.0f;
 )";
         for (int j = 0; j < dim_; j++)
         {
-            kernel_code += "            diff = tree_to_expand[j * " + std::to_string(dim_) + " + " + std::to_string(j) + "] - local_sampled_configurations[" + std::to_string(j) + "];\n";
+            kernel_code += "            diff = tree_to_expand[j * " + std::to_string(dim_) + " + " + std::to_string(j) + "] - local_sampled_configuration[" + std::to_string(j) + "];\n";
             kernel_code += "            dist += diff * diff;\n";
         }
 
@@ -265,16 +274,44 @@ kernel_code += R"(
 
         // After the reduction, thread 0 has the overall nearest neighbor's index and its squared distance.
         if (tid == 0) {
-            float nearest_dist = sqrtf(partial_distance_cost_from_nn[0]);
-            int nearest_idx = partial_nn_index[0];
-            printf("Nearest neighbor index: %d, Euclidean distance: %f\n", nearest_idx, nearest_dist);
-        }
+            local_nearest_neighbor_distance = sqrtf(partial_distance_cost_from_nn[0]);
+            local_parent_index = partial_nn_index[0];
+)";
 
-    )";
+        kernel_code += "            motion_step = min((int)(local_nearest_neighbor_distance / " + std::to_string(step_resolution_) + "), " + std::to_string(max_step_) + ");\n";
+        kernel_code += "            printf(\"Nearest neighbor index: %d, Euclidean distance: %f motion step: %d \\n \", local_parent_index, local_nearest_neighbor_distance, motion_step);\n";
+        kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n";
+        kernel_code += "        // Calculate the delta motion from the nearest configuration to the sampled configuration\n";
+        kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
+        kernel_code += "            local_parent_configuration[tid] = tree_to_expand[local_parent_index * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "            local_delta_motion[tid] = (local_sampled_configuration[tid] - local_parent_configuration[tid]) / local_nearest_neighbor_distance * " + std::to_string(step_resolution_) + ";\n";
+        kernel_code += "        }\n";
+        kernel_code += R"(
+        __syncthreads();
+)";
 
-    kernel_code += "}\n";
+    kernel_code += "        // interpolate the new configuration from the nearest configuration and the sampled configuration\n";
+    kernel_code += "        for (int j = tid; j < " + std::to_string(dim_) + " * motion_step; j += blockDim.x) {\n";
+    kernel_code += "            int state_ind_in_motion = j / " + std::to_string(dim_) + ";\n";
+    kernel_code += "            int joint_ind_in_state = j % " + std::to_string(dim_) + ";\n";
+    kernel_code += "            local_motion_configurations[j] = local_parent_configuration[joint_ind_in_state] + local_delta_motion[joint_ind_in_state] * state_ind_in_motion;\n";
+    kernel_code += "        }\n";
+    kernel_code += "        __syncthreads();\n";
+    kernel_code += "        // print the intermediate configurations for debugging\n";
+    kernel_code += "        if (tid == 0) {\n";
+    kernel_code += "            for (int j = 0; j < motion_step; j++) {\n";
+    kernel_code += "                printf(\"Intermediate configuration %d: \", j);\n";
+    for (int j = 0; j < dim_; j++)
+    {
+        kernel_code += "                printf(\"%f \", local_motion_configurations[j * " + std::to_string(dim_) + " + " + std::to_string(j) + "]);\n";
+    }
+    kernel_code += "                printf(\"\\n\");\n";
+    kernel_code += "             }\n";
+    kernel_code += "        }\n";
+    kernel_code += "    }\n";
     
-kernel_code += R"(
+    kernel_code += R"(
 })";
         return kernel_code;
     }

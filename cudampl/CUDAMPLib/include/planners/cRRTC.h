@@ -29,6 +29,8 @@ namespace CUDAMPLib
             int max_interations_;
             int dim_;
             int num_of_threads_per_motion_;
+            float step_resolution_;
+            int max_step_;
 
             // device memory
             float* d_start_tree_configurations_;
