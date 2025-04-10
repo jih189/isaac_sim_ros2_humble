@@ -49,6 +49,8 @@ namespace CUDAMPLib
 
             void sampleConfigurations(float * d_configurations, int num_of_config) override;
 
+            std::string generateFKKernelSourceCode() override;
+
             bool checkMotions(
                 const BaseStatesPtr & states1, 
                 const BaseStatesPtr & states2, 
@@ -138,6 +140,13 @@ namespace CUDAMPLib
             std::vector<bool> active_joint_map_;
             std::vector<float> default_joint_values_;
             std::vector<std::string> link_names_;
+            std::vector<int> joint_types_;
+            std::vector<int> link_parent_link_maps_;
+            std::vector<Eigen::Isometry3d> joint_poses_;
+            std::vector<Eigen::Vector3d> joint_axes_;
+            std::vector<int> collision_spheres_to_link_map_;
+            std::vector<std::vector<float>> collision_spheres_pos_in_link_;
+            std::vector<float> collision_spheres_radius_;
             float resolution_;
 
             // variables for gpu memory

@@ -45,6 +45,12 @@ namespace CUDAMPLib
             ) = 0;
 
             /**
+                @brief generate the fk kernel source code.
+                @return The kernel source code.
+             */
+            virtual std::string generateFKKernelSourceCode() = 0;
+
+            /**
                 @brief Given two sets of states, check the feasibility of motions between them.
                 @param states1 The first set of states.
                 @param states2 The second set of states.

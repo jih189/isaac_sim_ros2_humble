@@ -17,6 +17,7 @@ namespace CUDAMPLib
         max_interations_ = 1;
         num_of_threads_per_motion_ = 32;
         dim_ = space->getDim();
+        forward_kinematics_kernel_source_code_ = space->generateFKKernelSourceCode();
 
         step_resolution_ = 0.02f;
         max_step_ = 32;
@@ -144,13 +145,13 @@ namespace CUDAMPLib
         int threads_per_block = num_of_threads_per_motion_;
         int blocks_per_grid = 1;
 
-        cRRTCKernelPtr_->launchKernel(
-            dim3(blocks_per_grid, 1, 1), // grid size
-            dim3(threads_per_block, 1, 1), // block size
-            0, // shared memory size
-            nullptr, // stream
-            args // kernel arguments
-        );
+        // cRRTCKernelPtr_->launchKernel(
+        //     dim3(blocks_per_grid, 1, 1), // grid size
+        //     dim3(threads_per_block, 1, 1), // block size
+        //     0, // shared memory size
+        //     nullptr, // stream
+        //     args // kernel arguments
+        // );
 
         cudaDeviceSynchronize();
     }
@@ -169,7 +170,11 @@ extern "C" {
     __device__ int goalTreeCounter = 0;
     __device__ int sampledCounter = 0;
 }
+)";
 
+        kernel_code += forward_kinematics_kernel_source_code_;
+
+        kernel_code += R"(
 extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, float * d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations) {
 )";
     kernel_code += "    __shared__ float * tree_to_expand;\n";
@@ -298,17 +303,17 @@ kernel_code += R"(
     kernel_code += "            local_motion_configurations[j] = local_parent_configuration[joint_ind_in_state] + local_delta_motion[joint_ind_in_state] * state_ind_in_motion;\n";
     kernel_code += "        }\n";
     kernel_code += "        __syncthreads();\n";
-    kernel_code += "        // print the intermediate configurations for debugging\n";
-    kernel_code += "        if (tid == 0) {\n";
-    kernel_code += "            for (int j = 0; j < motion_step; j++) {\n";
-    kernel_code += "                printf(\"Intermediate configuration %d: \", j);\n";
-    for (int j = 0; j < dim_; j++)
-    {
-        kernel_code += "                printf(\"%f \", local_motion_configurations[j * " + std::to_string(dim_) + " + " + std::to_string(j) + "]);\n";
-    }
-    kernel_code += "                printf(\"\\n\");\n";
-    kernel_code += "             }\n";
-    kernel_code += "        }\n";
+    // kernel_code += "        // print the intermediate configurations for debugging\n";
+    // kernel_code += "        if (tid == 0) {\n";
+    // kernel_code += "            for (int j = 0; j < motion_step; j++) {\n";
+    // kernel_code += "                printf(\"Intermediate configuration %d: \", j);\n";
+    // for (int j = 0; j < dim_; j++)
+    // {
+    //     kernel_code += "                printf(\"%f \", local_motion_configurations[j * " + std::to_string(dim_) + " + " + std::to_string(j) + "]);\n";
+    // }
+    // kernel_code += "                printf(\"\\n\");\n";
+    // kernel_code += "             }\n";
+    // kernel_code += "        }\n";
     kernel_code += "    }\n";
     
     kernel_code += R"(
