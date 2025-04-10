@@ -14,9 +14,9 @@ namespace CUDAMPLib {
         const std::vector<Eigen::Isometry3d>& joint_poses,
         const std::vector<Eigen::Vector3d>& joint_axes,
         const std::vector<int>& link_parent_link_maps,
-        const std::vector<int>& collision_spheres_to_link_map,
-        const std::vector<std::vector<float>>& collision_spheres_pos_in_link,
-        const std::vector<float>& collision_spheres_radius,
+        const std::vector<int>& self_collision_spheres_to_link_map,
+        const std::vector<std::vector<float>>& self_collision_spheres_pos_in_link,
+        const std::vector<float>& self_collision_spheres_radius,
         const std::vector<bool>& active_joint_map,
         const std::vector<float>& lower,
         const std::vector<float>& upper,
@@ -29,12 +29,9 @@ namespace CUDAMPLib {
           resolution_(resolution),
           dist(0, std::numeric_limits<unsigned long>::max())
     {
-        // need to allocate device memory for joint_types, joint_poses, joint_axes, 
-        // parent_link_maps, collision_spheres_to_link_map, collision_spheres_pos_in_link, 
-        // and collision_spheres_radius
         num_of_joints = joint_types.size();
         num_of_links = link_parent_link_maps.size();
-        num_of_self_collision_spheres = collision_spheres_to_link_map.size();
+        num_of_self_collision_spheres = self_collision_spheres_to_link_map.size();
         // copy data to member variables
         active_joint_map_ = active_joint_map;
         default_joint_values_ = default_joint_values;
@@ -48,9 +45,9 @@ namespace CUDAMPLib {
         link_parent_link_maps_ = link_parent_link_maps;
         joint_poses_ = joint_poses;
         joint_axes_ = joint_axes;
-        collision_spheres_to_link_map_ = collision_spheres_to_link_map;
-        collision_spheres_pos_in_link_ = collision_spheres_pos_in_link;
-        collision_spheres_radius_ = collision_spheres_radius;
+        self_collision_spheres_to_link_map_ = self_collision_spheres_to_link_map;
+        self_collision_spheres_pos_in_link_ = self_collision_spheres_pos_in_link;
+        self_collision_spheres_radius_ = self_collision_spheres_radius;
 
         // get the number of active joints
         num_of_active_joints_ = 0;
@@ -84,7 +81,7 @@ namespace CUDAMPLib {
         int joint_poses_bytes = byte_size_of_pose_matrix * num_of_joints;
         int joint_axes_bytes = sizeof(float) * 3 * num_of_joints;
         int link_parent_link_maps_bytes = sizeof(int) * num_of_links;
-        int collision_spheres_to_link_map_bytes = sizeof(int) * num_of_self_collision_spheres;
+        int self_collision_spheres_to_link_map_bytes = sizeof(int) * num_of_self_collision_spheres;
         int self_collision_spheres_pos_in_link_bytes = sizeof(float) * 3 * num_of_self_collision_spheres;
         int self_collision_spheres_radius_bytes = sizeof(float) * num_of_self_collision_spheres;
         int active_joint_map_bytes = sizeof(int) * num_of_joints;
@@ -97,7 +94,7 @@ namespace CUDAMPLib {
         cudaMalloc(&d_joint_poses, joint_poses_bytes);
         cudaMalloc(&d_joint_axes, joint_axes_bytes);
         cudaMalloc(&d_link_parent_link_maps, link_parent_link_maps_bytes);
-        cudaMalloc(&d_collision_spheres_to_link_map, collision_spheres_to_link_map_bytes);
+        cudaMalloc(&d_self_collision_spheres_to_link_map, self_collision_spheres_to_link_map_bytes);
         cudaMalloc(&d_self_collision_spheres_pos_in_link, self_collision_spheres_pos_in_link_bytes);
         cudaMalloc(&d_self_collision_spheres_radius, self_collision_spheres_radius_bytes);
         cudaMalloc(&d_active_joint_map, active_joint_map_bytes);
@@ -113,9 +110,9 @@ namespace CUDAMPLib {
         cudaMemcpy(d_joint_poses, joint_poses_flatten.data(), joint_poses_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_joint_axes, joint_axes_flatten.data(), joint_axes_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_link_parent_link_maps, link_parent_link_maps.data(), link_parent_link_maps_bytes, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_collision_spheres_to_link_map, collision_spheres_to_link_map.data(), collision_spheres_to_link_map_bytes, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_self_collision_spheres_pos_in_link, floatVectorFlatten(collision_spheres_pos_in_link).data(), self_collision_spheres_pos_in_link_bytes, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_self_collision_spheres_radius, collision_spheres_radius.data(), self_collision_spheres_radius_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_self_collision_spheres_to_link_map, self_collision_spheres_to_link_map.data(), self_collision_spheres_to_link_map_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_self_collision_spheres_pos_in_link, floatVectorFlatten(self_collision_spheres_pos_in_link).data(), self_collision_spheres_pos_in_link_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_self_collision_spheres_radius, self_collision_spheres_radius.data(), self_collision_spheres_radius_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_active_joint_map, boolVectorFlatten(active_joint_map).data(), active_joint_map_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_lower_bound, lower.data(), lower_bound_bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(d_upper_bound, upper.data(), upper_bound_bytes, cudaMemcpyHostToDevice);
@@ -170,7 +167,7 @@ namespace CUDAMPLib {
         cudaFree(d_joint_poses);
         cudaFree(d_joint_axes);
         cudaFree(d_link_parent_link_maps);
-        cudaFree(d_collision_spheres_to_link_map);
+        cudaFree(d_self_collision_spheres_to_link_map);
         cudaFree(d_self_collision_spheres_pos_in_link);
         cudaFree(d_self_collision_spheres_radius);
         cudaFree(d_active_joint_map);
@@ -1724,7 +1721,7 @@ namespace CUDAMPLib {
         space_info->d_joint_poses = d_joint_poses;
         space_info->d_joint_axes = d_joint_axes;
         space_info->d_link_parent_link_maps = d_link_parent_link_maps;
-        space_info->d_collision_spheres_to_link_map = d_collision_spheres_to_link_map;
+        space_info->d_self_collision_spheres_to_link_map = d_self_collision_spheres_to_link_map;
         space_info->d_self_collision_spheres_pos_in_link = d_self_collision_spheres_pos_in_link;
         space_info->d_self_collision_spheres_radius = d_self_collision_spheres_radius;
         space_info->d_active_joint_map = d_active_joint_map;
@@ -1805,6 +1802,42 @@ namespace CUDAMPLib {
             kernel_source_code += "\n";
         }
         kernel_source_code += "};\n";
+
+        // set self collision spheres pos in link
+        kernel_source_code += "__constant__ float self_collision_spheres_pos_in_link[" + std::to_string(num_of_self_collision_spheres * 3) + "] = \n";
+        kernel_source_code += "{\n";
+        for (size_t i = 0; i < self_collision_spheres_pos_in_link_.size(); i++)
+        {
+            for (size_t j = 0; j < 3; j++)
+            {
+                if ( i == self_collision_spheres_pos_in_link_.size() - 1 && j == 2)
+                {
+                    kernel_source_code += std::to_string(self_collision_spheres_pos_in_link_[i][j]);
+                }
+                else
+                {
+                    kernel_source_code += std::to_string(self_collision_spheres_pos_in_link_[i][j]) + ", ";
+                }
+            }
+            kernel_source_code += "\n";
+        }
+        kernel_source_code += "};\n";
+
+        // set self collision spheres to link map
+        kernel_source_code += "__constant__ int self_collision_spheres_to_link_map[" + std::to_string(num_of_self_collision_spheres) + "] = \n";
+        kernel_source_code += "{\n";
+        for (size_t i = 0; i < self_collision_spheres_to_link_map_.size(); i++)
+        {
+            if ( i == self_collision_spheres_to_link_map_.size() - 1)
+            {
+                kernel_source_code += std::to_string(self_collision_spheres_to_link_map_[i]);
+            }
+            else
+            {
+                kernel_source_code += std::to_string(self_collision_spheres_to_link_map_[i]) + ", ";
+            }
+        }
+        kernel_source_code += "\n};\n";
 
         kernel_source_code += R"(
  // Multiply two 4x4 matrices (row-major order)
@@ -1966,9 +1999,25 @@ __device__ __forceinline__ void kin_forward(float * configuration, float * self_
 
         }
 
+        kernel_source_code += "    // calculate the self collision spheres positions in the base link frame\n";
+        kernel_source_code += "    #pragma unroll\n";
+        kernel_source_code += "    for (int i = 0; i < " + std::to_string(num_of_self_collision_spheres) + "; i++)\n";
+        kernel_source_code += "    {\n";
+        kernel_source_code += "        float * T = &link_poses[self_collision_spheres_to_link_map[i] * 16];\n";
+        kernel_source_code += "        float sx = self_collision_spheres_pos_in_link[i * 3 + 0];\n";
+        kernel_source_code += "        float sy = self_collision_spheres_pos_in_link[i * 3 + 1];\n";
+        kernel_source_code += "        float sz = self_collision_spheres_pos_in_link[i * 3 + 2];\n";
 
+        kernel_source_code += "        float x = T[0] * sx + T[1] * sy + T[2] * sz + T[3];\n";
+        kernel_source_code += "        float y = T[4] * sx + T[5] * sy + T[6] * sz + T[7];\n";
+        kernel_source_code += "        float z = T[8] * sx + T[9] * sy + T[10] * sz + T[11];\n";
+
+        kernel_source_code += "        self_collision_spheres[i * 3 + 0] = x;\n";
+        kernel_source_code += "        self_collision_spheres[i * 3 + 1] = y;\n";
+        kernel_source_code += "        self_collision_spheres[i * 3 + 2] = z;\n";
+
+        kernel_source_code += "    }\n";
         kernel_source_code += R"(
-        // calculate the self collision spheres positions in the base link frame
 }
         )";
         return kernel_source_code;

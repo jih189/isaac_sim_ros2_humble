@@ -28,9 +28,9 @@ namespace CUDAMPLib
                 const std::vector<Eigen::Isometry3d>& joint_poses,
                 const std::vector<Eigen::Vector3d>& joint_axes,
                 const std::vector<int>& link_parent_link_maps,
-                const std::vector<int>& collision_spheres_to_link_map,
-                const std::vector<std::vector<float>>& collision_spheres_pos_in_link,
-                const std::vector<float>& collision_spheres_radius,
+                const std::vector<int>& self_collision_spheres_to_link_map,
+                const std::vector<std::vector<float>>& self_collision_spheres_pos_in_link,
+                const std::vector<float>& self_collision_spheres_radius,
                 const std::vector<bool>& active_joint_map,
                 const std::vector<float>& lower,
                 const std::vector<float>& upper,
@@ -144,9 +144,9 @@ namespace CUDAMPLib
             std::vector<int> link_parent_link_maps_;
             std::vector<Eigen::Isometry3d> joint_poses_;
             std::vector<Eigen::Vector3d> joint_axes_;
-            std::vector<int> collision_spheres_to_link_map_;
-            std::vector<std::vector<float>> collision_spheres_pos_in_link_;
-            std::vector<float> collision_spheres_radius_;
+            std::vector<int> self_collision_spheres_to_link_map_;
+            std::vector<std::vector<float>> self_collision_spheres_pos_in_link_;
+            std::vector<float> self_collision_spheres_radius_;
             float resolution_;
 
             // variables for gpu memory
@@ -154,7 +154,7 @@ namespace CUDAMPLib
             float * d_joint_poses;
             float * d_joint_axes;
             int * d_link_parent_link_maps;
-            int * d_collision_spheres_to_link_map;
+            int * d_self_collision_spheres_to_link_map;
             float * d_self_collision_spheres_pos_in_link;
             float * d_self_collision_spheres_radius;
             int * d_active_joint_map;

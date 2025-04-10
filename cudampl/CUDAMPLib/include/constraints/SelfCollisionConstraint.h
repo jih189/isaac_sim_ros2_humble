@@ -19,8 +19,8 @@ namespace CUDAMPLib
              */
             SelfCollisionConstraint(
                 const std::string& constraint_name,
-                const std::vector<int>& collision_spheres_map,
-                const std::vector<float>& collision_spheres_radius, 
+                const std::vector<int>& self_collision_spheres_map,
+                const std::vector<float>& self_collision_spheres_radius, 
                 const std::vector<std::vector<bool>>& self_collision_enables_map
             );
             ~SelfCollisionConstraint() override;

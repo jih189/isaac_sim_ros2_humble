@@ -337,14 +337,14 @@ namespace CUDAMPLib
         }
     }
 
-    __global__ void update_collision_spheres_kernel(
+    __global__ void update_self_collision_spheres_kernel(
         const int num_of_states,
         const int num_of_links,
         const int num_of_self_collision_spheres,
-        const int* __restrict__ collision_spheres_map,
-        const float* __restrict__ collision_spheres_pos, // collision sphere position in link frame
+        const int* __restrict__ self_collision_spheres_map,
+        const float* __restrict__ self_collision_spheres_pos, // self collision sphere position in link frame
         const float* __restrict__ link_poses_set,
-        float* __restrict__ collision_spheres_pos_in_baselink
+        float* __restrict__ self_collision_spheres_pos_in_baselink
     ) {
         int idx = threadIdx.x + blockIdx.x * blockDim.x;
         if (idx >= num_of_states * num_of_self_collision_spheres)
@@ -356,15 +356,15 @@ namespace CUDAMPLib
 
         // Load collision sphere position into registers
         int posIndex = sphere_idx * 3;
-        float cs_x = collision_spheres_pos[posIndex];
-        float cs_y = collision_spheres_pos[posIndex + 1];
-        float cs_z = collision_spheres_pos[posIndex + 2];
+        float cs_x = self_collision_spheres_pos[posIndex];
+        float cs_y = self_collision_spheres_pos[posIndex + 1];
+        float cs_z = self_collision_spheres_pos[posIndex + 2];
 
         // Compute output index
         int outIndex = state_idx * num_of_self_collision_spheres * 3 + sphere_idx * 3;
 
         // Get the link index for this sphere and compute the starting index of its transformation matrix
-        int link_idx = collision_spheres_map[sphere_idx];
+        int link_idx = self_collision_spheres_map[sphere_idx];
         int linkPoseIndex = state_idx * num_of_links * 16 + link_idx * 16;
 
         // Load the transformation matrix elements into registers
@@ -387,9 +387,9 @@ namespace CUDAMPLib
         float out_z = m8 * cs_x + m9 * cs_y + m10 * cs_z + m11;
 
         // Write the results to global memory
-        collision_spheres_pos_in_baselink[outIndex]     = out_x;
-        collision_spheres_pos_in_baselink[outIndex + 1] = out_y;
-        collision_spheres_pos_in_baselink[outIndex + 2] = out_z;
+        self_collision_spheres_pos_in_baselink[outIndex]     = out_x;
+        self_collision_spheres_pos_in_baselink[outIndex + 1] = out_y;
+        self_collision_spheres_pos_in_baselink[outIndex + 2] = out_z;
     }
 
     // kernel to calculate the distance between two states
@@ -708,11 +708,11 @@ namespace CUDAMPLib
         int blocksPerGrid = (num_of_states_ * space_info_single_arm_space->num_of_self_collision_spheres + threadsPerBlock - 1) / threadsPerBlock;
 
         // update the self collision spheres position in base link frame
-        update_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+        update_self_collision_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
             num_of_states_,
             space_info_single_arm_space->num_of_links,
             space_info_single_arm_space->num_of_self_collision_spheres,
-            space_info_single_arm_space->d_collision_spheres_to_link_map,
+            space_info_single_arm_space->d_self_collision_spheres_to_link_map,
             space_info_single_arm_space->d_self_collision_spheres_pos_in_link,
             d_link_poses_in_base_link,
             d_self_collision_spheres_pos_in_base_link

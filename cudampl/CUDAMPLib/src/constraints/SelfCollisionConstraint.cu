@@ -6,8 +6,8 @@ namespace CUDAMPLib{
 
     SelfCollisionConstraint::SelfCollisionConstraint(
         const std::string& constraint_name,
-        const std::vector<int>& collision_spheres_map, // link index of each collision sphere
-        const std::vector<float>& collision_spheres_radius, // radius of each collision sphere
+        const std::vector<int>& self_collision_spheres_map, // link index of each collision sphere
+        const std::vector<float>& self_collision_spheres_radius, // radius of each collision sphere
         const std::vector<std::vector<bool>>& self_collision_enables_map
     )
     : BaseConstraint(constraint_name, false) // This constraint is not projectable.
@@ -25,13 +25,13 @@ namespace CUDAMPLib{
         std::vector<float> collision_distance_threshold;
         num_of_self_collision_check_ = 0;
 
-        for (size_t i = 0; i < collision_spheres_map.size(); i++){
-            for (size_t j = i + 1; j < collision_spheres_map.size(); j++){
+        for (size_t i = 0; i < self_collision_spheres_map.size(); i++){
+            for (size_t j = i + 1; j < self_collision_spheres_map.size(); j++){
                 // check if the two spheres are not in the same link and self-collision is enabled between the two links
-                if (collision_spheres_map[i] != collision_spheres_map[j] && self_collision_enables_map[collision_spheres_map[i]][collision_spheres_map[j]]){
+                if (self_collision_spheres_map[i] != self_collision_spheres_map[j] && self_collision_enables_map[self_collision_spheres_map[i]][self_collision_spheres_map[j]]){
                     collision_sphere_indices_1.push_back(i);
                     collision_sphere_indices_2.push_back(j);
-                    collision_distance_threshold.push_back((collision_spheres_radius[i] + collision_spheres_radius[j]) * (collision_spheres_radius[i] + collision_spheres_radius[j])); // squared distance threshold
+                    collision_distance_threshold.push_back((self_collision_spheres_radius[i] + self_collision_spheres_radius[j]) * (self_collision_spheres_radius[i] + self_collision_spheres_radius[j])); // squared distance threshold
                     num_of_self_collision_check_++;
                 }
             }
