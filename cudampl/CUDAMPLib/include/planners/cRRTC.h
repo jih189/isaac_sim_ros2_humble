@@ -32,6 +32,7 @@ namespace CUDAMPLib
             float step_resolution_;
             int max_step_;
             std::string forward_kinematics_kernel_source_code_;
+            std::string robot_collision_model_kernel_source_code_;
 
             // device memory
             float* d_start_tree_configurations_;

@@ -18,6 +18,7 @@ namespace CUDAMPLib
         num_of_threads_per_motion_ = 32;
         dim_ = space->getDim();
         forward_kinematics_kernel_source_code_ = space->generateFKKernelSourceCode();
+        robot_collision_model_kernel_source_code_ = space->generateRobotCollisionModelSourceCode();
 
         step_resolution_ = 0.02f;
         max_step_ = 32;
@@ -193,6 +194,7 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
     kernel_code += "    __shared__ float local_motion_configurations[" + std::to_string(dim_ * max_step_) + "]; \n";
     kernel_code += "    __shared__ int motion_step;\n";
     kernel_code += "    const int tid = threadIdx.x;\n";
+    kernel_code += "    " + robot_collision_model_kernel_source_code_ + "\n";
     kernel_code += "    // run for loop with max_interations_ iterations\n";
     kernel_code += "    for (int i = 0; i < " + std::to_string(max_interations_) + "; i++) {\n";
 
@@ -302,7 +304,8 @@ kernel_code += R"(
     kernel_code += "            int joint_ind_in_state = j % " + std::to_string(dim_) + ";\n";
     kernel_code += "            local_motion_configurations[j] = local_parent_configuration[joint_ind_in_state] + local_delta_motion[joint_ind_in_state] * state_ind_in_motion;\n";
     kernel_code += "        }\n";
-    kernel_code += "        __syncthreads();\n";
+    kernel_code += "        __syncthreads();\n\n";
+
     // kernel_code += "        // print the intermediate configurations for debugging\n";
     // kernel_code += "        if (tid == 0) {\n";
     // kernel_code += "            for (int j = 0; j < motion_step; j++) {\n";
@@ -314,6 +317,12 @@ kernel_code += R"(
     // kernel_code += "                printf(\"\\n\");\n";
     // kernel_code += "             }\n";
     // kernel_code += "        }\n";
+
+    // call the forward kinematics kernel
+    kernel_code += "        // call the forward kinematics kernel\n";
+    kernel_code += "        kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
+    kernel_code += "        __syncthreads();\n\n";
+
     kernel_code += "    }\n";
     
     kernel_code += R"(

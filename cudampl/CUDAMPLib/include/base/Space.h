@@ -50,6 +50,8 @@ namespace CUDAMPLib
              */
             virtual std::string generateFKKernelSourceCode() = 0;
 
+            virtual std::string generateRobotCollisionModelSourceCode() = 0;
+
             /**
                 @brief Given two sets of states, check the feasibility of motions between them.
                 @param states1 The first set of states.

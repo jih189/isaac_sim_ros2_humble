@@ -737,8 +737,7 @@ __device__ __forceinline__ void kin_forward(float * configuration, float * self_
     #pragma unroll
     for (int i = 0; i < 303; i++)
     {
-        int link_id = self_collision_spheres_to_link_map[i];
-        float * T = &link_poses[link_id * 16];
+        float * T = &link_poses[self_collision_spheres_to_link_map[i] * 16];
         float sx = self_collision_spheres_pos_in_link[i * 3 + 0];
         float sy = self_collision_spheres_pos_in_link[i * 3 + 1];
         float sz = self_collision_spheres_pos_in_link[i * 3 + 2];
@@ -769,6 +768,8 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
     __shared__ float local_motion_configurations[224]; 
     __shared__ int motion_step;
     const int tid = threadIdx.x;
+    float self_collision_spheres_pos_in_base[909];
+
     // run for loop with max_interations_ iterations
     for (int i = 0; i < 1; i++) {
 
@@ -880,6 +881,11 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
             local_motion_configurations[j] = local_parent_configuration[joint_ind_in_state] + local_delta_motion[joint_ind_in_state] * state_ind_in_motion;
         }
         __syncthreads();
+
+        // call the forward kinematics kernel
+        kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);
+        __syncthreads();
+
     }
 
 }

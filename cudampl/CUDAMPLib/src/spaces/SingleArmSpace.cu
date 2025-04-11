@@ -1754,6 +1754,13 @@ namespace CUDAMPLib {
         return std::make_shared<SingleArmStateManager>(space_info);
     }
 
+    std::string SingleArmSpace::generateRobotCollisionModelSourceCode()
+    {
+        std::string kernel_source_code;
+        kernel_source_code += "float self_collision_spheres_pos_in_base[" + std::to_string(num_of_self_collision_spheres * 3) + "];\n";
+        return kernel_source_code;
+    }
+
     std::string SingleArmSpace::generateFKKernelSourceCode()
     {
         

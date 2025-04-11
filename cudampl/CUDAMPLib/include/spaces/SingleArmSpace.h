@@ -51,6 +51,8 @@ namespace CUDAMPLib
 
             std::string generateFKKernelSourceCode() override;
 
+            std::string generateRobotCollisionModelSourceCode() override;
+
             bool checkMotions(
                 const BaseStatesPtr & states1, 
                 const BaseStatesPtr & states2, 
