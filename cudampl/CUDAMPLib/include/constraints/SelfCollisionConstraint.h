@@ -26,6 +26,11 @@ namespace CUDAMPLib
             ~SelfCollisionConstraint() override;
 
             void computeCost(BaseStatesPtr states) override;
+
+            std::string generateCheckConstraintCode() override;
+
+            std::string generateLaunchCheckConstraintCode() override;
+
         
         private:
             int *d_self_collision_enables_map;
@@ -34,6 +39,10 @@ namespace CUDAMPLib
             int * d_collision_sphere_indices_1;
             int * d_collision_sphere_indices_2;
             float * d_collision_distance_threshold;
+
+            std::vector<int> collision_sphere_indices_1;
+            std::vector<int> collision_sphere_indices_2;
+            std::vector<float> collision_distance_threshold;
     };
 
     typedef std::shared_ptr<SelfCollisionConstraint> SelfCollisionConstraintPtr;

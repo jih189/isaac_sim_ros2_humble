@@ -218,4 +218,15 @@ namespace CUDAMPLib{
 
         cudaDeviceSynchronize();
     }
+
+    std::string BoundaryConstraint::generateCheckConstraintCode()
+    {
+        return "// Boundary Constraint check function\n";
+    }
+
+    std::string BoundaryConstraint::generateLaunchCheckConstraintCode()
+    {
+        return "// Launch Boundary Constraint check function\n";
+    }
+
 } // namespace CUDAMPLib

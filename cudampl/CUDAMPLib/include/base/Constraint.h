@@ -41,6 +41,10 @@ namespace CUDAMPLib
              */
             std::string getName() const { return constraint_name; }
 
+            virtual std::string generateCheckConstraintCode() = 0;
+
+            virtual std::string generateLaunchCheckConstraintCode() = 0;
+
             /**
                 @brief Get the constraint index in the space info.
                 @param space_info The space info

@@ -597,4 +597,14 @@ namespace CUDAMPLib{
         // }
 
     }
+
+    std::string TaskSpaceConstraint::generateCheckConstraintCode()
+    {
+        return "TaskSpaceConstraint check function\n";
+    }
+
+    std::string TaskSpaceConstraint::generateLaunchCheckConstraintCode()
+    {
+        return "TaskSpaceConstraint launch check function\n";
+    }
 } // namespace CUDAMPLib

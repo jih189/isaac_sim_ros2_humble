@@ -226,4 +226,14 @@ namespace CUDAMPLib {
             d_cost_of_current_constraint
         );
     }
+
+    std::string EnvConstraintCylinder::generateCheckConstraintCode()
+    {
+        return "// EnvConstraintCylinder check function\n";
+    }
+
+    std::string EnvConstraintCylinder::generateLaunchCheckConstraintCode()
+    {
+        return "// Launch EnvConstraintCylinder check function\n";
+    }
 } // namespace CUDAMPLib

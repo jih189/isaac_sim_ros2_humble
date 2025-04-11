@@ -35,6 +35,10 @@ namespace CUDAMPLib
             void computeCost(BaseStatesPtr states) override;
             
             void computeGradientAndError(BaseStatesPtr states) override;
+
+            std::string generateCheckConstraintCode() override;
+
+            std::string generateLaunchCheckConstraintCode() override;
             
         private:
             int task_link_index_;

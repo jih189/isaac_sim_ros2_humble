@@ -19,6 +19,8 @@ namespace CUDAMPLib
         dim_ = space->getDim();
         forward_kinematics_kernel_source_code_ = space->generateFKKernelSourceCode();
         robot_collision_model_kernel_source_code_ = space->generateRobotCollisionModelSourceCode();
+        constraint_functions_kernel_source_code_ = space->generateCheckConstraintCode();
+        launch_check_constraint_kernel_source_code_ = space->generateLaunchCheckConstraintCode();
 
         step_resolution_ = 0.02f;
         max_step_ = 32;
@@ -171,9 +173,14 @@ extern "C" {
     __device__ int goalTreeCounter = 0;
     __device__ int sampledCounter = 0;
 }
+
 )";
 
         kernel_code += forward_kinematics_kernel_source_code_;
+
+        kernel_code += "\n";
+
+        kernel_code += constraint_functions_kernel_source_code_;
 
         kernel_code += R"(
 extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, float * d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations) {
@@ -193,6 +200,7 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
     kernel_code += "    __shared__ float local_nearest_neighbor_distance;\n";
     kernel_code += "    __shared__ float local_motion_configurations[" + std::to_string(dim_ * max_step_) + "]; \n";
     kernel_code += "    __shared__ int motion_step;\n";
+    kernel_code += "    __shared__ bool should_skip;\n";
     kernel_code += "    const int tid = threadIdx.x;\n";
     kernel_code += "    " + robot_collision_model_kernel_source_code_ + "\n";
     kernel_code += "    // run for loop with max_interations_ iterations\n";
@@ -202,6 +210,7 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
         // Need to decide which tree to expand based on their sizes. The smaller tree will be expanded.
         if (tid == 0)
         {
+            should_skip = false;
             // increase the sampledCounter with atomic operation
             localSampledCounter = atomicAdd(&sampledCounter, 1);
             localStartTreeCounter = startTreeCounter;
@@ -223,17 +232,17 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
 
         kernel_code += "        if (localSampledCounter >= " + std::to_string(max_interations_) + ")\n";
         kernel_code += "            return; // meet the max_iteration, then stop the block.\n";
-        kernel_code += "        if(tid == 0) {\n";
-        kernel_code += "            printf(\"localStartTreeCounter: %d\\n\", localStartTreeCounter);\n";
-        kernel_code += "            printf(\"localGoalTreeCounter: %d\\n\", localGoalTreeCounter);\n";
-        kernel_code += "            printf(\"localSampledCounter: %d\\n\", localSampledCounter);\n";
-        kernel_code += "            printf(\"Sampled configuration: \");\n";
-        for (int j = 0; j < dim_; j++)
-        {
-            kernel_code += "            printf(\"%f \", d_sampled_configurations[localSampledCounter * " + std::to_string(dim_) + " + " + std::to_string(j) + "]);\n";
-        }
-        kernel_code += "            printf(\"\\n\");\n";
-        kernel_code += "        }\n";
+        // kernel_code += "        if(tid == 0) {\n";
+        // kernel_code += "            printf(\"localStartTreeCounter: %d\\n\", localStartTreeCounter);\n";
+        // kernel_code += "            printf(\"localGoalTreeCounter: %d\\n\", localGoalTreeCounter);\n";
+        // kernel_code += "            printf(\"localSampledCounter: %d\\n\", localSampledCounter);\n";
+        // kernel_code += "            printf(\"Sampled configuration: \");\n";
+        // for (int j = 0; j < dim_; j++)
+        // {
+        //     kernel_code += "            printf(\"%f \", d_sampled_configurations[localSampledCounter * " + std::to_string(dim_) + " + " + std::to_string(j) + "]);\n";
+        // }
+        // kernel_code += "            printf(\"\\n\");\n";
+        // kernel_code += "        }\n";
 
         kernel_code += "        // Load the sampled configuration into shared memory\n";
         kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
@@ -286,7 +295,7 @@ kernel_code += R"(
 )";
 
         kernel_code += "            motion_step = min((int)(local_nearest_neighbor_distance / " + std::to_string(step_resolution_) + "), " + std::to_string(max_step_) + ");\n";
-        kernel_code += "            printf(\"Nearest neighbor index: %d, Euclidean distance: %f motion step: %d \\n \", local_parent_index, local_nearest_neighbor_distance, motion_step);\n";
+        // kernel_code += "            printf(\"Nearest neighbor index: %d, Euclidean distance: %f motion step: %d \\n \", local_parent_index, local_nearest_neighbor_distance, motion_step);\n";
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n";
         kernel_code += "        // Calculate the delta motion from the nearest configuration to the sampled configuration\n";
@@ -322,6 +331,7 @@ kernel_code += R"(
     kernel_code += "        // call the forward kinematics kernel\n";
     kernel_code += "        kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
     kernel_code += "        __syncthreads();\n\n";
+    kernel_code += launch_check_constraint_kernel_source_code_;
 
     kernel_code += "    }\n";
     

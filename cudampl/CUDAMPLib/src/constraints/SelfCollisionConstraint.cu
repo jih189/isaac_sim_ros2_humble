@@ -20,9 +20,9 @@ namespace CUDAMPLib{
         cudaMemcpy(d_self_collision_enables_map, boolMatrixFlatten(self_collision_enables_map).data(), self_collision_enables_map_bytes, cudaMemcpyHostToDevice);
 
         // determine which pairs of collision spheres should be checked for self-collision.
-        std::vector<int> collision_sphere_indices_1;
-        std::vector<int> collision_sphere_indices_2;
-        std::vector<float> collision_distance_threshold;
+        collision_sphere_indices_1.clear();
+        collision_sphere_indices_2.clear();
+        collision_distance_threshold.clear();
         num_of_self_collision_check_ = 0;
 
         for (size_t i = 0; i < self_collision_spheres_map.size(); i++){
@@ -169,5 +169,45 @@ namespace CUDAMPLib{
 
         // CUDA_CHECK(cudaGetLastError());
         // CUDA_CHECK(cudaDeviceSynchronize());
+    }
+
+    std::string SelfCollisionConstraint::generateCheckConstraintCode()
+    {
+        std::string source_code;
+        source_code += "// SelfCollisionConstraint check function\n";
+        source_code += "__device__ __forceinline__ void checkSelfCollisionConstraint(bool * should_skip, float * self_collision_sphere_pos){\n";
+        source_code += "    float dx = 0.0f;\n";
+        source_code += "    float dy = 0.0f;\n";
+        source_code += "    float dz = 0.0f;\n";
+        source_code += "    float squared_distance = 0.0f;\n";
+        std::cout << "=========== num_of_self_collision_check_: " << num_of_self_collision_check_ << std::endl;
+        for (int i = 0; i < num_of_self_collision_check_; i++)
+        {
+            source_code += "    dx = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + "] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + "];\n";
+            source_code += "    dy = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + " + 1] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + " + 1];\n";
+            source_code += "    dz = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + " + 2] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + " + 2];\n";
+            source_code += "    squared_distance = dx * dx + dy * dy + dz * dz;\n";
+            source_code += "    if (squared_distance < " + std::to_string(collision_distance_threshold[i]) + "){\n";
+            source_code += "        *should_skip = true;\n";
+            source_code += "    }\n";
+            source_code += "    if (*should_skip == true){\n";
+            source_code += "        return;\n";
+            source_code += "    }\n";
+        }
+
+        source_code += "}\n";
+        return source_code;
+    }
+
+    std::string SelfCollisionConstraint::generateLaunchCheckConstraintCode()
+    {
+        std::string source_code;
+        source_code += "        // Launch SelfCollisionConstraint check function\n";
+        // source_code += "        checkSelfCollisionConstraint(&should_skip, self_collision_spheres_pos_in_base);\n";
+        // source_code += "        __syncthreads();\n";
+        // source_code += "        if (should_skip == true){\n";
+        // source_code += "            continue;\n";
+        // source_code += "        }\n";
+        return source_code;
     }
 } // namespace CUDAMPLib

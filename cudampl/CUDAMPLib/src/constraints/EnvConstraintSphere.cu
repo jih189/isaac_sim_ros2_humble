@@ -150,4 +150,14 @@ namespace CUDAMPLib{
             d_cost_of_current_constraint
         );
     }
+
+    std::string EnvConstraintSphere::generateCheckConstraintCode()
+    {
+        return "// EnvConstraintSphere check function\n";
+    }
+
+    std::string EnvConstraintSphere::generateLaunchCheckConstraintCode()
+    {
+        return "// Launch EnvConstraintSphere check function\n";
+    }
 } // namespace CUDAMPLib

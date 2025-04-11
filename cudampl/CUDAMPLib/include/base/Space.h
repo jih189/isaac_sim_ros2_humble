@@ -130,6 +130,22 @@ namespace CUDAMPLib
                 }
             }
 
+            std::string generateCheckConstraintCode() {
+                std::string code = "";
+                for (const auto & constraint : constraints_) {
+                    code += constraint->generateCheckConstraintCode();
+                }
+                return code;
+            }
+
+            std::string generateLaunchCheckConstraintCode() {
+                std::string code = "";
+                for (const auto & constraint : constraints_) {
+                    code += constraint->generateLaunchCheckConstraintCode();
+                }
+                return code;
+            }
+
         protected:
             size_t dim;
             std::vector<BaseConstraintPtr> constraints_;

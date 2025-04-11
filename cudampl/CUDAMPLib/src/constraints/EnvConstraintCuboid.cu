@@ -206,4 +206,14 @@ namespace CUDAMPLib {
         );
     }
 
+    std::string EnvConstraintCuboid::generateCheckConstraintCode()
+    {
+        return "// EnvConstraintCuboid check function\n";
+    }
+
+    std::string EnvConstraintCuboid::generateLaunchCheckConstraintCode()
+    {
+        return "// Launch EnvConstraintCuboid check function\n";
+    }
+
 } // namespace CUDAMPLib

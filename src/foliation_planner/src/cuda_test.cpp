@@ -1536,7 +1536,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         balls_pos,
         ball_radius
     );
-    constraints.push_back(env_constraint_sphere);
+    // constraints.push_back(env_constraint_sphere);
 
     // Create obstacle constraint for cuboid
     CUDAMPLib::EnvConstraintCuboidPtr env_constraint_cuboid = std::make_shared<CUDAMPLib::EnvConstraintCuboid>(
@@ -1546,7 +1546,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         bounding_boxes_max,
         bounding_boxes_min
     );
-    constraints.push_back(env_constraint_cuboid);
+    // constraints.push_back(env_constraint_cuboid);
 
     // Create obstacle constraint for cylinder
     CUDAMPLib::EnvConstraintCylinderPtr env_constraint_cylinder = std::make_shared<CUDAMPLib::EnvConstraintCylinder>(
@@ -1556,7 +1556,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         cylinders_radius,
         cylinders_height
     );
-    constraints.push_back(env_constraint_cylinder);
+    // constraints.push_back(env_constraint_cylinder);
     
     // Create self collision constraint
     CUDAMPLib::SelfCollisionConstraintPtr self_collision_constraint = std::make_shared<CUDAMPLib::SelfCollisionConstraint>(

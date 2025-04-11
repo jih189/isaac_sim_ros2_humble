@@ -30,6 +30,11 @@ namespace CUDAMPLib
             ~EnvConstraintCylinder() override;
 
             void computeCost(BaseStatesPtr states) override;
+
+            std::string generateCheckConstraintCode() override;
+
+            std::string generateLaunchCheckConstraintCode() override;
+
             
         private:
             int num_of_env_collision_cylinders;

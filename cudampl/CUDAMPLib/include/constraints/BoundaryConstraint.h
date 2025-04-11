@@ -33,6 +33,10 @@ namespace CUDAMPLib
 
             void computeGradientAndError(BaseStatesPtr states) override;
 
+            std::string generateCheckConstraintCode() override;
+
+            std::string generateLaunchCheckConstraintCode() override;
+
         private:
             float * d_lower_bound_full_;
             float * d_upper_bound_full_;
