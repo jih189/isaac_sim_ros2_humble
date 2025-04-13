@@ -8,8 +8,11 @@
 #include <iostream>
 #include <string>
 
+
 namespace CUDAMPLib
 {
+    constexpr float UNWRITTEN_VAL = -9999.0f;
+
     // Constructor
     cRRTC::cRRTC(BaseSpacePtr space)
         : BasePlanner(space)
@@ -107,10 +110,10 @@ namespace CUDAMPLib
         std::vector<float> first_goal_configuration = goal_states_vector_[0];
 
         // clear the device memory
-        // cudaMemset(d_start_tree_configurations_, 0, max_interations_ * dim_ * sizeof(float));
+        cudaMemset(d_start_tree_configurations_, UNWRITTEN_VAL, max_interations_ * dim_ * sizeof(float));
         // cudaMemset(d_start_tree_parent_indexs_, 0, max_interations_ * sizeof(int));
         cudaMemset(d_start_tree_parent_indexs_, 0, sizeof(int));
-        // cudaMemset(d_goal_tree_configurations_, 0, max_interations_ * dim_ * sizeof(float));    
+        cudaMemset(d_goal_tree_configurations_, UNWRITTEN_VAL, max_interations_ * dim_ * sizeof(float));
         // cudaMemset(d_goal_tree_parent_indexs_, 0, max_interations_ * sizeof(int));
         cudaMemset(d_goal_tree_parent_indexs_, 0, sizeof(int));
 
@@ -168,6 +171,8 @@ namespace CUDAMPLib
 #define FLT_MAX __int_as_float(0x7f7fffff)    // 3.40282347e+38f
 #endif
 
+constexpr float UNWRITTEN_VAL = -9999.0f;
+
 extern "C" {
     __device__ int startTreeCounter = 0;
     __device__ int goalTreeCounter = 0;
@@ -175,6 +180,13 @@ extern "C" {
 }
 
 )";
+
+        kernel_code += "__device__ __forceinline__ bool check_partially_written(float *node) {\n";
+        kernel_code += "    for (int i = 0; i < " + std::to_string(dim_) + "; i++) {\n";
+        kernel_code += "        if (node[i] == UNWRITTEN_VAL) return true;\n";
+        kernel_code += "    }\n";
+        kernel_code += "    return false;\n";
+        kernel_code += "}\n";
 
         kernel_code += forward_kinematics_kernel_source_code_;
 
@@ -201,6 +213,8 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
     kernel_code += "    __shared__ float local_motion_configurations[" + std::to_string(dim_ * max_step_) + "]; \n";
     kernel_code += "    __shared__ int motion_step;\n";
     kernel_code += "    __shared__ bool should_skip;\n";
+    kernel_code += "    __shared__ int * target_tree_counter;\n";
+    kernel_code += "    __shared__ int new_node_index;\n";
     kernel_code += "    const int tid = threadIdx.x;\n";
     kernel_code += "    " + robot_collision_model_kernel_source_code_ + "\n";
     kernel_code += "    // run for loop with max_interations_ iterations\n";
@@ -220,10 +234,12 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
                 tree_to_expand = d_start_tree_configurations;
                 tree_to_expand_parent_indexs = d_start_tree_parent_indexs;
                 localTargetTreeCounter = localStartTreeCounter;
+                target_tree_counter = &startTreeCounter;
             } else {
                 tree_to_expand = d_goal_tree_configurations;
                 tree_to_expand_parent_indexs = d_goal_tree_parent_indexs;
                 localTargetTreeCounter = localGoalTreeCounter;
+                target_tree_counter = &goalTreeCounter;
             }
         }
 
@@ -256,9 +272,10 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
         float best_dist = FLT_MAX;
         int best_index = -1;
         for (int j = tid; j < localTargetTreeCounter; j += blockDim.x){
-            float dist = 0.0f;
-            float diff = 0.0f;
 )";
+        kernel_code += "            if (check_partially_written(&tree_to_expand[j * " + std::to_string(dim_) + "])) break;\n";
+        kernel_code += "            float dist = 0.0f;\n";
+        kernel_code += "            float diff = 0.0f;\n";
         for (int j = 0; j < dim_; j++)
         {
             kernel_code += "            diff = tree_to_expand[j * " + std::to_string(dim_) + " + " + std::to_string(j) + "] - local_sampled_configuration[" + std::to_string(j) + "];\n";
@@ -332,6 +349,17 @@ kernel_code += R"(
     kernel_code += "        kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
     kernel_code += "        __syncthreads();\n\n";
     kernel_code += launch_check_constraint_kernel_source_code_;
+    kernel_code += "        // add the new configuration to the tree_to_expand as a new node\n";
+    kernel_code += "        if (tid == 0) {\n";
+    kernel_code += "            new_node_index = atomicAdd(target_tree_counter, 1);\n";
+    kernel_code += "            tree_to_expand_parent_indexs[new_node_index] = local_parent_index;\n";
+    kernel_code += "        }\n";
+    kernel_code += "        __syncthreads();\n";
+    kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
+    kernel_code += "            tree_to_expand[new_node_index * " + std::to_string(dim_) + " + tid] = local_sampled_configuration[tid];\n";
+    kernel_code += "        }\n";
+    kernel_code += "        __syncthreads();\n";
+
 
     kernel_code += "    }\n";
     

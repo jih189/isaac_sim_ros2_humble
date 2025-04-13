@@ -175,7 +175,7 @@ namespace CUDAMPLib{
     {
         std::string source_code;
         source_code += "// SelfCollisionConstraint check function\n";
-        source_code += "__device__ __forceinline__ void checkSelfCollisionConstraint(bool * should_skip, float * self_collision_sphere_pos){\n";
+        source_code += "__device__ __forceinline__ bool checkSelfCollisionConstraint(float * self_collision_sphere_pos){\n";
         source_code += "    float dx = 0.0f;\n";
         source_code += "    float dy = 0.0f;\n";
         source_code += "    float dz = 0.0f;\n";
@@ -188,12 +188,10 @@ namespace CUDAMPLib{
             source_code += "    dz = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + " + 2] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + " + 2];\n";
             source_code += "    squared_distance = dx * dx + dy * dy + dz * dz;\n";
             source_code += "    if (squared_distance < " + std::to_string(collision_distance_threshold[i]) + "){\n";
-            source_code += "        *should_skip = true;\n";
-            source_code += "    }\n";
-            source_code += "    if (*should_skip == true){\n";
-            source_code += "        return;\n";
+            source_code += "        return true;\n";
             source_code += "    }\n";
         }
+        source_code += "    return false;\n";
 
         source_code += "}\n";
         return source_code;
@@ -203,11 +201,12 @@ namespace CUDAMPLib{
     {
         std::string source_code;
         source_code += "        // Launch SelfCollisionConstraint check function\n";
-        // source_code += "        checkSelfCollisionConstraint(&should_skip, self_collision_spheres_pos_in_base);\n";
-        // source_code += "        __syncthreads();\n";
-        // source_code += "        if (should_skip == true){\n";
-        // source_code += "            continue;\n";
-        // source_code += "        }\n";
+        source_code += "        should_skip = checkSelfCollisionConstraint( self_collision_spheres_pos_in_base);\n";
+        source_code += "        __syncthreads();\n";
+        source_code += "        if (should_skip == true){\n";
+        source_code += "            continue;\n";
+        source_code += "        }\n";
+        source_code += "        __syncthreads();\n";
         return source_code;
     }
 } // namespace CUDAMPLib
