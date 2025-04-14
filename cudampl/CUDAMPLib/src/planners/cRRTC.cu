@@ -17,7 +17,7 @@ namespace CUDAMPLib
     cRRTC::cRRTC(BaseSpacePtr space)
         : BasePlanner(space)
     {
-        max_interations_ = 1;
+        max_interations_ = 100;
         num_of_threads_per_motion_ = 32;
         dim_ = space->getDim();
         forward_kinematics_kernel_source_code_ = space->generateFKKernelSourceCode();
@@ -151,13 +151,13 @@ namespace CUDAMPLib
         int threads_per_block = num_of_threads_per_motion_;
         int blocks_per_grid = 1;
 
-        // cRRTCKernelPtr_->launchKernel(
-        //     dim3(blocks_per_grid, 1, 1), // grid size
-        //     dim3(threads_per_block, 1, 1), // block size
-        //     0, // shared memory size
-        //     nullptr, // stream
-        //     args // kernel arguments
-        // );
+        cRRTCKernelPtr_->launchKernel(
+            dim3(blocks_per_grid, 1, 1), // grid size
+            dim3(threads_per_block, 1, 1), // block size
+            0, // shared memory size
+            nullptr, // stream
+            args // kernel arguments
+        );
 
         cudaDeviceSynchronize();
     }
@@ -346,21 +346,24 @@ kernel_code += R"(
 
     // call the forward kinematics kernel
     kernel_code += "        // call the forward kinematics kernel\n";
-    kernel_code += "        kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
+    kernel_code += "        if (tid < motion_step) {\n";
+    kernel_code += "            kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
+    kernel_code += "        }\n";
     kernel_code += "        __syncthreads();\n\n";
     kernel_code += launch_check_constraint_kernel_source_code_;
     kernel_code += "        // add the new configuration to the tree_to_expand as a new node\n";
     kernel_code += "        if (tid == 0) {\n";
     kernel_code += "            new_node_index = atomicAdd(target_tree_counter, 1);\n";
     kernel_code += "            tree_to_expand_parent_indexs[new_node_index] = local_parent_index;\n";
+    // kernel_code += "            // print the last configuration of the motion\n";
+    // kernel_code += "            printf(\"Parent node index: %d New node index: %d \\n\", local_parent_index, new_node_index);\n";
+    // kernel_code += "            printf(\"%f %f %f %f %f %f %f \\n\", local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + "], local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + 1], local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + 2], local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + 3], local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + 4], local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + 5], local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + 6]);\n";
     kernel_code += "        }\n";
     kernel_code += "        __syncthreads();\n";
     kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
-    kernel_code += "            tree_to_expand[new_node_index * " + std::to_string(dim_) + " + tid] = local_sampled_configuration[tid];\n";
+    kernel_code += "            tree_to_expand[new_node_index * " + std::to_string(dim_) + " + tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
     kernel_code += "        }\n";
     kernel_code += "        __syncthreads();\n";
-
-
     kernel_code += "    }\n";
     
     kernel_code += R"(

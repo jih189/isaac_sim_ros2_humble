@@ -180,7 +180,6 @@ namespace CUDAMPLib{
         source_code += "    float dy = 0.0f;\n";
         source_code += "    float dz = 0.0f;\n";
         source_code += "    float squared_distance = 0.0f;\n";
-        std::cout << "=========== num_of_self_collision_check_: " << num_of_self_collision_check_ << std::endl;
         for (int i = 0; i < num_of_self_collision_check_; i++)
         {
             source_code += "    dx = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + "] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + "];\n";
