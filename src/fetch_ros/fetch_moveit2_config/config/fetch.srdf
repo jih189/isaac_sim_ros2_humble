@@ -163,6 +163,7 @@
     <disable_collisions link1="shoulder_lift_link" link2="upperarm_roll_link" reason="Adjacent" />
     <disable_collisions link1="shoulder_lift_link" link2="wrist_flex_link" reason="Never" />
     <disable_collisions link1="shoulder_lift_link" link2="wrist_roll_link" reason="Never" />
+    <disable_collisions link1="shoulder_lift_link" link2="torso_lift_link" reason="Never" />
     <disable_collisions link1="shoulder_pan_link" link2="torso_fixed_link" reason="Never" />
     <disable_collisions link1="shoulder_pan_link" link2="torso_lift_link" reason="Adjacent" />
     <disable_collisions link1="shoulder_pan_link" link2="wrist_flex_link" reason="Never" />
