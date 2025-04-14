@@ -1978,7 +1978,7 @@ __device__ __forceinline__ void kin_forward(float * configuration, float * self_
                 kernel_source_code += "        &joint_poses[" + std::to_string(i * 16) + "], \n";
                 kernel_source_code += "        &joint_axes[" + std::to_string(i * 3) + "], \n";
                 kernel_source_code += "        full_joint_values[" + std::to_string(i) + "], \n";
-                kernel_source_code += "        &link_poses[" + std::to_string((i + 1) * 16) + "] \n";
+                kernel_source_code += "        &link_poses[" + std::to_string(i * 16) + "] \n";
                 kernel_source_code += "    );\n";
             }
             else if(joint_types_[i] == 2) // PRISMATIC
@@ -1988,7 +1988,7 @@ __device__ __forceinline__ void kin_forward(float * configuration, float * self_
                 kernel_source_code += "        &joint_poses[" + std::to_string(i * 16) + "], \n";
                 kernel_source_code += "        &joint_axes[" + std::to_string(i * 3) + "], \n";
                 kernel_source_code += "        full_joint_values[" + std::to_string(i) + "], \n";
-                kernel_source_code += "        &link_poses[" + std::to_string((i + 1) * 16) + "] \n";
+                kernel_source_code += "        &link_poses[" + std::to_string(i * 16) + "] \n";
                 kernel_source_code += "    );\n";
             }
             else if(joint_types_[i] == 5) // FIXED
@@ -1996,7 +1996,7 @@ __device__ __forceinline__ void kin_forward(float * configuration, float * self_
                 kernel_source_code += "    // fixed joint\n";
                 kernel_source_code += "    fixed_joint_fn_cuda( &link_poses[" + std::to_string(link_parent_link_maps_[i] * 16) + "], \n";
                 kernel_source_code += "        &joint_poses[" + std::to_string(i * 16) + "], \n";
-                kernel_source_code += "        &link_poses[" + std::to_string((i + 1) * 16) + "] \n";
+                kernel_source_code += "        &link_poses[" + std::to_string(i * 16) + "] \n";
                 kernel_source_code += "    );\n";
             }
             else
