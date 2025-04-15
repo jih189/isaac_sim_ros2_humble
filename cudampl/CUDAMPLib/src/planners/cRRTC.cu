@@ -356,7 +356,7 @@ kernel_code += R"(
     kernel_code += "            kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
     kernel_code += "        }\n";
     kernel_code += "        __syncthreads();\n\n";
-    // kernel_code += launch_check_constraint_kernel_source_code_;
+    kernel_code += launch_check_constraint_kernel_source_code_;
     kernel_code += "        // add the new configuration to the tree_to_expand as a new node\n";
     kernel_code += "        if (tid == 0) {\n";
     kernel_code += "            new_node_index = atomicAdd(target_tree_counter, 1);\n";
@@ -410,8 +410,8 @@ kernel_code += R"(
             local_nearest_neighbor_distance = sqrtf(partial_distance_cost_from_nn[0]);
             local_parent_index = partial_nn_index[0];
 )";
-        kernel_code += "            printf(\"New config: %f %f %f %f %f %f %f \\n\", tree_to_expand[new_node_index * " + std::to_string(dim_) + "], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 1], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 2], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 3], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 4], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 5], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 6]);\n";
-        kernel_code += "            printf(\"From other tree, Nearest neighbor index: %d, Euclidean distance: %f\\n \", local_parent_index, local_nearest_neighbor_distance);\n";
+        // kernel_code += "            printf(\"New config: %f %f %f %f %f %f %f \\n\", tree_to_expand[new_node_index * " + std::to_string(dim_) + "], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 1], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 2], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 3], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 4], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 5], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 6]);\n";
+        // kernel_code += "            printf(\"From other tree, Nearest neighbor index: %d, Euclidean distance: %f\\n \", local_parent_index, local_nearest_neighbor_distance);\n";
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n";
         kernel_code += "        // Calculate the delta motion from the new node to the nearest configuration in the other tree\n";
@@ -443,21 +443,7 @@ kernel_code += R"(
         kernel_code += "                kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
         kernel_code += "            }\n";
         kernel_code += "            __syncthreads();\n";
-        kernel_code += "            // Print the intermediate configurations for debugging\n";
-        kernel_code += "            if (tid == 0) {\n";
-        kernel_code += "                printf(\"ditance to the nearest configuration in the other tree: %f with motion step: %d \\n\", local_nearest_neighbor_distance, motion_step);\n";
-        kernel_code += "                for (int j = 0; j < motion_step; j++) {\n";
-        kernel_code += "                    printf(\"Intermediate configuration %d: \", j);\n";
-        for (int j = 0; j < dim_; j++)
-        {
-            kernel_code += "                    printf(\"%f \", local_motion_configurations[j * " + std::to_string(dim_) + " + " + std::to_string(j) + "]);\n";
-        }
-        kernel_code += "                    printf(\"\\n\");\n";
-        kernel_code += "                }\n";
-        kernel_code += "            }\n";
-        kernel_code += "            __syncthreads();\n";
-        kernel_code += "            // Run Evaluation here.TODO\n";
-        kernel_code += "            __syncthreads();\n";
+        kernel_code += launch_check_constraint_kernel_source_code_;
         kernel_code += "            // add the new configuration to the tree_to_expand as a new node\n";
         kernel_code += "            if (tid == 0) {\n";
         kernel_code += "                new_node_index = atomicAdd(target_tree_counter, 1);\n";
