@@ -17,7 +17,8 @@ namespace CUDAMPLib
     cRRTC::cRRTC(BaseSpacePtr space)
         : BasePlanner(space)
     {
-        max_interations_ = 1;
+        num_of_thread_blocks_ = 1;
+        max_interations_ = 100;
         num_of_threads_per_motion_ = 32;
         dim_ = space->getDim();
         forward_kinematics_kernel_source_code_ = space->generateFKKernelSourceCode();
@@ -37,6 +38,8 @@ namespace CUDAMPLib
 
         cudaMalloc(&d_goal_tree_configurations_,configuration_memory_bytes);
         cudaMalloc(&d_goal_tree_parent_indexs_, parent_indexs_memory_bytes);
+
+        cudaMalloc(&connected_tree_node_pair_, 2 * sizeof(int) * num_of_thread_blocks_);
 
         // Create the source code for motion planning and compile it with nvrtc.
         std::string source_code = generateSourceCode();
@@ -116,26 +119,30 @@ namespace CUDAMPLib
         cudaMemset(d_goal_tree_configurations_, UNWRITTEN_VAL, max_interations_ * dim_ * sizeof(float));
         // cudaMemset(d_goal_tree_parent_indexs_, 0, max_interations_ * sizeof(int));
         cudaMemset(d_goal_tree_parent_indexs_, 0, sizeof(int));
+        cudaMemset(connected_tree_node_pair_, -1, 2 * sizeof(int) * num_of_thread_blocks_);
 
         // pass first start and goal configurations to the device by copying them to the device
         cudaMemcpy(d_start_tree_configurations_, first_start_configuration.data(), (size_t)(dim_ * sizeof(float)), cudaMemcpyHostToDevice);
         cudaMemcpy(d_goal_tree_configurations_, first_goal_configuration.data(), (size_t)(dim_ * sizeof(float)), cudaMemcpyHostToDevice);
 
         // Retrieve global variable pointers from the compiled module.
-        CUdeviceptr d_startTreeCounter, d_goalTreeCounter, d_sampledCounter;
+        CUdeviceptr d_startTreeCounter, d_goalTreeCounter, d_sampledCounter, d_foundSolution;
         size_t varSize;
         cuModuleGetGlobal(&d_startTreeCounter, &varSize, cRRTCKernelPtr_->module, "startTreeCounter");
         cuModuleGetGlobal(&d_goalTreeCounter, &varSize, cRRTCKernelPtr_->module, "goalTreeCounter");
         cuModuleGetGlobal(&d_sampledCounter, &varSize, cRRTCKernelPtr_->module, "sampledCounter");
+        cuModuleGetGlobal(&d_foundSolution, &varSize, cRRTCKernelPtr_->module, "foundSolution");
 
         int h_startTreeCounter = 1;
         int h_goalTreeCounter = 1;
         int h_sampledCounter = 0;
+        int h_foundSolution = 0;
 
         // Copy the initial values to the device
         cuMemcpyHtoD(d_startTreeCounter, &h_startTreeCounter, sizeof(int));
         cuMemcpyHtoD(d_goalTreeCounter, &h_goalTreeCounter, sizeof(int));
         cuMemcpyHtoD(d_sampledCounter, &h_sampledCounter, sizeof(int));
+        cuMemcpyHtoD(d_foundSolution, &h_foundSolution, sizeof(int));
 
         // Launch the kernel function
 
@@ -145,11 +152,12 @@ namespace CUDAMPLib
             &d_goal_tree_configurations_,
             &d_start_tree_parent_indexs_,
             &d_goal_tree_parent_indexs_,
-            &d_sampled_configurations_
+            &d_sampled_configurations_,
+            &connected_tree_node_pair_
         };
 
         int threads_per_block = num_of_threads_per_motion_;
-        int blocks_per_grid = 1;
+        int blocks_per_grid = num_of_thread_blocks_;
 
         cRRTCKernelPtr_->launchKernel(
             dim3(blocks_per_grid, 1, 1), // grid size
@@ -160,6 +168,55 @@ namespace CUDAMPLib
         );
 
         cudaDeviceSynchronize();
+
+        // print the connected tree node pair
+        std::vector<int> connected_tree_node_pair(num_of_thread_blocks_ * 2);
+        cudaMemcpy(connected_tree_node_pair.data(), connected_tree_node_pair_, num_of_thread_blocks_ * 2 * sizeof(int), cudaMemcpyDeviceToHost);
+        int check1 = 0;
+        int check2 = 0;
+        for (int i = 0; i < num_of_thread_blocks_; i++)
+        {
+            if (connected_tree_node_pair[i * 2] != -1  && connected_tree_node_pair[i * 2 + 1] != -1)
+            {
+                std::cout << "Connected tree node pair: " << connected_tree_node_pair[i * 2] << " " << connected_tree_node_pair[i * 2 + 1] << std::endl;
+                check1 = connected_tree_node_pair[i * 2];
+                check2 = connected_tree_node_pair[i * 2 + 1];
+                break;
+            }
+        }
+
+        // print d_start_tree_configurations_ with first check1 configurations
+        std::vector<float> start_tree_configurations(max_interations_ * dim_);
+        std::vector<int> start_tree_parent_indexs(max_interations_);
+        cudaMemcpy(start_tree_configurations.data(), d_start_tree_configurations_, max_interations_ * dim_ * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(start_tree_parent_indexs.data(), d_start_tree_parent_indexs_, max_interations_ * sizeof(int), cudaMemcpyDeviceToHost);
+        std::cout << "Start tree configurations: " << std::endl;
+        for (int i = 0; i < check1; i++)
+        {
+            for (int j = 0; j < dim_; j++)
+            {
+                std::cout << start_tree_configurations[i * dim_ + j] << " ";
+            }
+            std::cout << " Parent index: " << start_tree_parent_indexs[i] << std::endl;
+            std::cout << std::endl;
+        }
+
+        // print d_goal_tree_configurations_ with first check2 configurations
+        std::vector<float> goal_tree_configurations(max_interations_ * dim_);
+        std::vector<int> goal_tree_parent_indexs(max_interations_);
+        cudaMemcpy(goal_tree_configurations.data(), d_goal_tree_configurations_, max_interations_ * dim_ * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(goal_tree_parent_indexs.data(), d_goal_tree_parent_indexs_, max_interations_ * sizeof(int), cudaMemcpyDeviceToHost);
+        std::cout << "Goal tree configurations: " << std::endl;
+        for (int i = 0; i < check2; i++)
+        {
+            for (int j = 0; j < dim_; j++)
+            {
+                std::cout << goal_tree_configurations[i * dim_ + j] << " ";
+            }
+            std::cout << " Parent index: " << goal_tree_parent_indexs[i] << std::endl;
+            std::cout << std::endl;
+        }
+
     }
 
     std::string cRRTC::generateSourceCode()
@@ -177,6 +234,7 @@ extern "C" {
     __device__ int startTreeCounter = 0;
     __device__ int goalTreeCounter = 0;
     __device__ int sampledCounter = 0;
+    __device__ int foundSolution = 0;
 }
 
 )";
@@ -195,7 +253,7 @@ extern "C" {
         kernel_code += constraint_functions_kernel_source_code_;
 
         kernel_code += R"(
-extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, float * d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations) {
+extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, float * d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations, int * connected_tree_node_pair) {
 )";
     kernel_code += "    __shared__ float * tree_to_expand;\n";
     kernel_code += "    __shared__ int * tree_to_expand_parent_indexs;\n";
@@ -217,6 +275,9 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
     kernel_code += "    __shared__ bool should_skip;\n";
     kernel_code += "    __shared__ int * target_tree_counter;\n";
     kernel_code += "    __shared__ int new_node_index;\n";
+    kernel_code += "    __shared__ int connected_node_in_target_tree;\n";
+    kernel_code += "    __shared__ int connected_node_in_other_tree;\n";
+    kernel_code += "    __shared__ int connected_index_in_other_tree;\n";
     kernel_code += "    const int tid = threadIdx.x;\n";
     kernel_code += "    " + robot_collision_model_kernel_source_code_ + "\n";
     kernel_code += "    // run for loop with max_interations_ iterations\n";
@@ -239,6 +300,8 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
                 target_tree_counter = &startTreeCounter;
                 other_tree = d_goal_tree_configurations;
                 other_tree_counter = localGoalTreeCounter;
+                connected_node_in_target_tree = blockIdx.x * 2;
+                connected_node_in_other_tree = blockIdx.x * 2 + 1;
             } else {
                 tree_to_expand = d_goal_tree_configurations;
                 tree_to_expand_parent_indexs = d_goal_tree_parent_indexs;
@@ -246,6 +309,8 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
                 target_tree_counter = &goalTreeCounter;
                 other_tree = d_start_tree_configurations;
                 other_tree_counter = localStartTreeCounter;
+                connected_node_in_target_tree = blockIdx.x * 2 + 1;
+                connected_node_in_other_tree = blockIdx.x * 2;
             }
         }
 
@@ -409,6 +474,7 @@ kernel_code += R"(
         if (tid == 0) {
             local_nearest_neighbor_distance = sqrtf(partial_distance_cost_from_nn[0]);
             local_parent_index = partial_nn_index[0];
+            connected_index_in_other_tree = local_parent_index;
 )";
         // kernel_code += "            printf(\"New config: %f %f %f %f %f %f %f \\n\", tree_to_expand[new_node_index * " + std::to_string(dim_) + "], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 1], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 2], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 3], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 4], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 5], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 6]);\n";
         // kernel_code += "            printf(\"From other tree, Nearest neighbor index: %d, Euclidean distance: %f\\n \", local_parent_index, local_nearest_neighbor_distance);\n";
@@ -457,7 +523,11 @@ kernel_code += R"(
         kernel_code += "                local_nearest_neighbor_distance = sqrtf(squared_distance);\n";
         kernel_code += "                // The new node is close enough to the other tree, then stop the loop\n";
         kernel_code += "                if (local_nearest_neighbor_distance < " + std::to_string(step_resolution_ * 2) + ") {\n";
+        kernel_code += "                    // Connection between two trees is found\n";
         kernel_code += "                    should_skip = true;\n";
+        kernel_code += "                    connected_tree_node_pair[connected_node_in_target_tree] = new_node_index;\n";
+        kernel_code += "                    connected_tree_node_pair[connected_node_in_other_tree] = connected_index_in_other_tree;\n";
+        kernel_code += "                    foundSolution = 1;\n";
         kernel_code += "                }\n";
         kernel_code += "            }\n";
         kernel_code += "            __syncthreads();\n";
@@ -466,6 +536,11 @@ kernel_code += R"(
         kernel_code += "                local_sampled_configuration[tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
         kernel_code += "            }\n";
         kernel_code += "            __syncthreads();\n";
+        kernel_code += "        }\n";
+        kernel_code += "        // check if the connection is found\n";
+        kernel_code += "        if (foundSolution != 0) {\n";
+        kernel_code += "            // if the connection is found, then break the loop\n";
+        kernel_code += "            return;\n";
         kernel_code += "        }\n";
         kernel_code += "    }\n";
         

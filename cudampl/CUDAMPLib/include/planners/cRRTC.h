@@ -29,6 +29,7 @@ namespace CUDAMPLib
             int max_interations_;
             int dim_;
             int num_of_threads_per_motion_;
+            int num_of_thread_blocks_;
             float step_resolution_;
             int max_step_;
             std::string forward_kinematics_kernel_source_code_;
@@ -41,6 +42,7 @@ namespace CUDAMPLib
             int* d_start_tree_parent_indexs_;
             float* d_goal_tree_configurations_;
             int* d_goal_tree_parent_indexs_;
+            int * connected_tree_node_pair_;
 
             float * d_sampled_configurations_;
 
