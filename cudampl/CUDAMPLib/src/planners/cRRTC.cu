@@ -217,8 +217,6 @@ extern "C" __global__ void cRRTCKernel(float * d_start_tree_configurations, floa
     kernel_code += "    __shared__ bool should_skip;\n";
     kernel_code += "    __shared__ int * target_tree_counter;\n";
     kernel_code += "    __shared__ int new_node_index;\n";
-    kernel_code += "    __shared__ int n_extension;\n";
-    kernel_code += "    __shared__ int n_step_of_last_motion_portion;\n";
     kernel_code += "    const int tid = threadIdx.x;\n";
     kernel_code += "    " + robot_collision_model_kernel_source_code_ + "\n";
     kernel_code += "    // run for loop with max_interations_ iterations\n";
@@ -358,7 +356,7 @@ kernel_code += R"(
     kernel_code += "            kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
     kernel_code += "        }\n";
     kernel_code += "        __syncthreads();\n\n";
-    kernel_code += launch_check_constraint_kernel_source_code_;
+    // kernel_code += launch_check_constraint_kernel_source_code_;
     kernel_code += "        // add the new configuration to the tree_to_expand as a new node\n";
     kernel_code += "        if (tid == 0) {\n";
     kernel_code += "            new_node_index = atomicAdd(target_tree_counter, 1);\n";
@@ -412,54 +410,80 @@ kernel_code += R"(
             local_nearest_neighbor_distance = sqrtf(partial_distance_cost_from_nn[0]);
             local_parent_index = partial_nn_index[0];
 )";
-        kernel_code += "            n_extension = floor(local_nearest_neighbor_distance / (" + std::to_string(step_resolution_) + " * motion_step));\n";
         kernel_code += "            printf(\"New config: %f %f %f %f %f %f %f \\n\", tree_to_expand[new_node_index * " + std::to_string(dim_) + "], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 1], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 2], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 3], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 4], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 5], tree_to_expand[new_node_index * " + std::to_string(dim_) + " + 6]);\n";
-        kernel_code += R"(
-            printf("From other tree, Nearest neighbor index: %d, Euclidean distance: %f, n_extension: %d, n step of last: %d \n ", local_parent_index, local_nearest_neighbor_distance, n_extension, n_step_of_last_motion_portion);
+        kernel_code += "            printf(\"From other tree, Nearest neighbor index: %d, Euclidean distance: %f\\n \", local_parent_index, local_nearest_neighbor_distance);\n";
+        kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n";
+        kernel_code += "        // Calculate the delta motion from the new node to the nearest configuration in the other tree\n";
+        kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
+        kernel_code += "            local_sampled_configuration[tid] = tree_to_expand[new_node_index * " + std::to_string(dim_) + " + tid]; // local sampled config is the current explored state\n";
+        kernel_code += "            local_parent_configuration[tid] = other_tree[local_parent_index * " + std::to_string(dim_) + " + tid]; // local parent config is the nearest node in oppo tree\n";
+        kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n";
+        kernel_code += "        while(!should_skip) {\n";
+        kernel_code += "            if (tid == 0) {\n";
+        kernel_code += "                motion_step = min((int)(local_nearest_neighbor_distance / " + std::to_string(step_resolution_) + "), " + std::to_string(max_step_) + ");\n";
+        kernel_code += "                local_parent_index = new_node_index; // Set the previous node as the parent of the new node \n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n";
+        kernel_code += "            // Calculate the delta motion from the current node to the nearest configuration in the other tree\n";
+        kernel_code += "            if (tid < " + std::to_string(dim_) + ") {\n";
+        kernel_code += "                local_delta_motion[tid] = (local_parent_configuration[tid] - local_sampled_configuration[tid]) / local_nearest_neighbor_distance * " + std::to_string(step_resolution_) + ";\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n";
+        kernel_code += "            // Calculate the intermediate configurations\n";
+        kernel_code += "            for (int j = tid; j < " + std::to_string(dim_) + " * motion_step; j += blockDim.x) {\n";
+        kernel_code += "                int state_ind_in_motion = j / " + std::to_string(dim_) + ";\n";
+        kernel_code += "                int joint_ind_in_state = j % " + std::to_string(dim_) + ";\n";
+        kernel_code += "                local_motion_configurations[j] = local_sampled_configuration[joint_ind_in_state] + local_delta_motion[joint_ind_in_state] * state_ind_in_motion;\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n";
+        kernel_code += "            // call the forward kinematics kernel\n";
+        kernel_code += "            if (tid < motion_step) {\n";
+        kernel_code += "                kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n";
+        kernel_code += "            // Print the intermediate configurations for debugging\n";
+        kernel_code += "            if (tid == 0) {\n";
+        kernel_code += "                printf(\"ditance to the nearest configuration in the other tree: %f with motion step: %d \\n\", local_nearest_neighbor_distance, motion_step);\n";
+        kernel_code += "                for (int j = 0; j < motion_step; j++) {\n";
+        kernel_code += "                    printf(\"Intermediate configuration %d: \", j);\n";
+        for (int j = 0; j < dim_; j++)
+        {
+            kernel_code += "                    printf(\"%f \", local_motion_configurations[j * " + std::to_string(dim_) + " + " + std::to_string(j) + "]);\n";
         }
-        __syncthreads();
-)";
-    kernel_code += "        // Calculate the delta motion from the new node to the nearest configuration in the other tree\n";
-    kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
-    kernel_code += "            local_parent_configuration[tid] = other_tree[local_parent_index * " + std::to_string(dim_) + " + tid];\n";
-    kernel_code += "            local_delta_motion[tid] = (local_parent_configuration[tid] - tree_to_expand[new_node_index * " + std::to_string(dim_) + " + tid]) / local_nearest_neighbor_distance * " + std::to_string(step_resolution_) + ";\n";
-    kernel_code += "        }\n";
-    kernel_code += "        __syncthreads();\n";
-    kernel_code += "        // Try to extend the new node to the nearest configuration in the other tree\n";
-    kernel_code += "        int i_extensions = 0;\n";
-    kernel_code += "        int current_parent_index_in_target_tree = new_node_index;\n";
-    kernel_code += "        while (i_extensions < n_extension) {\n";
-    kernel_code += "            // calculate the intermediate configuration\n";
-    kernel_code += "            for (int j = 0; j < " + std::to_string(dim_) + "; j++) {\n";
-    kernel_code += "                local_motion_configurations[tid * " + std::to_string(dim_) + " + j] = tree_to_expand[new_node_index * " + std::to_string(dim_) + " + j] + local_delta_motion[j] * (i_extensions * " + std::to_string(max_step_) + " + tid);\n";
-    kernel_code += "            }\n";
-    kernel_code += "            __syncthreads();\n";
-    kernel_code += "            // print local motion configuration for defbugging\n";
-    kernel_code += "            if (tid == 0) {\n";
-    kernel_code += "                printf(\"Intermediate configuration %d: \\n\", i_extensions);\n";
-    kernel_code += "                for (int k = 0; k < motion_step; k++) {\n";
-    kernel_code += "                    printf(\"%f %f %f %f %f %f %f \\n\", local_motion_configurations[k * " + std::to_string(dim_) + 
-                                            " + 0], local_motion_configurations[k * " + std::to_string(dim_) + 
-                                            " + 1], local_motion_configurations[k * " + std::to_string(dim_) + 
-                                            " + 2], local_motion_configurations[k * " + std::to_string(dim_) + 
-                                            " + 3], local_motion_configurations[k * " + std::to_string(dim_) + 
-                                            " + 4], local_motion_configurations[k * " + std::to_string(dim_) + 
-                                            " + 5], local_motion_configurations[k * " + std::to_string(dim_) + 
-                                            " + 6]); \n";
-    kernel_code += "                }\n";
-    kernel_code += "            }\n";
-    // kernel_code += "            __syncthreads();\n";
-    // kernel_code += "            // call the forward kinematics kernel\n";
-    // kernel_code += "            kin_forward(&(local_motion_configurations[tid * " + std::to_string(dim_) + "]), self_collision_spheres_pos_in_base);\n";
-
-    kernel_code += "            __syncthreads();\n";
-    kernel_code += "            i_extensions++;\n";
-    kernel_code += "            __syncthreads();\n";
-    kernel_code += "        }\n";
-    kernel_code += "        // the last portion of the motion may not be large than max_step_\n";
-    kernel_code += "    }\n";
-    
-    kernel_code += R"(
+        kernel_code += "                    printf(\"\\n\");\n";
+        kernel_code += "                }\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n";
+        kernel_code += "            // Run Evaluation here.TODO\n";
+        kernel_code += "            __syncthreads();\n";
+        kernel_code += "            // add the new configuration to the tree_to_expand as a new node\n";
+        kernel_code += "            if (tid == 0) {\n";
+        kernel_code += "                new_node_index = atomicAdd(target_tree_counter, 1);\n";
+        kernel_code += "                tree_to_expand_parent_indexs[new_node_index] = local_parent_index;\n";
+        kernel_code += "                // Calculate the distance from the new node to the nearest configuration in the other tree\n";
+        kernel_code += "                float squared_distance = 0.0f;\n";
+        kernel_code += "                for (int j = 0; j < " + std::to_string(dim_) + "; j++) {\n";
+        kernel_code += "                    float diff = local_parent_configuration[j] - local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + j];\n";
+        kernel_code += "                    squared_distance += diff * diff;\n";
+        kernel_code += "                }\n";
+        kernel_code += "                local_nearest_neighbor_distance = sqrtf(squared_distance);\n";
+        kernel_code += "                // The new node is close enough to the other tree, then stop the loop\n";
+        kernel_code += "                if (local_nearest_neighbor_distance < " + std::to_string(step_resolution_ * 2) + ") {\n";
+        kernel_code += "                    should_skip = true;\n";
+        kernel_code += "                }\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n";
+        kernel_code += "            if (tid < " + std::to_string(dim_) + ") {\n";
+        kernel_code += "                tree_to_expand[new_node_index * " + std::to_string(dim_) + " + tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "                local_sampled_configuration[tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n";
+        kernel_code += "        }\n";
+        kernel_code += "    }\n";
+        
+        kernel_code += R"(
 })";
         return kernel_code;
     }
