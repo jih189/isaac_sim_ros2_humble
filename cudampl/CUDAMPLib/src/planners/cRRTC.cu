@@ -173,19 +173,42 @@ namespace CUDAMPLib
             final_path.insert(final_path.end(), goal_path.begin() + 1, goal_path.end());
         }
 
-        return final_path;
-        
+        // print start path
+        std::cout << "Start path from start to connection node:" << std::endl;
+        for (size_t i = 0; i < start_path.size(); i++)
+        {
+            std::cout << "Node " << i << ": ";
+            for (int j = 0; j < dim; j++)
+            {
+                std::cout << start_path[i][j] << " ";
+            }
+            std::cout << std::endl;
+        }
+        // print goal path
+        std::cout << "Goal path from connection node to goal:" << std::endl;
+        for (size_t i = 0; i < goal_path.size(); i++)
+        {
+            std::cout << "Node " << i << ": ";
+            for (int j = 0; j < dim; j++)
+            {
+                std::cout << goal_path[i][j] << " ";
+            }
+            std::cout << std::endl;
+        }
+
         // (Optional) Print the final path for verification.
-        // std::cout << "Final path from start to goal:" << std::endl;
-        // for (size_t i = 0; i < final_path.size(); i++)
-        // {
-        //     std::cout << "Node " << i << ": ";
-        //     for (int j = 0; j < dim; j++)
-        //     {
-        //         std::cout << final_path[i][j] << " ";
-        //     }
-        //     std::cout << std::endl;
-        // }
+        std::cout << "Final path from start to goal:" << std::endl;
+        for (size_t i = 0; i < final_path.size(); i++)
+        {
+            std::cout << "Node " << i << ": ";
+            for (int j = 0; j < dim; j++)
+            {
+                std::cout << final_path[i][j] << " ";
+            }
+            std::cout << std::endl;
+        }
+
+        return final_path;
     }
 
     void cRRTC::solve(BaseTerminationPtr termination_condition)
@@ -275,6 +298,7 @@ namespace CUDAMPLib
             std::vector<float> start_tree_configurations(current_start_tree_num * dim_);
             std::vector<int> start_tree_parent_indexs(current_start_tree_num);
             cudaMemcpy(start_tree_configurations.data(), d_start_tree_configurations_, current_start_tree_num * dim_ * sizeof(float), cudaMemcpyDeviceToHost);
+            cudaMemcpy(start_tree_parent_indexs.data(), d_start_tree_parent_indexs_, current_start_tree_num * sizeof(int), cudaMemcpyDeviceToHost);
 
             // print d_goal_tree_configurations_ with first current_goal_tree_num configurations
             std::vector<float> goal_tree_configurations(current_goal_tree_num * dim_);
