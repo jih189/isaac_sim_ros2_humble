@@ -80,6 +80,12 @@ namespace CUDAMPLib
         solution_vector = single_arm_space->getJointVectorInActiveJointsFromStates(solution);
     }
 
+    void SingleArmTask::setSolution(const std::vector<std::vector<float>>& solution)
+    {
+        has_solution = true;
+        solution_vector = solution;
+    }
+
     std::vector<std::vector<float>> SingleArmTask::getSolution()
     {
         return solution_vector;

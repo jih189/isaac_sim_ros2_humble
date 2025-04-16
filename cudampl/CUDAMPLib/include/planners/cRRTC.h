@@ -21,7 +21,7 @@ namespace CUDAMPLib
         private:
 
             std::vector<std::vector<float>> backtraceTree(const std::vector<float>& tree_configurations, const std::vector<int>& tree_parent_indexs, int dim, int start_index);
-            void constructFinalPath(int dim,
+            std::vector<std::vector<float>> constructFinalPath(int dim,
                 const std::vector<float>& start_tree_configurations,
                 const std::vector<int>& start_tree_parent_indexs,
                 const std::vector<float>& goal_tree_configurations,

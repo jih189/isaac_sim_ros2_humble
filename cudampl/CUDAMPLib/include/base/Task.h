@@ -42,6 +42,11 @@ namespace CUDAMPLib
             virtual void setSolution(const BaseStatesPtr& solution, const BaseSpacePtr space) = 0;
 
             /**
+                @brief Set the solution with a vector.
+             */
+            virtual void setSolution(const std::vector<std::vector<float>>& solution) = 0;
+
+            /**
                 @brief Check if the task has a solution.
              */
             bool hasSolution() const { return has_solution; }

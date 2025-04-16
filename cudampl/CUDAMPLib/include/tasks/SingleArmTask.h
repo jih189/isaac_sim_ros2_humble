@@ -15,6 +15,7 @@ namespace CUDAMPLib
             BaseStatesPtr getStartStates(BaseSpacePtr space) override;
             BaseStatesPtr getGoalStates(BaseSpacePtr space) override;
             void setSolution(const BaseStatesPtr& solution, BaseSpacePtr space) override;
+            void setSolution(const std::vector<std::vector<float>>& solution) override;
             std::vector<std::vector<float>> getSolution();
         private:
             std::vector<std::vector<float>> start_states_vector;

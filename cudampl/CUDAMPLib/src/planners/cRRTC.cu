@@ -112,7 +112,6 @@ namespace CUDAMPLib
                                                int dim,
                                                int start_index)
     {
-        std::cout << "start_index: " << start_index << std::endl;
         std::vector<std::vector<float>> path;
         int index = start_index;
         // Backtrace until we reach the root (assumed to be index 0).
@@ -138,7 +137,7 @@ namespace CUDAMPLib
         return path;
     }
 
-    void cRRTC::constructFinalPath(int dim,
+    std::vector<std::vector<float>> cRRTC::constructFinalPath(int dim,
                             const std::vector<float>& start_tree_configurations,
                             const std::vector<int>& start_tree_parent_indexs,
                             const std::vector<float>& goal_tree_configurations,
@@ -173,18 +172,20 @@ namespace CUDAMPLib
         {
             final_path.insert(final_path.end(), goal_path.begin() + 1, goal_path.end());
         }
+
+        return final_path;
         
         // (Optional) Print the final path for verification.
-        std::cout << "Final path from start to goal:" << std::endl;
-        for (size_t i = 0; i < final_path.size(); i++)
-        {
-            std::cout << "Node " << i << ": ";
-            for (int j = 0; j < dim; j++)
-            {
-                std::cout << final_path[i][j] << " ";
-            }
-            std::cout << std::endl;
-        }
+        // std::cout << "Final path from start to goal:" << std::endl;
+        // for (size_t i = 0; i < final_path.size(); i++)
+        // {
+        //     std::cout << "Node " << i << ": ";
+        //     for (int j = 0; j < dim; j++)
+        //     {
+        //         std::cout << final_path[i][j] << " ";
+        //     }
+        //     std::cout << std::endl;
+        // }
     }
 
     void cRRTC::solve(BaseTerminationPtr termination_condition)
@@ -259,7 +260,6 @@ namespace CUDAMPLib
         {
             if (connected_tree_node_pair[i * 2] != -1  && connected_tree_node_pair[i * 2 + 1] != -1)
             {
-                std::cout << "Connected tree node pair: " << connected_tree_node_pair[i * 2] << " " << connected_tree_node_pair[i * 2 + 1] << std::endl;
                 current_start_tree_num = connected_tree_node_pair[i * 2];
                 current_goal_tree_num = connected_tree_node_pair[i * 2 + 1];
                 found = true;
@@ -283,8 +283,10 @@ namespace CUDAMPLib
             cudaMemcpy(goal_tree_parent_indexs.data(), d_goal_tree_parent_indexs_, current_goal_tree_num * sizeof(int), cudaMemcpyDeviceToHost);
 
             // Get the final path
-            std::cout << "Final path: " << std::endl;
-            constructFinalPath(dim_, start_tree_configurations, start_tree_parent_indexs, goal_tree_configurations, goal_tree_parent_indexs, current_start_tree_num - 1, current_goal_tree_num - 1);
+            // std::cout << "Final path: " << std::endl;
+            std::vector<std::vector<float>> final_path = constructFinalPath(dim_, start_tree_configurations, start_tree_parent_indexs, goal_tree_configurations, goal_tree_parent_indexs, current_start_tree_num - 1, current_goal_tree_num - 1);
+            // set the final path to the task
+            task_->setSolution(final_path);
         }
     }
 
