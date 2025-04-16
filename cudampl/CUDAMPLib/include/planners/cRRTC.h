@@ -20,6 +20,15 @@ namespace CUDAMPLib
             void solve(BaseTerminationPtr termination_condition) override;
         private:
 
+            std::vector<std::vector<float>> backtraceTree(const std::vector<float>& tree_configurations, const std::vector<int>& tree_parent_indexs, int dim, int start_index);
+            void constructFinalPath(int dim,
+                const std::vector<float>& start_tree_configurations,
+                const std::vector<int>& start_tree_parent_indexs,
+                const std::vector<float>& goal_tree_configurations,
+                const std::vector<int>& goal_tree_parent_indexs,
+                int connection_index_start, // index in the start tree where connection occurred
+                int connection_index_goal);  // index in the goal tree where connection occurred
+
             std::vector<std::vector<float>> start_states_vector_;
             std::vector<std::vector<float>> goal_states_vector_;
 

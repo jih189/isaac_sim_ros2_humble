@@ -107,6 +107,86 @@ namespace CUDAMPLib
         goal_states_vector_ = task->getGoalStatesVector();
     }
 
+    std::vector<std::vector<float>> cRRTC::backtraceTree(const std::vector<float>& tree_configurations,
+                                               const std::vector<int>& tree_parent_indexs,
+                                               int dim,
+                                               int start_index)
+    {
+        std::cout << "start_index: " << start_index << std::endl;
+        std::vector<std::vector<float>> path;
+        int index = start_index;
+        // Backtrace until we reach the root (assumed to be index 0).
+        while (true)
+        {
+            // Extract the configuration for the current node.
+            std::vector<float> config(dim);
+            for (int j = 0; j < dim; j++)
+            {
+                // Each node's configuration is stored consecutively.
+                config[j] = tree_configurations[index * dim + j];
+            }
+            path.push_back(config);
+            
+            // If we've reached the root node, we finish.
+            if (index == 0)
+                break;
+            
+            // Move to the parent of the current node.
+            index = tree_parent_indexs[index];
+        }
+        
+        return path;
+    }
+
+    void cRRTC::constructFinalPath(int dim,
+                            const std::vector<float>& start_tree_configurations,
+                            const std::vector<int>& start_tree_parent_indexs,
+                            const std::vector<float>& goal_tree_configurations,
+                            const std::vector<int>& goal_tree_parent_indexs,
+                            int connection_index_start, // index in the start tree where connection occurred
+                            int connection_index_goal)  // index in the goal tree where connection occurred
+    {
+        // Backtrace the start tree from the connection node back to the start configuration.
+        // This yields a sequence from the connection node up to the start.
+        std::vector<std::vector<float>> start_path = backtraceTree(start_tree_configurations,
+                                                                    start_tree_parent_indexs,
+                                                                    dim,
+                                                                    connection_index_start);
+        // The backtracing from the start tree gives the path in reverse order (from the connection node to the start).
+        // Reverse it to obtain a proper order: from the start configuration to the connection node.
+        std::reverse(start_path.begin(), start_path.end());
+        
+        // Backtrace the goal tree from the connection node back to the goal configuration.
+        // Here the tree was grown from the goal, so index 0 should correspond to the goal.
+        std::vector<std::vector<float>> goal_path = backtraceTree(goal_tree_configurations,
+                                                                goal_tree_parent_indexs,
+                                                                dim,
+                                                                connection_index_goal);
+        // The goal tree path is from the connection node to the goal state.
+        // Depending on how you wish to join the two paths, you may not need to reverse the goal_path.
+        // In this example, we assume that goal_path is already in the order from the connection node to the goal.
+        
+        // Combine the two paths.
+        // Since the connection node is included in both paths, remove the duplicate by skipping the first element of the goal path.
+        std::vector<std::vector<float>> final_path = start_path;
+        if (!goal_path.empty())
+        {
+            final_path.insert(final_path.end(), goal_path.begin() + 1, goal_path.end());
+        }
+        
+        // (Optional) Print the final path for verification.
+        std::cout << "Final path from start to goal:" << std::endl;
+        for (size_t i = 0; i < final_path.size(); i++)
+        {
+            std::cout << "Node " << i << ": ";
+            for (int j = 0; j < dim; j++)
+            {
+                std::cout << final_path[i][j] << " ";
+            }
+            std::cout << std::endl;
+        }
+    }
+
     void cRRTC::solve(BaseTerminationPtr termination_condition)
     {
         std::vector<float> first_start_configuration = start_states_vector_[0];
@@ -172,51 +252,40 @@ namespace CUDAMPLib
         // print the connected tree node pair
         std::vector<int> connected_tree_node_pair(num_of_thread_blocks_ * 2);
         cudaMemcpy(connected_tree_node_pair.data(), connected_tree_node_pair_, num_of_thread_blocks_ * 2 * sizeof(int), cudaMemcpyDeviceToHost);
-        int check1 = 0;
-        int check2 = 0;
+        int current_start_tree_num = 0;
+        int current_goal_tree_num = 0;
+        bool found = false;
         for (int i = 0; i < num_of_thread_blocks_; i++)
         {
             if (connected_tree_node_pair[i * 2] != -1  && connected_tree_node_pair[i * 2 + 1] != -1)
             {
                 std::cout << "Connected tree node pair: " << connected_tree_node_pair[i * 2] << " " << connected_tree_node_pair[i * 2 + 1] << std::endl;
-                check1 = connected_tree_node_pair[i * 2];
-                check2 = connected_tree_node_pair[i * 2 + 1];
+                current_start_tree_num = connected_tree_node_pair[i * 2];
+                current_goal_tree_num = connected_tree_node_pair[i * 2 + 1];
+                found = true;
                 break;
             }
         }
 
-        // print d_start_tree_configurations_ with first check1 configurations
-        std::vector<float> start_tree_configurations(max_interations_ * dim_);
-        std::vector<int> start_tree_parent_indexs(max_interations_);
-        cudaMemcpy(start_tree_configurations.data(), d_start_tree_configurations_, max_interations_ * dim_ * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(start_tree_parent_indexs.data(), d_start_tree_parent_indexs_, max_interations_ * sizeof(int), cudaMemcpyDeviceToHost);
-        std::cout << "Start tree configurations: " << std::endl;
-        for (int i = 0; i < check1; i++)
+        if (found)
         {
-            for (int j = 0; j < dim_; j++)
-            {
-                std::cout << start_tree_configurations[i * dim_ + j] << " ";
-            }
-            std::cout << " Parent index: " << start_tree_parent_indexs[i] << std::endl;
-            std::cout << std::endl;
-        }
+            current_start_tree_num += 1;
+            current_goal_tree_num += 1;
+            // print d_start_tree_configurations_ with first current_start_tree_num configurations
+            std::vector<float> start_tree_configurations(current_start_tree_num * dim_);
+            std::vector<int> start_tree_parent_indexs(current_start_tree_num);
+            cudaMemcpy(start_tree_configurations.data(), d_start_tree_configurations_, current_start_tree_num * dim_ * sizeof(float), cudaMemcpyDeviceToHost);
 
-        // print d_goal_tree_configurations_ with first check2 configurations
-        std::vector<float> goal_tree_configurations(max_interations_ * dim_);
-        std::vector<int> goal_tree_parent_indexs(max_interations_);
-        cudaMemcpy(goal_tree_configurations.data(), d_goal_tree_configurations_, max_interations_ * dim_ * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(goal_tree_parent_indexs.data(), d_goal_tree_parent_indexs_, max_interations_ * sizeof(int), cudaMemcpyDeviceToHost);
-        std::cout << "Goal tree configurations: " << std::endl;
-        for (int i = 0; i < check2; i++)
-        {
-            for (int j = 0; j < dim_; j++)
-            {
-                std::cout << goal_tree_configurations[i * dim_ + j] << " ";
-            }
-            std::cout << " Parent index: " << goal_tree_parent_indexs[i] << std::endl;
-            std::cout << std::endl;
-        }
+            // print d_goal_tree_configurations_ with first current_goal_tree_num configurations
+            std::vector<float> goal_tree_configurations(current_goal_tree_num * dim_);
+            std::vector<int> goal_tree_parent_indexs(current_goal_tree_num);
+            cudaMemcpy(goal_tree_configurations.data(), d_goal_tree_configurations_, current_goal_tree_num * dim_ * sizeof(float), cudaMemcpyDeviceToHost);
+            cudaMemcpy(goal_tree_parent_indexs.data(), d_goal_tree_parent_indexs_, current_goal_tree_num * sizeof(int), cudaMemcpyDeviceToHost);
 
+            // Get the final path
+            std::cout << "Final path: " << std::endl;
+            constructFinalPath(dim_, start_tree_configurations, start_tree_parent_indexs, goal_tree_configurations, goal_tree_parent_indexs, current_start_tree_num - 1, current_goal_tree_num - 1);
+        }
     }
 
     std::string cRRTC::generateSourceCode()
