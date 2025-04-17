@@ -1946,6 +1946,7 @@ void TEST_CPRRTC(const moveit::core::RobotModelPtr & robot_model, const std::str
         robot_info.getUpperBounds(),
         robot_info.getDefaultJointValues(),
         robot_info.getLinkNames(),
+        robot_info.getSelfCollisionEnabledMap(),
         0.02 // resolution
     );
 

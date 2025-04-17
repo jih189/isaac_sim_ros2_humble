@@ -19,6 +19,7 @@ namespace CPRRTC
         const std::vector<float>& upper,
         const std::vector<float>& default_joint_values,
         const std::vector<std::string>& link_names,
+        const std::vector<std::vector<bool>>& self_collision_enables_map,
         float resolution
     )
         : robot_name_(std::move(robot_name))
@@ -35,6 +36,7 @@ namespace CPRRTC
         , upper_bound_(upper)
         , default_joint_values_(default_joint_values)
         , link_names_(link_names)
+        , self_collision_enables_map_(self_collision_enables_map)
         , resolution_(resolution)
         , num_of_joints_(static_cast<int>(joint_types_.size()))
         , num_of_links_(static_cast<int>(link_names_.size()))
@@ -66,17 +68,17 @@ namespace CPRRTC
         self_collision_distance_thresholds_.clear();
         num_of_self_collision_check_ = 0;
 
-        // for (size_t i = 0; i < num_of_self_collision_spheres_.size(); i++){
-        //     for (size_t j = i + 1; j < num_of_self_collision_spheres_.size(); j++){
-        //         // check if the two spheres are not in the same link and self-collision is enabled between the two links
-        //         if (self_collision_spheres_to_link_map_[i] != self_collision_spheres_to_link_map_[j] && self_collision_enables_map[self_collision_spheres_to_link_map_[i]][self_collision_spheres_to_link_map_[j]]){
-        //             collision_sphere_indices_1.push_back(i);
-        //             collision_sphere_indices_2.push_back(j);
-        //             collision_distance_threshold.push_back((self_collision_spheres_radius[i] + self_collision_spheres_radius[j]) * (self_collision_spheres_radius[i] + self_collision_spheres_radius[j])); // squared distance threshold
-        //             num_of_self_collision_check_++;
-        //         }
-        //     }
-        // }
+        for (int i = 0; i < num_of_self_collision_spheres_; i++){
+            for (int j = i + 1; j < num_of_self_collision_spheres_; j++){
+                // check if the two spheres are not in the same link and self-collision is enabled between the two links
+                if (self_collision_spheres_to_link_map_[i] != self_collision_spheres_to_link_map_[j] && self_collision_enables_map_[self_collision_spheres_to_link_map_[i]][self_collision_spheres_to_link_map_[j]]){
+                    self_collision_sphere_indices_1_.push_back(i);
+                    self_collision_sphere_indices_2_.push_back(j);
+                    self_collision_distance_thresholds_.push_back((self_collision_spheres_radius_[i] + self_collision_spheres_radius_[j]) * (self_collision_spheres_radius_[i] + self_collision_spheres_radius_[j])); // squared distance threshold
+                    num_of_self_collision_check_++;
+                }
+            }
+        }
 
         std::string source_code = generateKernelSourceCode();
 
@@ -149,6 +151,7 @@ extern "C" {
 )";
 
         kernel_code += generateFKKernelSourceCode();
+        kernel_code += generateSelfCollisionCheckSourceCode();
 
         kernel_code += "__device__ __forceinline__ bool check_partially_written(float *node) {\n";
         kernel_code += "    #pragma unroll\n";
@@ -270,6 +273,20 @@ extern "C" {
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n\n";
         kernel_code += "        // Check for self-collision\n";
+        kernel_code += "        if (tid < motion_step) {\n";
+        kernel_code += "            should_skip = checkSelfCollisionConstraint(self_collision_spheres_pos_in_base);\n";
+        kernel_code += "        }\n";
+        // kernel_code += "        __syncthreads();\n\n";
+        // kernel_code += "        if (! should_skip) {\n";
+        // kernel_code += "            // Check for collision with environment obstacles\n";
+        // kernel_code += "            // TODO: implement collision check with environment obstacles\n";
+        // kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n\n";
+        kernel_code += "        if (should_skip) {\n";
+        kernel_code += "            continue;\n";
+        kernel_code += "        }\n\n";
+        kernel_code += "        __syncthreads();\n";
+        kernel_code += "        // Add the new node to the target tree\n";
 
         kernel_code += "    }\n";
         kernel_code += "};\n";
@@ -279,8 +296,44 @@ extern "C" {
     std::string RobotSolver::generateSelfCollisionCheckSourceCode()
     {
         std::string source_code;
-        // source_code += "__constant__ int self_collision_check_pairs[" + std::to_string(num_of_self_collision_check_) + "][2] = \n";
+        source_code += "__constant__ int self_collision_check_pairs[" + std::to_string(num_of_self_collision_check_) + "][2] = \n";
+        source_code += "{\n";
+        for (int i = 0; i < num_of_self_collision_check_; i++)
+        {
+            if (i == num_of_self_collision_check_ - 1)
+                source_code += "{" + std::to_string(self_collision_sphere_indices_1_[i]) + ", " + std::to_string(self_collision_sphere_indices_2_[i]) + "}\n";
+            else
+                source_code += "{" + std::to_string(self_collision_sphere_indices_1_[i]) + ", " + std::to_string(self_collision_sphere_indices_2_[i]) + "}, ";
+        }
+        source_code += "};\n\n";
+        source_code += "__constant__ float self_collision_distance_threshold[" + std::to_string(num_of_self_collision_check_) + "] = \n";
+        source_code += "{\n";
+        for (int i = 0; i < num_of_self_collision_check_; i++)
+        {
+            if (i == num_of_self_collision_check_ - 1)
+                source_code += std::to_string(self_collision_distance_thresholds_[i]) + "\n";
+            else
+                source_code += std::to_string(self_collision_distance_thresholds_[i]) + ", ";
+        }
+        source_code += "};\n\n";
+        source_code += "// SelfCollisionConstraint check function\n";
+        source_code += "__device__ __forceinline__ bool checkSelfCollisionConstraint(float * self_collision_sphere_pos){\n";
+        source_code += "    float dx = 0.0f;\n";
+        source_code += "    float dy = 0.0f;\n";
+        source_code += "    float dz = 0.0f;\n";
+        source_code += "    float squared_distance = 0.0f;\n";
+        source_code += "    for (int i = 0; i < " + std::to_string(num_of_self_collision_check_) + "; i++){\n";
+        source_code += "        dx = self_collision_sphere_pos[3 * self_collision_check_pairs[i][0]] - self_collision_sphere_pos[3 * self_collision_check_pairs[i][1]];\n";
+        source_code += "        dy = self_collision_sphere_pos[3 * self_collision_check_pairs[i][0] + 1] - self_collision_sphere_pos[3 * self_collision_check_pairs[i][1] + 1];\n";
+        source_code += "        dz = self_collision_sphere_pos[3 * self_collision_check_pairs[i][0] + 2] - self_collision_sphere_pos[3 * self_collision_check_pairs[i][1] + 2];\n";
+        source_code += "        squared_distance = dx * dx + dy * dy + dz * dz;\n";
+        source_code += "        if (squared_distance < self_collision_distance_threshold[i]){\n";
+        source_code += "            return true;\n";
+        source_code += "        }\n";
+        source_code += "    }\n";
+        source_code += "    return false;\n";
 
+        source_code += "}\n";
         return source_code;
     }
 

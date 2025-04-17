@@ -46,6 +46,7 @@ namespace CPRRTC
                 const std::vector<float>& upper,
                 const std::vector<float>& default_joint_values,
                 const std::vector<std::string>& link_names,
+                const std::vector<std::vector<bool>>& self_collision_enables_map,
                 float resolution = 0.02f
             );
             ~RobotSolver();
@@ -74,6 +75,7 @@ namespace CPRRTC
         private:
             std::string generateKernelSourceCode();
             std::string generateFKKernelSourceCode();
+            std::string generateSelfCollisionCheckSourceCode();
 
             // Add private member variables and methods here
             std::string robot_name_;
@@ -90,6 +92,7 @@ namespace CPRRTC
             std::vector<float> upper_bound_;
             std::vector<float> default_joint_values_;
             std::vector<std::string> link_names_;
+            std::vector<std::vector<bool>> self_collision_enables_map_;
             float resolution_;
             int num_of_joints_;
             int num_of_links_;
