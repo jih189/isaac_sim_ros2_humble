@@ -43,21 +43,6 @@ namespace CPRRTC
         , num_of_self_collision_spheres_(static_cast<int>(self_collision_spheres_radius_.size()))
         , num_of_active_joints_(static_cast<int>(std::count(active_joint_map_.begin(), active_joint_map_.end(), true)))
     {
-        // Check if the sizes of the vectors are consistent
-        if (joint_types_.size() != joint_poses_.size() || joint_types_.size() != joint_axes_.size() ||
-            joint_types_.size() != link_parent_link_maps_.size() || joint_types_.size() != active_joint_map_.size()) {
-            throw std::invalid_argument("Size of joint types, poses, axes, parent link maps, and active joint map must match.");
-        }
-
-        if (self_collision_spheres_to_link_map_.size() != self_collision_spheres_pos_in_link_.size() ||
-            self_collision_spheres_to_link_map_.size() != self_collision_spheres_radius_.size()) {
-            throw std::invalid_argument("Size of self-collision spheres to link map, positions, and radii must match.");
-        }
-
-        if (lower_bound_.size() != num_of_joints_ || upper_bound_.size() != num_of_joints_ || default_joint_values_.size() != num_of_joints_) {
-            throw std::invalid_argument("Size of lower, upper bounds, and default joint values must match the num of joints.");
-        }
-
         max_iterations_ = 100;
         num_of_threads_per_motion_ = max_step_ = 32;
         num_of_thread_blocks_ = 1;
@@ -170,7 +155,7 @@ extern "C" {
         kernel_code += "    __shared__ int localSampledCounter;\n";
         kernel_code += "    __shared__ float partial_distance_cost_from_nn[" + std::to_string(num_of_threads_per_motion_) + "];\n";
         kernel_code += "    __shared__ int partial_nn_index[" + std::to_string(num_of_threads_per_motion_) + "];\n";
-        kernel_code += "    __shared__ float local_sampled_configuration[" + std::to_string(dim_) + "];\n";
+        kernel_code += "    __shared__ float local_to_configuration[" + std::to_string(dim_) + "];\n";
         kernel_code += "    __shared__ float local_from_configuration[" + std::to_string(dim_) + "];\n";
         kernel_code += "    __shared__ float local_delta_motion[" + std::to_string(dim_) + "];\n";
         kernel_code += "    __shared__ int local_parent_index;\n";
@@ -214,7 +199,7 @@ extern "C" {
         kernel_code += "            return;\n";
         kernel_code += "        // Sample a random configuration by loading it from global memory\n";
         kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
-        kernel_code += "            local_sampled_configuration[tid] = d_sampled_configurations[localSampledCounter * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "            local_to_configuration[tid] = d_sampled_configurations[localSampledCounter * " + std::to_string(dim_) + " + tid];\n";
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n\n";
         kernel_code += "        // Find the nearest neighbor in the target tree\n";
@@ -224,10 +209,11 @@ extern "C" {
         kernel_code += "            if (check_partially_written(&tree_to_expand[i * " + std::to_string(dim_) + "])) break;\n";
         kernel_code += "            float distance = 0.0f;\n";
         kernel_code += "            float difference = 0.0f;\n";
-        for (size_t j = 0; j < dim_; j++) {
-            kernel_code += "            difference = local_sampled_configuration[" + std::to_string(j) + "] - target_tree[i * " + std::to_string(dim_) + " + " + std::to_string(j) + "];\n";
-            kernel_code += "            distance += difference * difference;\n";
-        }
+        kernel_code += "            #pragma unroll\n";
+        kernel_code += "            for (int j = 0; j < " + std::to_string(dim_) + "; j++) {\n";
+        kernel_code += "                difference = local_to_configuration[j] - target_tree[i * " + std::to_string(dim_) + " + j];\n";
+        kernel_code += "                distance += difference * difference;\n";
+        kernel_code += "            }\n";
         kernel_code += "            if (distance < best_distance) {\n";
         kernel_code += "                best_distance = distance;\n";
         kernel_code += "                best_index = i;\n";
@@ -257,7 +243,7 @@ extern "C" {
         kernel_code += "        // Calculate the delta motion from the nearest neighbor in the target tree to sampled configuration\n";
         kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
         kernel_code += "            local_from_configuration[tid] = target_tree[local_parent_index * " + std::to_string(dim_) + " + tid];\n";
-        kernel_code += "            local_delta_motion[tid] = (local_sampled_configuration[tid] - local_from_configuration[tid]) / local_nearest_neighbor_distance * " + std::to_string(resolution_) + ";\n";
+        kernel_code += "            local_delta_motion[tid] = (local_to_configuration[tid] - local_from_configuration[tid]) / local_nearest_neighbor_distance * " + std::to_string(resolution_) + ";\n";
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n\n";
         kernel_code += "        // Interpolate the new configuration between the nearest neighbor in the target tree and sampled configuration\n";
@@ -287,7 +273,125 @@ extern "C" {
         kernel_code += "        }\n\n";
         kernel_code += "        __syncthreads();\n";
         kernel_code += "        // Add the new node to the target tree\n";
-
+        kernel_code += "        if (tid == 0) {\n";
+        kernel_code += "            new_node_index = atomicAdd(target_tree_counter, 1);\n";
+        kernel_code += "            target_tree_parent_indexs[new_node_index] = local_parent_index;\n";
+        kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n\n";
+        kernel_code += "        // Write the new node to the target tree\n";
+        kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
+        kernel_code += "            target_tree[new_node_index * " + std::to_string(dim_) + " + tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "            local_from_configuration[tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n\n";
+        kernel_code += "        // find the nearest neighbor in the other tree\n";
+        kernel_code += "        best_distance = FLT_MAX;\n";
+        kernel_code += "        best_index = -1;\n";
+        kernel_code += "        for (int i = tid; i < other_tree_counter; i += blockDim.x) {\n";
+        kernel_code += "            if (check_partially_written(&other_tree[i * " + std::to_string(dim_) + "])) break;\n";
+        kernel_code += "            float distance = 0.0f;\n";
+        kernel_code += "            float difference = 0.0f;\n";
+        kernel_code += "            #pragma unroll\n";
+        kernel_code += "            for (int j = 0; j < " + std::to_string(dim_) + "; j++) {\n";
+        kernel_code += "                difference = other_tree[i * " + std::to_string(dim_) + " + j] - local_from_configuration[j];\n";
+        kernel_code += "                distance += difference * difference;\n";
+        kernel_code += "            }\n";
+        kernel_code += "            if (distance < best_distance) {\n";
+        kernel_code += "                best_distance = distance;\n";
+        kernel_code += "                best_index = i;\n";
+        kernel_code += "            }\n";
+        kernel_code += "        }\n";
+        kernel_code += "        // Write the local best distance and index to shared memory\n";
+        kernel_code += "        partial_distance_cost_from_nn[tid] = best_distance;\n";
+        kernel_code += "        partial_nn_index[tid] = best_index;\n";
+        kernel_code += "        __syncthreads();\n\n";
+        kernel_code += "        // Perform reduction to find the best distance and index\n";
+        kernel_code += "        for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {\n";
+        kernel_code += "            if (tid < stride) {\n";
+        kernel_code += "                if (partial_distance_cost_from_nn[tid] > partial_distance_cost_from_nn[tid + stride]) {\n";
+        kernel_code += "                    partial_distance_cost_from_nn[tid] = partial_distance_cost_from_nn[tid + stride];\n";
+        kernel_code += "                    partial_nn_index[tid] = partial_nn_index[tid + stride];\n";
+        kernel_code += "                }\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n";
+        kernel_code += "        }\n\n";
+        kernel_code += "        // Write the best distance and index to shared memory\n";
+        kernel_code += "        if (tid == 0) {\n";
+        kernel_code += "            local_nearest_neighbor_distance = sqrtf(partial_distance_cost_from_nn[0]);\n";
+        kernel_code += "            connected_index_in_other_tree = partial_nn_index[0];\n";
+        kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n\n";
+        kernel_code += "        // get the configuration of the nearest neighbor in the other tree\n";
+        kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
+        kernel_code += "            local_to_configuration[tid] = other_tree[connected_index_in_other_tree * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n\n";
+        kernel_code += "        while (!should_skip) {\n";
+        kernel_code += "            if (tid == 0) {\n";
+        kernel_code += "                motion_step = min((int)(local_nearest_neighbor_distance / " + std::to_string(resolution_) + "), " + std::to_string(max_step_) + ");\n";
+        kernel_code += "                local_parent_index = new_node_index;\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "            // Calculate the delta motion from the new node to the nearest neighbor in the other tree\n";
+        kernel_code += "            if (tid < " + std::to_string(dim_) + ") {\n";
+        kernel_code += "                local_delta_motion[tid] = (local_to_configuration[tid] - local_from_configuration[tid]) / local_nearest_neighbor_distance * " + std::to_string(resolution_) + ";\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "            // Calculate the intermediate configurations of next motion segment\n";
+        kernel_code += "            for (int j = tid; j < " + std::to_string(dim_) + " * motion_step; j += blockDim.x) {\n";
+        kernel_code += "                int state_ind_in_motion = j / " + std::to_string(dim_) + ";\n";
+        kernel_code += "                int joint_ind_in_state = j % " + std::to_string(dim_) + ";\n";
+        kernel_code += "                local_motion_configurations[j] = local_from_configuration[joint_ind_in_state] + local_delta_motion[joint_ind_in_state] * state_ind_in_motion;\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "            // Call forward kinematics function to calculate self-collision spheres positions in base frame\n";
+        kernel_code += "            if (tid < motion_step) {\n";
+        kernel_code += "                kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "            // Check for self-collision\n";
+        kernel_code += "            if (tid < motion_step) {\n";
+        kernel_code += "                should_skip = checkSelfCollisionConstraint(self_collision_spheres_pos_in_base);\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "            if (should_skip) {\n";
+        kernel_code += "                break;\n";
+        kernel_code += "            }\n\n";
+        // kernel_code += "            // Check for collision with environment obstacles\n";
+        // kernel_code += "            // TODO: implement collision check with environment obstacles\n";
+        // kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "            // Add the new node to the target tree\n";
+        kernel_code += "            if (tid == 0) {\n";
+        kernel_code += "                new_node_index = atomicAdd(target_tree_counter, 1);\n";
+        kernel_code += "                target_tree_parent_indexs[new_node_index] = local_parent_index;\n";
+        kernel_code += "                // Calculate the distance from the new node to the nearest configuration in the other tree\n";
+        kernel_code += "                float squared_distance = 0.0f;\n";
+        kernel_code += "                #pragma unroll\n";
+        kernel_code += "                for (int j = 0; j < " + std::to_string(dim_) + "; j++) {\n";
+        kernel_code += "                    float diff = local_to_configuration[j] - local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + j];\n";
+        kernel_code += "                    squared_distance += diff * diff;\n";
+        kernel_code += "                }\n";
+        kernel_code += "                local_nearest_neighbor_distance = sqrtf(squared_distance);\n";
+        kernel_code += "                // The new node is close enough to the nearest configuration in the other tree\n";
+        kernel_code += "                if (local_nearest_neighbor_distance < " + std::to_string(resolution_ * 2) + ") {\n";
+        kernel_code += "                    should_skip = true;\n";
+        kernel_code += "                    connected_tree_node_pair[connected_node_in_target_tree] = new_node_index;\n";
+        kernel_code += "                    connected_tree_node_pair[connected_node_in_other_tree] = connected_index_in_other_tree;\n";
+        kernel_code += "                    foundSolution = 1;\n";
+        kernel_code += "                }\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "            // Write the new node to the target tree\n";
+        kernel_code += "            if (tid < " + std::to_string(dim_) + ") {\n";
+        kernel_code += "                target_tree[new_node_index * " + std::to_string(dim_) + " + tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "                local_from_configuration[tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "        }\n";
+        kernel_code += "        // check if the connection is found\n";
+        kernel_code += "        if (foundSolution != 0) {\n";
+        kernel_code += "            return;\n";
+        kernel_code += "        }\n";
         kernel_code += "    }\n";
         kernel_code += "};\n";
         return kernel_code; 
