@@ -4,7 +4,7 @@
 #include <eigen3/Eigen/Dense>
 #include <Obstacle.h>
 
-#include <NvrtcUtil.h>
+#include <Nvrtc.h>
 
 namespace CPRRTC
 {
@@ -110,8 +110,10 @@ namespace CPRRTC
             int num_of_thread_blocks_;
             int max_step_;
 
+            KernelFunctionPtr cRRTCKernelPtr_;
     };
 
     // create std::shared_ptr for RobotSolver
-    using RobotSolverPtr = std::shared_ptr<RobotSolver>;
-} // namespace CUDAMPLib
+    typedef std::shared_ptr<RobotSolver> RobotSolverPtr;
+
+} // namespace CPRRTC

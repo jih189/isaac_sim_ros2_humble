@@ -33,7 +33,7 @@
         }                                                                        \
     } while (0)
 
-namespace CUDAMPLib
+namespace CPRRTC
 {
     // Class holding CUDA context, module, and kernel function.
     class KernelFunction {
@@ -65,6 +65,10 @@ namespace CUDAMPLib
             // Check if cached PTX file exists.
             std::ifstream ptxFile(ptx_filename, std::ios::binary);
             if (ptxFile.good()) {
+                DRIVER_SAFE_CALL(cuInit(0));
+                CUdevice cuDevice;
+                DRIVER_SAFE_CALL(cuDeviceGet(&cuDevice, 0));
+
                 // Load PTX code from the file.
                 ptxFile.seekg(0, std::ios::end);
                 std::streamsize size = ptxFile.tellg();
@@ -160,6 +164,6 @@ namespace CUDAMPLib
         KernelFunction() = default;
     };
 
+    // define the kernel function pointer type
     #define KernelFunctionPtr std::shared_ptr<KernelFunction>
-
-} // namespace CUDAMPLib
+} // namespace CPRRTC

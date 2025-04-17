@@ -83,6 +83,14 @@ namespace CPRRTC
         {
             std::cerr << "Unable to open file: " << file_name << std::endl;
         }
+
+        const char *source_code_c_str = source_code.c_str();
+
+        cRRTCKernelPtr_ = KernelFunction::create(source_code_c_str, "CPRRTCKernel");
+
+        if (! cRRTCKernelPtr_ || ! cRRTCKernelPtr_->function) {
+            std::cerr << "\033[31m" << "Kernel function 'cRRTCKernel' compilation failed." << "\033[0m" << std::endl;
+        }
     }
 
     RobotSolver::~RobotSolver()
@@ -146,12 +154,12 @@ extern "C" {
         kernel_code += "    return false;\n";
         kernel_code += "}\n";
 
-        kernel_code += "__global__ void cRRTKernel(float* d_start_tree_configurations, float* d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations, int * connected_tree_node_pair, int num_of_sphere_obstacles, float * d_sphere_obstacles, int num_of_cuboid_obstacles, float * d_cuboid_obstacles, int num_of_cylinder_obstacles, float * d_cylinder_obstacles){\n";
+        kernel_code += "extern \"C\" __global__ void CPRRTCKernel(float* d_start_tree_configurations, float* d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations, int * connected_tree_node_pair, int num_of_sphere_obstacles, float * d_sphere_obstacles, int num_of_cuboid_obstacles, float * d_cuboid_obstacles, int num_of_cylinder_obstacles, float * d_cylinder_obstacles){\n";
         kernel_code += "    __shared__ float * target_tree;\n";
-        kernel_code += "    __shared__ int target_tree_counter;\n";
+        kernel_code += "    __shared__ int * target_tree_counter;\n";
         kernel_code += "    __shared__ int * target_tree_parent_indexs;\n";
         kernel_code += "    __shared__ float * other_tree;\n";
-        kernel_code += "    __shared__ int other_tree_counter;\n";
+        kernel_code += "    __shared__ int * other_tree_counter;\n";
         kernel_code += "    __shared__ int localSampledCounter;\n";
         kernel_code += "    __shared__ float partial_distance_cost_from_nn[" + std::to_string(num_of_threads_per_motion_) + "];\n";
         kernel_code += "    __shared__ int partial_nn_index[" + std::to_string(num_of_threads_per_motion_) + "];\n";
@@ -174,21 +182,21 @@ extern "C" {
         kernel_code += "        if (i == 0) {\n";
         kernel_code += "            should_skip = false;\n";
         kernel_code += "            localSampledCounter =  atomicAdd(&sampledCounter, 1);\n\n";
-        kernel_code += "            if (start_tree_counter > goal_tree_counter) {\n";
+        kernel_code += "            if (startTreeCounter > goalTreeCounter) {\n";
         kernel_code += "                target_tree = d_goal_tree_configurations;\n";
-        kernel_code += "                target_tree_counter = goalTreeCounter;\n";
+        kernel_code += "                target_tree_counter = &goalTreeCounter;\n";
         kernel_code += "                target_tree_parent_indexs = d_goal_tree_parent_indexs;\n";
         kernel_code += "                other_tree = d_start_tree_configurations;\n";
-        kernel_code += "                other_tree_counter = startTreeCounter;\n";
+        kernel_code += "                other_tree_counter = &startTreeCounter;\n";
         kernel_code += "                connected_node_in_target_tree = blockIdx.x * 2 + 1;\n";
         kernel_code += "                connected_node_in_other_tree = blockIdx.x * 2;\n";
         kernel_code += "            }\n";
         kernel_code += "            else {\n";
         kernel_code += "                target_tree = d_start_tree_configurations;\n";
-        kernel_code += "                target_tree_counter = startTreeCounter;\n";
+        kernel_code += "                target_tree_counter = &startTreeCounter;\n";
         kernel_code += "                target_tree_parent_indexs = d_start_tree_parent_indexs;\n";
         kernel_code += "                other_tree = d_goal_tree_configurations;\n";
-        kernel_code += "                other_tree_counter = goalTreeCounter;\n";
+        kernel_code += "                other_tree_counter = &goalTreeCounter;\n";
         kernel_code += "                connected_node_in_target_tree = blockIdx.x * 2;\n";
         kernel_code += "                connected_node_in_other_tree = blockIdx.x * 2 + 1;\n";
         kernel_code += "            }\n";
@@ -205,8 +213,8 @@ extern "C" {
         kernel_code += "        // Find the nearest neighbor in the target tree\n";
         kernel_code += "        float best_distance = FLT_MAX;\n";
         kernel_code += "        int best_index = -1;\n";
-        kernel_code += "        for (int i = tid; i < target_tree_counter; i += blockDim.x) {\n";
-        kernel_code += "            if (check_partially_written(&tree_to_expand[i * " + std::to_string(dim_) + "])) break;\n";
+        kernel_code += "        for (int i = tid; i < *target_tree_counter; i += blockDim.x) {\n";
+        kernel_code += "            if (check_partially_written(&target_tree[i * " + std::to_string(dim_) + "])) break;\n";
         kernel_code += "            float distance = 0.0f;\n";
         kernel_code += "            float difference = 0.0f;\n";
         kernel_code += "            #pragma unroll\n";
@@ -287,7 +295,7 @@ extern "C" {
         kernel_code += "        // find the nearest neighbor in the other tree\n";
         kernel_code += "        best_distance = FLT_MAX;\n";
         kernel_code += "        best_index = -1;\n";
-        kernel_code += "        for (int i = tid; i < other_tree_counter; i += blockDim.x) {\n";
+        kernel_code += "        for (int i = tid; i < *other_tree_counter; i += blockDim.x) {\n";
         kernel_code += "            if (check_partially_written(&other_tree[i * " + std::to_string(dim_) + "])) break;\n";
         kernel_code += "            float distance = 0.0f;\n";
         kernel_code += "            float difference = 0.0f;\n";
