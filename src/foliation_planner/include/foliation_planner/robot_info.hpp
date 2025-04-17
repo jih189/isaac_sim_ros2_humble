@@ -344,6 +344,16 @@ class RobotInfo
         return collision_spheres_pos;
     }
 
+    std::vector<Eigen::Vector3d> getCollisionSpheresPosEigen() const
+    {
+        std::vector<Eigen::Vector3d> collision_spheres_pos_eigen;
+        for (const auto& pos : collision_spheres_pos)
+        {
+            collision_spheres_pos_eigen.push_back(Eigen::Vector3d(pos[0], pos[1], pos[2]));
+        }
+        return collision_spheres_pos_eigen;
+    }
+
     std::vector<float> getCollisionSpheresRadius() const
     {
         return collision_spheres_radius;

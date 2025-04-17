@@ -24,6 +24,9 @@
 #include <CUDAMPLib/termination/StepTermination.h>
 #include <CUDAMPLib/termination/TimeoutTermination.h>
 
+// CPRRTC include
+#include <CPRRTC/RobotSolver.h>
+
 // ompl include
 #include <ompl/base/SpaceInformation.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
@@ -1749,6 +1752,209 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
     robot_state.reset();
 }
 
+void TEST_CPRRTC(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
+{
+    /***************************** 1. Prepare Robot information **************************************************/
+    std::string collision_spheres_file_path;
+    node->get_parameter("collision_spheres_file_path", collision_spheres_file_path);
+    RobotInfo robot_info(robot_model, group_name, collision_spheres_file_path);
+
+    moveit::core::RobotStatePtr robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
+    const moveit::core::JointModelGroup* joint_model_group = robot_model->getJointModelGroup(group_name);
+    // set robot state to default state
+    robot_state->setToDefaultValues();
+    robot_state->update();
+
+    /***************************** 2. Generate Obstacles **************************************************/
+
+    // find the region where the obstacles should not be placed
+    std::vector<BoundingBox> unmoveable_bounding_boxes_of_robot = getUnmoveableBoundingBoxes(robot_model, group_name, 0.05);
+
+    // create obstacles for spheres
+    std::vector<Sphere> collision_spheres;
+    genSphereObstacles(1, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+
+    // create obstacles for cuboids
+    std::vector<BoundingBox> bounding_boxes;
+    genCuboidObstacles(1, 0.05, 0.05, unmoveable_bounding_boxes_of_robot, bounding_boxes);
+
+    // create obstacles for cylinders
+    std::vector<Cylinder> cylinders;
+    genCylinderObstacles(1, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
+
+
+    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintSphere
+    std::vector<std::vector<float>> balls_pos;
+    std::vector<float> ball_radius;
+    SphereToVectors(collision_spheres, balls_pos, ball_radius);
+
+    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintCuboid
+    std::vector<std::vector<float>> bounding_boxes_pos;
+    std::vector<std::vector<float>> bounding_boxes_orientation_matrix;
+    std::vector<std::vector<float>> bounding_boxes_max;
+    std::vector<std::vector<float>> bounding_boxes_min;
+    CuboidToVectors(bounding_boxes, bounding_boxes_pos, bounding_boxes_orientation_matrix, bounding_boxes_max, bounding_boxes_min);
+
+    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintCylinder
+    std::vector<std::vector<float>> cylinders_pos;
+    std::vector<std::vector<float>> cylinders_orientation_matrix;
+    std::vector<float> cylinders_radius;
+    std::vector<float> cylinders_height;
+    CylinderToVectors(cylinders, cylinders_pos, cylinders_orientation_matrix, cylinders_radius, cylinders_height);
+
+    // generate the markers for the obstacles
+    visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generateSpheresMarkers(collision_spheres, node);
+    visualization_msgs::msg::MarkerArray obstacle_collision_cuboids_marker_array = generateBoundingBoxesMarkers(bounding_boxes, node);
+    visualization_msgs::msg::MarkerArray obstacle_collision_cylinders_marker_array = generateCylindersMarkers(cylinders, node);
+
+    /***************************** 3. Generate Start and Goal States **************************************************/
+
+    // create planning scene
+    auto world = std::make_shared<collision_detection::World>();
+    auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, world);
+
+    // Add spheres as obstacles to the planning scene
+    for (size_t i = 0; i < collision_spheres.size(); i++)
+    {
+        Eigen::Isometry3d sphere_pose = Eigen::Isometry3d::Identity();
+        sphere_pose.translation() = Eigen::Vector3d(collision_spheres[i].x, collision_spheres[i].y, collision_spheres[i].z);
+        planning_scene->getWorldNonConst()->addToObject("obstacle_" + std::to_string(i), shapes::ShapeConstPtr(new shapes::Sphere(collision_spheres[i].radius)), sphere_pose);
+    }
+
+    // Add cuboids as obstacles to the planning scene
+    for (size_t i = 0; i < bounding_boxes.size(); i++)
+    {
+        // Get the current bounding box
+        BoundingBox box = bounding_boxes[i];
+
+        // Compute the dimensions of the cuboid
+        float dim_x = box.x_max - box.x_min;
+        float dim_y = box.y_max - box.y_min;
+        float dim_z = box.z_max - box.z_min;
+
+        // Create the Box shape using the dimensions
+        shapes::ShapeConstPtr box_shape(new shapes::Box(dim_x, dim_y, dim_z));
+
+        // Compute the center of the box in its local coordinate frame.
+        // Note: this center is relative to the reference point given by box.x, box.y, box.z.
+        float center_local_x = (box.x_min + box.x_max) / 2.0;
+        float center_local_y = (box.y_min + box.y_max) / 2.0;
+        float center_local_z = (box.z_min + box.z_max) / 2.0;
+        Eigen::Vector3d center_local(center_local_x, center_local_y, center_local_z);
+
+        // Build the rotation from roll, pitch, yaw.
+        Eigen::Quaterniond quat;
+        quat = Eigen::AngleAxisd(box.roll, Eigen::Vector3d::UnitX()) *
+            Eigen::AngleAxisd(box.pitch, Eigen::Vector3d::UnitY()) *
+            Eigen::AngleAxisd(box.yaw, Eigen::Vector3d::UnitZ());
+
+        // The provided pose (box.x, box.y, box.z) is not at the center,
+        // so compute the final translation by adding the rotated local center offset.
+        Eigen::Vector3d pose_translation(box.x, box.y, box.z);
+        Eigen::Isometry3d box_pose = Eigen::Isometry3d::Identity();
+        box_pose.linear() = quat.toRotationMatrix();
+        box_pose.translation() = pose_translation + quat * center_local;
+
+        // Add the box as an obstacle to the planning scene.
+        planning_scene->getWorldNonConst()->addToObject("obstacle_box_" + std::to_string(i),
+                                                        box_shape, box_pose);
+    }
+
+    // Add cylinders as obstacles to the planning scene
+    for (size_t i = 0; i < cylinders.size(); i++)
+    {
+        // Create an identity transformation for the cylinder pose
+        Eigen::Isometry3d cylinder_pose = Eigen::Isometry3d::Identity();
+
+        // Set the translation using the cylinder's x, y, z coordinates
+        cylinder_pose.translation() = Eigen::Vector3d(cylinders[i].x, 
+                                                    cylinders[i].y, 
+                                                    cylinders[i].z);
+
+        // Compute the orientation from roll, pitch, and yaw using Eigen's AngleAxis
+        Eigen::Quaterniond q = Eigen::AngleAxisd(cylinders[i].roll, Eigen::Vector3d::UnitX()) *
+                            Eigen::AngleAxisd(cylinders[i].pitch, Eigen::Vector3d::UnitY()) *
+                            Eigen::AngleAxisd(cylinders[i].yaw, Eigen::Vector3d::UnitZ());
+        cylinder_pose.rotate(q);
+
+        // Create the cylinder shape and add it to the planning scene
+        planning_scene->getWorldNonConst()->addToObject(
+            "obstacle_cylinder_" + std::to_string(i),
+            shapes::ShapeConstPtr(new shapes::Cylinder(cylinders[i].height, cylinders[i].radius)),
+            cylinder_pose);
+    }
+
+    // generate start and goal states
+    std::vector<float> start_joint_values;
+    std::vector<float> goal_joint_values;
+    moveit_msgs::msg::RobotState start_state_msg;
+    moveit_msgs::msg::RobotState goal_state_msg;
+    generateRandomStartAndGoal(robot_state, joint_model_group, planning_scene, group_name, start_joint_values, goal_joint_values, start_state_msg, goal_state_msg);
+
+    std::cout << ">>>>>>>>>>> Generate random start and goal: Done" << std::endl;
+
+    std::vector<std::vector<float>> start_joint_values_set;
+    start_joint_values_set.push_back(start_joint_values);
+    std::vector<std::vector<float>> goal_joint_values_set;
+    goal_joint_values_set.push_back(goal_joint_values);
+
+    // create the task from start and goal states
+    CUDAMPLib::SingleArmTaskPtr task = std::make_shared<CUDAMPLib::SingleArmTask>(
+        start_joint_values_set,
+        goal_joint_values_set
+    );
+
+    // prepare the state markers for both start and goal state to visualize later
+    moveit_msgs::msg::DisplayRobotState start_display_robot_state;
+    start_display_robot_state.state = start_state_msg;
+    moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
+    goal_display_robot_state.state = goal_state_msg;
+
+    /***************************** 4. Robot solver of CPRRTC **************************************************/
+
+    // RobotSolver(
+    // std::string robot_name,
+    // size_t dim,
+    // const std::vector<int>& joint_types,
+    // const std::vector<Eigen::Isometry3d>& joint_poses,
+    // const std::vector<Eigen::Vector3d>& joint_axes,
+    // const std::vector<int>& link_parent_link_maps,
+    // const std::vector<int>& self_collision_spheres_to_link_map,
+    // const std::vector<Eigen::Vector3d>& self_collision_spheres_pos_in_link,
+    // const std::vector<float>& self_collision_spheres_radius,
+    // const std::vector<bool>& active_joint_map,
+    // const std::vector<float>& lower,
+    // const std::vector<float>& upper,
+    // const std::vector<float>& default_joint_values,
+    // const std::vector<std::string>& link_names,
+    // float resolution = 0.02f
+    // );
+
+    // Create solver
+    CPRRTC::RobotSolverPtr robot_solver = std::make_shared<CPRRTC::RobotSolver>(
+        "fetch",
+        robot_info.getDimension(),
+        robot_info.getJointTypes(),
+        robot_info.getJointPoses(),
+        robot_info.getJointAxes(),
+        robot_info.getLinkMaps(),
+        robot_info.getCollisionSpheresMap(),
+        robot_info.getCollisionSpheresPosEigen(),
+        robot_info.getCollisionSpheresRadius(),
+        robot_info.getActiveJointMap(),
+        robot_info.getLowerBounds(),
+        robot_info.getUpperBounds(),
+        robot_info.getDefaultJointValues(),
+        robot_info.getLinkNames(),
+        0.02 // resolution
+    );
+
+    /******************************* Free ****************************************************************************/
+
+    // clear the robot state
+    robot_state.reset();
+}
+
 void TEST_OMPL(const moveit::core::RobotModelPtr & robot_model, const std::string & group_name, rclcpp::Node::SharedPtr node)
 {
     std::string collision_spheres_file_path;
@@ -3162,7 +3368,9 @@ int main(int argc, char** argv)
 
     // TEST_NEAREST_NEIGHBOR(kinematic_model, GROUP_NAME, cuda_test_node);
 
-    TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+    // TEST_Planner(kinematic_model, GROUP_NAME, cuda_test_node);
+
+    TEST_CPRRTC(kinematic_model, GROUP_NAME, cuda_test_node);
 
     // TEST_OMPL(kinematic_model, GROUP_NAME, cuda_test_node);
 

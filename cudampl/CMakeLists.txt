@@ -72,3 +72,4 @@ enable_testing()
 
 add_subdirectory(CUDAMPLib)
 add_subdirectory(CUDATest)
+add_subdirectory(CPRRTC)

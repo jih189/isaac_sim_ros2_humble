@@ -39,6 +39,7 @@ foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
 endforeach()
 
 find_package(CUDAMPLib REQUIRED)
+find_package(CPRRTC REQUIRED)
 
 moveit_package()
 
@@ -61,7 +62,7 @@ add_executable(foliation_example src/foliation_example.cpp)
 ament_target_dependencies(foliation_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 add_executable(cuda_test src/cuda_test.cpp)
-target_link_libraries(cuda_test CUDAMPLib ompl)
+target_link_libraries(cuda_test CUDAMPLib ompl CPRRTC)
 ament_target_dependencies(cuda_test ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 add_executable(create_motion_tasks src/create_motion_tasks.cpp)
@@ -76,7 +77,7 @@ target_link_libraries(evaluate_ompl ompl)
 ament_target_dependencies(evaluate_ompl ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
-target_link_libraries(${MOVEIT_LIB_NAME} CUDAMPLib)
+target_link_libraries(${MOVEIT_LIB_NAME} CUDAMPLib CPRRTC)
 ament_target_dependencies(${MOVEIT_LIB_NAME} ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 
