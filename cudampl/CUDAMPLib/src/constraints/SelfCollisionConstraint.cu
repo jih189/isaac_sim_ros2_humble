@@ -174,22 +174,51 @@ namespace CUDAMPLib{
     std::string SelfCollisionConstraint::generateCheckConstraintCode()
     {
         std::string source_code;
+        source_code += "__constant__ int self_collision_check_pairs[" + std::to_string(num_of_self_collision_check_) + "][2] = \n";
+        source_code += "{\n";
+        for (int i = 0; i < num_of_self_collision_check_; i++)
+        {
+            if (i == num_of_self_collision_check_ - 1)
+                source_code += "{" + std::to_string(collision_sphere_indices_1[i]) + ", " + std::to_string(collision_sphere_indices_2[i]) + "}\n";
+            else
+                source_code += "{" + std::to_string(collision_sphere_indices_1[i]) + ", " + std::to_string(collision_sphere_indices_2[i]) + "}, ";
+        }
+        source_code += "};\n\n";
+        source_code += "__constant__ float self_collision_distance_threshold[" + std::to_string(num_of_self_collision_check_) + "] = \n";
+        source_code += "{\n";
+        for (int i = 0; i < num_of_self_collision_check_; i++)
+        {
+            if (i == num_of_self_collision_check_ - 1)
+                source_code += std::to_string(collision_distance_threshold[i]) + "\n";
+            else
+                source_code += std::to_string(collision_distance_threshold[i]) + ", ";
+        }
+        source_code += "};\n\n";
         source_code += "// SelfCollisionConstraint check function\n";
         source_code += "__device__ __forceinline__ bool checkSelfCollisionConstraint(float * self_collision_sphere_pos){\n";
         source_code += "    float dx = 0.0f;\n";
         source_code += "    float dy = 0.0f;\n";
         source_code += "    float dz = 0.0f;\n";
         source_code += "    float squared_distance = 0.0f;\n";
-        for (int i = 0; i < num_of_self_collision_check_; i++)
-        {
-            source_code += "    dx = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + "] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + "];\n";
-            source_code += "    dy = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + " + 1] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + " + 1];\n";
-            source_code += "    dz = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + " + 2] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + " + 2];\n";
-            source_code += "    squared_distance = dx * dx + dy * dy + dz * dz;\n";
-            source_code += "    if (squared_distance < " + std::to_string(collision_distance_threshold[i]) + "){\n";
-            source_code += "        return true;\n";
-            source_code += "    }\n";
-        }
+        source_code += "    for (int i = 0; i < " + std::to_string(num_of_self_collision_check_) + "; i++){\n";
+        source_code += "        dx = self_collision_sphere_pos[3 * self_collision_check_pairs[i][0]] - self_collision_sphere_pos[3 * self_collision_check_pairs[i][1]];\n";
+        source_code += "        dy = self_collision_sphere_pos[3 * self_collision_check_pairs[i][0] + 1] - self_collision_sphere_pos[3 * self_collision_check_pairs[i][1] + 1];\n";
+        source_code += "        dz = self_collision_sphere_pos[3 * self_collision_check_pairs[i][0] + 2] - self_collision_sphere_pos[3 * self_collision_check_pairs[i][1] + 2];\n";
+        source_code += "        squared_distance = dx * dx + dy * dy + dz * dz;\n";
+        source_code += "        if (squared_distance < self_collision_distance_threshold[i]){\n";
+        source_code += "            return true;\n";
+        source_code += "        }\n";
+        source_code += "    }\n";
+        // for (int i = 0; i < num_of_self_collision_check_; i++)
+        // {
+        //     source_code += "    dx = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + "] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + "];\n";
+        //     source_code += "    dy = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + " + 1] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + " + 1];\n";
+        //     source_code += "    dz = self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_1[i]) + " + 2] - self_collision_sphere_pos[3 * " + std::to_string(collision_sphere_indices_2[i]) + " + 2];\n";
+        //     source_code += "    squared_distance = dx * dx + dy * dy + dz * dz;\n";
+        //     source_code += "    if (squared_distance < " + std::to_string(collision_distance_threshold[i]) + "){\n";
+        //     source_code += "        return true;\n";
+        //     source_code += "    }\n";
+        // }
         source_code += "    return false;\n";
 
         source_code += "}\n";

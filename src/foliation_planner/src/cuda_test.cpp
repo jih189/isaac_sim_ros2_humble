@@ -1536,7 +1536,7 @@ void TEST_Planner(const moveit::core::RobotModelPtr & robot_model, const std::st
         balls_pos,
         ball_radius
     );
-    // constraints.push_back(env_constraint_sphere);
+    constraints.push_back(env_constraint_sphere);
 
     // Create obstacle constraint for cuboid
     CUDAMPLib::EnvConstraintCuboidPtr env_constraint_cuboid = std::make_shared<CUDAMPLib::EnvConstraintCuboid>(

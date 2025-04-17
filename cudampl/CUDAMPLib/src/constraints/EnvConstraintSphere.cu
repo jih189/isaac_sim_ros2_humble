@@ -153,11 +153,14 @@ namespace CUDAMPLib{
 
     std::string EnvConstraintSphere::generateCheckConstraintCode()
     {
+        std::string source_code;
+
         return "// EnvConstraintSphere check function\n";
     }
 
     std::string EnvConstraintSphere::generateLaunchCheckConstraintCode()
     {
+        std::string source_code;
         return "// Launch EnvConstraintSphere check function\n";
     }
 } // namespace CUDAMPLib
