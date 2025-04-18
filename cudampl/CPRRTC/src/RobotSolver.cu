@@ -189,15 +189,6 @@ namespace CPRRTC
             return;
         }
 
-        // print spheres.data()
-        std::cout << "Spheres data: " << std::endl;
-        for (size_t i = 0; i < spheres.size(); i++)
-        {
-            std::cout << "Sphere " << i << ": ";
-            std::cout << "center: (" << spheres[i].x << ", " << spheres[i].y << ", " << spheres[i].z << "), ";
-            std::cout << "radius: " << spheres[i].radius << std::endl;
-        }
-
         // convert spheres.size() to int
         num_of_spheres_ = static_cast<int>(spheres.size());
         num_of_cuboids_ = static_cast<int>(cuboids.size());
@@ -339,31 +330,8 @@ namespace CPRRTC
             final_path.insert(final_path.end(), goal_path.begin(), goal_path.end());
         }
 
-        // print start path
-        std::cout << "Start path from start to connection node:" << std::endl;
-        for (size_t i = 0; i < start_path.size(); i++)
-        {
-            std::cout << "Node " << i << ": ";
-            for (int j = 0; j < dim; j++)
-            {
-                std::cout << start_path[i][j] << " ";
-            }
-            std::cout << std::endl;
-        }
-        // print goal path
-        std::cout << "Goal path from connection node to goal:" << std::endl;
-        for (size_t i = 0; i < goal_path.size(); i++)
-        {
-            std::cout << "Node " << i << ": ";
-            for (int j = 0; j < dim; j++)
-            {
-                std::cout << goal_path[i][j] << " ";
-            }
-            std::cout << std::endl;
-        }
-
         // (Optional) Print the final path for verification.
-        std::cout << "Final path from start to goal:" << std::endl;
+        std::cout << "Final path:" << std::endl;
         for (size_t i = 0; i < final_path.size(); i++)
         {
             std::cout << "Node " << i << ": ";
@@ -497,7 +465,7 @@ namespace CPRRTC
     std::string RobotSolver::generateEnvSphereCollisionCheckSourceCode()
     {
         std::string kernel_code;
-        kernel_code += "__device__ __forceinline__ bool checkEnvSphereCollisionConstraint(int ttid, float * self_collision_sphere_pos, float * d_spheres, int num_of_spheres) {\n";
+        kernel_code += "__device__ __forceinline__ bool checkEnvSphereCollisionConstraint(float * self_collision_sphere_pos, float * d_spheres, int num_of_spheres) {\n";
 
         kernel_code += "    float dx = 0.0f;\n";
         kernel_code += "    float dy = 0.0f;\n";
@@ -580,7 +548,7 @@ extern "C" {
         kernel_code += "    __shared__ int connected_index_in_other_tree;\n";
         kernel_code += "    const int tid = threadIdx.x;\n";
         kernel_code += "    float self_collision_spheres_pos_in_base[" + std::to_string(num_of_self_collision_spheres_ * 3) + "];\n\n";
-        kernel_code += "    for (int i = 0; i < " + std::to_string(max_iterations_) + "; i++) {\n";
+        kernel_code += "    for (int t = 0; t < " + std::to_string(max_iterations_) + "; t++) {\n";
         kernel_code += "        // Need to decide which tree to grow\n";
         kernel_code += "        if (tid == 0) {\n";
         kernel_code += "            should_skip = false;\n";
@@ -680,7 +648,7 @@ extern "C" {
         kernel_code += "        }\n\n";
         kernel_code += "        // Check for environment collision\n";
         kernel_code += "        if (tid < motion_step) {\n";
-        kernel_code += "            if(checkEnvSphereCollisionConstraint(tid, self_collision_spheres_pos_in_base, d_spheres, num_of_spheres))\n";
+        kernel_code += "            if(checkEnvSphereCollisionConstraint(self_collision_spheres_pos_in_base, d_spheres, num_of_spheres))\n";
         kernel_code += "                should_skip = true;\n";
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n\n";
@@ -776,7 +744,7 @@ extern "C" {
         kernel_code += "            }\n\n";
         kernel_code += "            // Check for collision with environment obstacles\n";
         kernel_code += "            if (tid < motion_step) {\n";
-        kernel_code += "                if(checkEnvSphereCollisionConstraint(tid, self_collision_spheres_pos_in_base, d_spheres, num_of_spheres))\n";
+        kernel_code += "                if(checkEnvSphereCollisionConstraint(self_collision_spheres_pos_in_base, d_spheres, num_of_spheres))\n";
         kernel_code += "                    should_skip = true;\n";
         kernel_code += "            }\n";
         kernel_code += "            __syncthreads();\n\n";
