@@ -542,6 +542,7 @@ extern "C" {
         kernel_code += "    __shared__ float local_motion_configurations[" + std::to_string(dim_ * max_step_) + "]; \n";
         kernel_code += "    __shared__ int motion_step;\n";
         kernel_code += "    __shared__ bool should_skip;\n";
+        kernel_code += "    __shared__ bool local_found_solution;\n";
         kernel_code += "    __shared__ int new_node_index;\n";
         kernel_code += "    __shared__ int connected_node_in_target_tree;\n";
         kernel_code += "    __shared__ int connected_node_in_other_tree;\n";
@@ -549,9 +550,11 @@ extern "C" {
         kernel_code += "    const int tid = threadIdx.x;\n";
         kernel_code += "    float self_collision_spheres_pos_in_base[" + std::to_string(num_of_self_collision_spheres_ * 3) + "];\n\n";
         kernel_code += "    for (int t = 0; t < " + std::to_string(max_iterations_) + "; t++) {\n";
+        kernel_code += "        __syncthreads();\n";
         kernel_code += "        // Need to decide which tree to grow\n";
         kernel_code += "        if (tid == 0) {\n";
         kernel_code += "            should_skip = false;\n";
+        kernel_code += "            local_found_solution = (foundSolution != 0);\n";
         kernel_code += "            localSampledCounter =  atomicAdd(&sampledCounter, 1);\n\n";
         kernel_code += "            if (startTreeCounter > goalTreeCounter) {\n";
         kernel_code += "                target_tree = d_goal_tree_configurations;\n";
@@ -573,9 +576,10 @@ extern "C" {
         kernel_code += "            }\n";
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n\n";
-        kernel_code += "        // If meet the max iterations, skip the rest of the iterations\n";
-        kernel_code += "        if (localSampledCounter >= " + std::to_string(max_iterations_) + ")\n";
+        kernel_code += "        // If meet the max iterations or found the solution, skip the rest of the iterations\n";
+        kernel_code += "        if (localSampledCounter >= " + std::to_string(max_iterations_) + " || local_found_solution){\n";
         kernel_code += "            return;\n";
+        kernel_code += "        }\n\n";
         kernel_code += "        // Sample a random configuration by loading it from global memory\n";
         kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
         kernel_code += "            local_to_configuration[tid] = d_sampled_configurations[localSampledCounter * " + std::to_string(dim_) + " + tid];\n";
@@ -709,8 +713,8 @@ extern "C" {
         kernel_code += "        if (tid < " + std::to_string(dim_) + ") {\n";
         kernel_code += "            local_to_configuration[tid] = other_tree[connected_index_in_other_tree * " + std::to_string(dim_) + " + tid];\n";
         kernel_code += "        }\n";
-        kernel_code += "        __syncthreads();\n\n";
         kernel_code += "        while (!should_skip) {\n";
+        kernel_code += "            __syncthreads();\n\n";
         kernel_code += "            if (tid == 0) {\n";
         kernel_code += "                motion_step = min((int)(local_nearest_neighbor_distance / " + std::to_string(resolution_) + "), " + std::to_string(max_step_) + ");\n";
         kernel_code += "                local_parent_index = new_node_index;\n";
@@ -777,13 +781,8 @@ extern "C" {
         kernel_code += "                target_tree[new_node_index * " + std::to_string(dim_) + " + tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
         kernel_code += "                local_from_configuration[tid] = local_motion_configurations[(motion_step - 1) * " + std::to_string(dim_) + " + tid];\n";
         kernel_code += "            }\n";
-        kernel_code += "            __syncthreads();\n\n";
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n\n";
-        kernel_code += "        // check if the connection is found\n";
-        kernel_code += "        if (foundSolution != 0) {\n";
-        kernel_code += "            return;\n";
-        kernel_code += "        }\n";
         kernel_code += "    }\n";
         kernel_code += "};\n";
         return kernel_code; 
