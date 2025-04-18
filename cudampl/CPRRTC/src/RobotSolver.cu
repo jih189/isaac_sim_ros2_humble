@@ -73,7 +73,7 @@ namespace CPRRTC
         , num_of_self_collision_spheres_(static_cast<int>(self_collision_spheres_radius_.size()))
         , num_of_active_joints_(static_cast<int>(std::count(active_joint_map_.begin(), active_joint_map_.end(), true)))
     {
-        max_iterations_ = 100;
+        max_iterations_ = 40;
         num_of_threads_per_motion_ = max_step_ = 32;
         num_of_thread_blocks_ = 1;
 
@@ -153,12 +153,27 @@ namespace CPRRTC
 
         cudaFree(d_sampled_configurations_);
 
+        cudaFree(d_spheres_);
+        cudaFree(d_cuboids_);
+        cudaFree(d_cylinders_);
+        
         cRRTCKernelPtr_.reset();
     }
 
     void RobotSolver::setEnvObstacleCache(int num_of_spheres, int num_of_cuboids, int num_of_cylinders)
     {
-        // TODO: allocate or resize GPU buffers for spheres, cuboids, cylinders
+        max_num_of_spheres_ = num_of_spheres;
+        max_num_of_cuboids_ = num_of_cuboids;
+        max_num_of_cylinders_ = num_of_cylinders;
+
+        // allocate memory for the obstacles
+        size_t sphere_memory_bytes = max_num_of_spheres_ * sizeof(Sphere);
+        size_t cuboid_memory_bytes = max_num_of_cuboids_ * sizeof(Cuboid);
+        size_t cylinder_memory_bytes = max_num_of_cylinders_ * sizeof(Cylinder);
+
+        cudaMalloc(&d_spheres_, sphere_memory_bytes);
+        cudaMalloc(&d_cuboids_, cuboid_memory_bytes);
+        cudaMalloc(&d_cylinders_, cylinder_memory_bytes);
     }
 
     void RobotSolver::updateEnvObstacle(
@@ -167,7 +182,34 @@ namespace CPRRTC
         std::vector<Cylinder>& cylinders
     )
     {
-        // TODO: upload obstacle data to GPU
+        // check the size of spheres, cuboids and cylinders
+        if (spheres.size() > max_num_of_spheres_ || cuboids.size() > max_num_of_cuboids_ || cylinders.size() > max_num_of_cylinders_)
+        {
+            std::cerr << "\033[31m" << "The number of obstacles exceeds the maximum number of obstacles." << "\033[0m" << std::endl;
+            return;
+        }
+
+        // print spheres.data()
+        std::cout << "Spheres data: " << std::endl;
+        for (size_t i = 0; i < spheres.size(); i++)
+        {
+            std::cout << "Sphere " << i << ": ";
+            std::cout << "center: (" << spheres[i].x << ", " << spheres[i].y << ", " << spheres[i].z << "), ";
+            std::cout << "radius: " << spheres[i].radius << std::endl;
+        }
+
+        // convert spheres.size() to int
+        num_of_spheres_ = static_cast<int>(spheres.size());
+        num_of_cuboids_ = static_cast<int>(cuboids.size());
+        num_of_cylinders_ = static_cast<int>(cylinders.size());
+
+        // copy the obstacles to device
+        if (spheres.size() > 0)
+            cudaMemcpy(d_spheres_, spheres.data(), spheres.size() * sizeof(Sphere), cudaMemcpyHostToDevice);
+        if (cuboids.size() > 0)
+            cudaMemcpy(d_cuboids_, cuboids.data(), cuboids.size() * sizeof(Cuboid), cudaMemcpyHostToDevice);
+        if (cylinders.size() > 0)
+            cudaMemcpy(d_cylinders_, cylinders.data(), cylinders.size() * sizeof(Cylinder), cudaMemcpyHostToDevice);
     }
 
     void RobotSolver::sampleConfigurations(float * d_configurations, int num_of_config)
@@ -294,7 +336,7 @@ namespace CPRRTC
         std::vector<std::vector<float>> final_path = start_path;
         if (!goal_path.empty())
         {
-            final_path.insert(final_path.end(), goal_path.begin() + 1, goal_path.end());
+            final_path.insert(final_path.end(), goal_path.begin(), goal_path.end());
         }
 
         // print start path
@@ -384,11 +426,15 @@ namespace CPRRTC
             &d_start_tree_parent_indexs_,
             &d_goal_tree_parent_indexs_,
             &d_sampled_configurations_,
-            &connected_tree_node_pair_
+            &connected_tree_node_pair_,
+            &d_spheres_,
+            &num_of_spheres_
         };
 
         int threads_per_block = num_of_threads_per_motion_;
         int blocks_per_grid = num_of_thread_blocks_;
+
+        auto kernel_start_time = std::chrono::high_resolution_clock::now();
 
         cRRTCKernelPtr_->launchKernel(
             dim3(blocks_per_grid, 1, 1), // grid size
@@ -400,6 +446,10 @@ namespace CPRRTC
 
         // wait for the kernel to finish
         cudaDeviceSynchronize();
+
+        auto kernel_end_time = std::chrono::high_resolution_clock::now();
+        auto kernel_duration = std::chrono::duration_cast<std::chrono::milliseconds>(kernel_end_time - kernel_start_time).count();
+        std::cout << "Kernel execution time: " << kernel_duration << " ms" << std::endl;
 
         std::vector<int> connected_tree_node_pair(num_of_thread_blocks_ * 2);
         cudaMemcpy(connected_tree_node_pair.data(), connected_tree_node_pair_, num_of_thread_blocks_ * 2 * sizeof(int), cudaMemcpyDeviceToHost);
@@ -444,6 +494,38 @@ namespace CPRRTC
         return {};
     }
 
+    std::string RobotSolver::generateEnvSphereCollisionCheckSourceCode()
+    {
+        std::string kernel_code;
+        kernel_code += "__device__ __forceinline__ bool checkEnvSphereCollisionConstraint(int ttid, float * self_collision_sphere_pos, float * d_spheres, int num_of_spheres) {\n";
+
+        kernel_code += "    float dx = 0.0f;\n";
+        kernel_code += "    float dy = 0.0f;\n";
+        kernel_code += "    float dz = 0.0f;\n";
+        kernel_code += "    float sq_dis = 0.0f;\n";
+        kernel_code += "    float threshold = 0.0f;\n";
+        kernel_code += "    float sq_threshold = 0.0f;\n";
+        kernel_code += "    for (int i = 0; i < num_of_spheres; i++) {\n";
+        for (int i  = 0 ; i < num_of_self_collision_spheres_; i++)
+        {
+            kernel_code += "        // self sphere " + std::to_string(i) + "\n";
+            kernel_code += "        threshold = d_spheres[i * 4 + 3] + " + std::to_string(self_collision_spheres_radius_[i]) + ";\n";
+            kernel_code += "        sq_threshold = threshold * threshold;\n";
+            kernel_code += "        dx = self_collision_sphere_pos[" + std::to_string(3 * i) + "] - d_spheres[i * 4];\n";
+            kernel_code += "        dy = self_collision_sphere_pos[" + std::to_string(3 * i + 1) + "] - d_spheres[i * 4 + 1];\n";
+            kernel_code += "        dz = self_collision_sphere_pos[" + std::to_string(3 * i + 2) + "] - d_spheres[i * 4 + 2];\n";
+            kernel_code += "        sq_dis = dx * dx + dy * dy + dz * dz;\n";
+            kernel_code += "        if (sq_dis < sq_threshold) {\n";
+            kernel_code += "            return true;\n";
+            kernel_code += "        }\n";
+        }
+        kernel_code += "    }\n";
+
+        kernel_code += "    return false;\n";
+        kernel_code += "}\n";
+        return kernel_code;
+    }
+
     std::string RobotSolver::generateKernelSourceCode()
     {
         std::string kernel_code;
@@ -464,6 +546,7 @@ extern "C" {
 
         kernel_code += generateFKKernelSourceCode();
         kernel_code += generateSelfCollisionCheckSourceCode();
+        kernel_code += generateEnvSphereCollisionCheckSourceCode();
 
         kernel_code += "__device__ __forceinline__ bool check_partially_written(float *node) {\n";
         kernel_code += "    #pragma unroll\n";
@@ -474,7 +557,7 @@ extern "C" {
         kernel_code += "}\n";
 
         // kernel_code += "extern \"C\" __global__ void CPRRTCKernel(float* d_start_tree_configurations, float* d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations, int * connected_tree_node_pair, int num_of_sphere_obstacles, float * d_sphere_obstacles, int num_of_cuboid_obstacles, float * d_cuboid_obstacles, int num_of_cylinder_obstacles, float * d_cylinder_obstacles){\n";
-        kernel_code += "extern \"C\" __global__ void CPRRTCKernel(float* d_start_tree_configurations, float* d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations, int * connected_tree_node_pair){\n";
+        kernel_code += "extern \"C\" __global__ void CPRRTCKernel(float* d_start_tree_configurations, float* d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations, int * connected_tree_node_pair, float * d_spheres, int num_of_spheres){\n";
         kernel_code += "    __shared__ float * target_tree;\n";
         kernel_code += "    __shared__ int * target_tree_counter;\n";
         kernel_code += "    __shared__ int * target_tree_parent_indexs;\n";
@@ -499,7 +582,7 @@ extern "C" {
         kernel_code += "    float self_collision_spheres_pos_in_base[" + std::to_string(num_of_self_collision_spheres_ * 3) + "];\n\n";
         kernel_code += "    for (int i = 0; i < " + std::to_string(max_iterations_) + "; i++) {\n";
         kernel_code += "        // Need to decide which tree to grow\n";
-        kernel_code += "        if (i == 0) {\n";
+        kernel_code += "        if (tid == 0) {\n";
         kernel_code += "            should_skip = false;\n";
         kernel_code += "            localSampledCounter =  atomicAdd(&sampledCounter, 1);\n\n";
         kernel_code += "            if (startTreeCounter > goalTreeCounter) {\n";
@@ -583,18 +666,23 @@ extern "C" {
         kernel_code += "        __syncthreads();\n\n";
         kernel_code += "        // Call forward kinematics function to calculate self-collision spheres positions in base frame\n";
         kernel_code += "        if (tid < motion_step) {\n";
-        kernel_code += "            kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
+        kernel_code += "            kin_forward(&(local_motion_configurations[tid * " + std::to_string(dim_) + "]), self_collision_spheres_pos_in_base);\n";
         kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n\n";
         kernel_code += "        // Check for self-collision\n";
         kernel_code += "        if (tid < motion_step) {\n";
-        kernel_code += "            should_skip = checkSelfCollisionConstraint(self_collision_spheres_pos_in_base);\n";
+        kernel_code += "            if(checkSelfCollisionConstraint(self_collision_spheres_pos_in_base))\n";
+        kernel_code += "                should_skip = true;\n";
         kernel_code += "        }\n";
-        // kernel_code += "        __syncthreads();\n\n";
-        // kernel_code += "        if (! should_skip) {\n";
-        // kernel_code += "            // Check for collision with environment obstacles\n";
-        // kernel_code += "            // TODO: implement collision check with environment obstacles\n";
-        // kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n\n";
+        kernel_code += "        if (should_skip) {\n";
+        kernel_code += "            continue;\n";
+        kernel_code += "        }\n\n";
+        kernel_code += "        // Check for environment collision\n";
+        kernel_code += "        if (tid < motion_step) {\n";
+        kernel_code += "            if(checkEnvSphereCollisionConstraint(tid, self_collision_spheres_pos_in_base, d_spheres, num_of_spheres))\n";
+        kernel_code += "                should_skip = true;\n";
+        kernel_code += "        }\n";
         kernel_code += "        __syncthreads();\n\n";
         kernel_code += "        if (should_skip) {\n";
         kernel_code += "            continue;\n";
@@ -674,20 +762,27 @@ extern "C" {
         kernel_code += "            __syncthreads();\n\n";
         kernel_code += "            // Call forward kinematics function to calculate self-collision spheres positions in base frame\n";
         kernel_code += "            if (tid < motion_step) {\n";
-        kernel_code += "                kin_forward(&(local_motion_configurations[tid]), self_collision_spheres_pos_in_base);\n";
+        kernel_code += "                kin_forward(&(local_motion_configurations[tid * " + std::to_string(dim_) + "]), self_collision_spheres_pos_in_base);\n";
         kernel_code += "            }\n";
         kernel_code += "            __syncthreads();\n\n";
         kernel_code += "            // Check for self-collision\n";
         kernel_code += "            if (tid < motion_step) {\n";
-        kernel_code += "                should_skip = checkSelfCollisionConstraint(self_collision_spheres_pos_in_base);\n";
+        kernel_code += "                if(checkSelfCollisionConstraint(self_collision_spheres_pos_in_base))\n";
+        kernel_code += "                    should_skip = true;\n";
         kernel_code += "            }\n";
         kernel_code += "            __syncthreads();\n\n";
         kernel_code += "            if (should_skip) {\n";
         kernel_code += "                break;\n";
         kernel_code += "            }\n\n";
-        // kernel_code += "            // Check for collision with environment obstacles\n";
-        // kernel_code += "            // TODO: implement collision check with environment obstacles\n";
-        // kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "            // Check for collision with environment obstacles\n";
+        kernel_code += "            if (tid < motion_step) {\n";
+        kernel_code += "                if(checkEnvSphereCollisionConstraint(tid, self_collision_spheres_pos_in_base, d_spheres, num_of_spheres))\n";
+        kernel_code += "                    should_skip = true;\n";
+        kernel_code += "            }\n";
+        kernel_code += "            __syncthreads();\n\n";
+        kernel_code += "            if (should_skip) {\n";
+        kernel_code += "                break;\n";
+        kernel_code += "            }\n\n";
         kernel_code += "            // Add the new node to the target tree\n";
         kernel_code += "            if (tid == 0) {\n";
         kernel_code += "                new_node_index = atomicAdd(target_tree_counter, 1);\n";
@@ -716,6 +811,7 @@ extern "C" {
         kernel_code += "            }\n";
         kernel_code += "            __syncthreads();\n\n";
         kernel_code += "        }\n";
+        kernel_code += "        __syncthreads();\n\n";
         kernel_code += "        // check if the connection is found\n";
         kernel_code += "        if (foundSolution != 0) {\n";
         kernel_code += "            return;\n";

@@ -1772,35 +1772,28 @@ void TEST_CPRRTC(const moveit::core::RobotModelPtr & robot_model, const std::str
 
     // create obstacles for spheres
     std::vector<Sphere> collision_spheres;
-    genSphereObstacles(1, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+    // genSphereObstacles(1, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
+    genTestSphereObstacles(collision_spheres);
+    std::vector<CPRRTC::Sphere> cprrtc_spheres;
+    for (size_t i = 0; i < collision_spheres.size(); i++)
+    {
+        CPRRTC::Sphere sphere;
+        sphere.x = collision_spheres[i].x;
+        sphere.y = collision_spheres[i].y;
+        sphere.z = collision_spheres[i].z;
+        sphere.radius = collision_spheres[i].radius;
+        cprrtc_spheres.push_back(sphere);
+    }
 
     // create obstacles for cuboids
     std::vector<BoundingBox> bounding_boxes;
     genCuboidObstacles(1, 0.05, 0.05, unmoveable_bounding_boxes_of_robot, bounding_boxes);
+    std::vector<CPRRTC::Cuboid> cprrtc_cuboids;
 
     // create obstacles for cylinders
     std::vector<Cylinder> cylinders;
     genCylinderObstacles(1, 0.08, 0.05, 0.8, 0.1, unmoveable_bounding_boxes_of_robot, cylinders);
-
-
-    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintSphere
-    std::vector<std::vector<float>> balls_pos;
-    std::vector<float> ball_radius;
-    SphereToVectors(collision_spheres, balls_pos, ball_radius);
-
-    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintCuboid
-    std::vector<std::vector<float>> bounding_boxes_pos;
-    std::vector<std::vector<float>> bounding_boxes_orientation_matrix;
-    std::vector<std::vector<float>> bounding_boxes_max;
-    std::vector<std::vector<float>> bounding_boxes_min;
-    CuboidToVectors(bounding_boxes, bounding_boxes_pos, bounding_boxes_orientation_matrix, bounding_boxes_max, bounding_boxes_min);
-
-    // convert to vector of vector so we can pass it to CUDAMPLib::EnvConstraintCylinder
-    std::vector<std::vector<float>> cylinders_pos;
-    std::vector<std::vector<float>> cylinders_orientation_matrix;
-    std::vector<float> cylinders_radius;
-    std::vector<float> cylinders_height;
-    CylinderToVectors(cylinders, cylinders_pos, cylinders_orientation_matrix, cylinders_radius, cylinders_height);
+    std::vector<CPRRTC::Cylinder> cprrtc_cylinders;
 
     // generate the markers for the obstacles
     visualization_msgs::msg::MarkerArray obstacle_collision_spheres_marker_array = generateSpheresMarkers(collision_spheres, node);
@@ -1904,25 +1897,7 @@ void TEST_CPRRTC(const moveit::core::RobotModelPtr & robot_model, const std::str
     moveit_msgs::msg::DisplayRobotState goal_display_robot_state;
     goal_display_robot_state.state = goal_state_msg;
 
-    /***************************** 4. Robot solver of CPRRTC **************************************************/
-
-    // RobotSolver(
-    // std::string robot_name,
-    // size_t dim,
-    // const std::vector<int>& joint_types,
-    // const std::vector<Eigen::Isometry3d>& joint_poses,
-    // const std::vector<Eigen::Vector3d>& joint_axes,
-    // const std::vector<int>& link_parent_link_maps,
-    // const std::vector<int>& self_collision_spheres_to_link_map,
-    // const std::vector<Eigen::Vector3d>& self_collision_spheres_pos_in_link,
-    // const std::vector<float>& self_collision_spheres_radius,
-    // const std::vector<bool>& active_joint_map,
-    // const std::vector<float>& lower,
-    // const std::vector<float>& upper,
-    // const std::vector<float>& default_joint_values,
-    // const std::vector<std::string>& link_names,
-    // float resolution = 0.02f
-    // );
+    /***************************** 4. Robot solver of CPRRTC **************************************************/ 
 
     // Create solver
     CPRRTC::RobotSolverPtr robot_solver = std::make_shared<CPRRTC::RobotSolver>(
@@ -1943,6 +1918,18 @@ void TEST_CPRRTC(const moveit::core::RobotModelPtr & robot_model, const std::str
         robot_info.getSelfCollisionEnabledMap(),
         0.02 // resolution
     );
+
+    // setup obstacle cache
+    robot_solver->setEnvObstacleCache(30,1,1);
+
+    robot_solver->updateEnvObstacle(
+        cprrtc_spheres,
+        cprrtc_cuboids,
+        cprrtc_cylinders
+    );
+
+    start_joint_values = std::vector<float>{1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    goal_joint_values = std::vector<float>{-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
     // solve
     std::vector<std::vector<float>> solution_path = robot_solver->solve(start_joint_values, goal_joint_values);

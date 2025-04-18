@@ -7,6 +7,9 @@
 
 #include <random>
 #include <limits>
+#include <ctime>
+#include <chrono>
+
 
 #include <Nvrtc.h>
 #include <curand_kernel.h>
@@ -96,6 +99,7 @@ namespace CPRRTC
             std::string generateKernelSourceCode();
             std::string generateFKKernelSourceCode();
             std::string generateSelfCollisionCheckSourceCode();
+            std::string generateEnvSphereCollisionCheckSourceCode();
 
             // Add private member variables and methods here
             std::string robot_name_;
@@ -125,15 +129,17 @@ namespace CPRRTC
             std::vector<float> self_collision_distance_thresholds_;
 
             // Obstacle cache
+            int max_num_of_spheres_;
+            int max_num_of_cuboids_;
+            int max_num_of_cylinders_;
+
             int num_of_spheres_;
             int num_of_cuboids_;
             int num_of_cylinders_;
-            std::vector<Sphere> spheres_;
-            std::vector<Cuboid> cuboids_;
-            std::vector<Cylinder> cylinders_;
-            float * d_spheres;
-            float * d_cuboids;
-            float * d_cylinders;
+
+            float * d_spheres_;
+            float * d_cuboids_;
+            float * d_cylinders_;
 
             // Parameters
             int max_iterations_;
