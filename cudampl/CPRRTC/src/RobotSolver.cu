@@ -419,6 +419,16 @@ namespace CPRRTC
         auto kernel_duration = std::chrono::duration_cast<std::chrono::milliseconds>(kernel_end_time - kernel_start_time).count();
         std::cout << "Kernel execution time: " << kernel_duration << " ms" << std::endl;
 
+        // print the global variables
+        cuMemcpyDtoH(&h_startTreeCounter, d_startTreeCounter, sizeof(int));
+        cuMemcpyDtoH(&h_goalTreeCounter, d_goalTreeCounter, sizeof(int));
+        cuMemcpyDtoH(&h_sampledCounter, d_sampledCounter, sizeof(int));
+        cuMemcpyDtoH(&h_foundSolution, d_foundSolution, sizeof(int));
+        std::cout << "startTreeCounter: " << h_startTreeCounter << std::endl;
+        std::cout << "goalTreeCounter: " << h_goalTreeCounter << std::endl;
+        std::cout << "sampledCounter: " << h_sampledCounter << std::endl;
+        std::cout << "foundSolution: " << h_foundSolution << std::endl;
+
         std::vector<int> connected_tree_node_pair(num_of_thread_blocks_ * 2);
         cudaMemcpy(connected_tree_node_pair.data(), connected_tree_node_pair_, num_of_thread_blocks_ * 2 * sizeof(int), cudaMemcpyDeviceToHost);
         int current_start_tree_num = 0;
