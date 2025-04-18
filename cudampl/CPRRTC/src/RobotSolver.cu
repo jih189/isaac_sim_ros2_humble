@@ -1,8 +1,38 @@
+#pragma nv_diag_suppress 20012
+#pragma nv_diag_suppress 20014
+
 #include "RobotSolver.h"
 #include <algorithm>  // for std::count
 
+
 namespace CPRRTC
 {
+    constexpr float UNWRITTEN_VAL = -9999.0f;
+
+    __global__ void initCurand(curandState * state, unsigned long seed, int state_size)
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= state_size) return;
+        curand_init(seed, idx, 0, &state[idx]);
+    }
+
+    __global__ void sample_configuration_kernel(
+        curandState_t * d_random_state,
+        float * d_sampled_configurations,
+        int num_of_config,
+        int num_of_dim,
+        float * d_lower_bound,
+        float * d_upper_bound
+    )
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_of_config * num_of_dim) return;
+
+        int joint_idx = idx % num_of_dim;
+
+        curandState_t local_state = d_random_state[idx];
+        d_sampled_configurations[idx] = curand_uniform(&local_state) * (d_upper_bound[joint_idx] - d_lower_bound[joint_idx]) + d_lower_bound[joint_idx];
+    }
 
     RobotSolver::RobotSolver(
         std::string robot_name,
@@ -91,11 +121,39 @@ namespace CPRRTC
         if (! cRRTCKernelPtr_ || ! cRRTCKernelPtr_->function) {
             std::cerr << "\033[31m" << "Kernel function 'cRRTCKernel' compilation failed." << "\033[0m" << std::endl;
         }
+
+        // allocate device memory
+        size_t configuration_memory_bytes = max_iterations_ * dim_ * sizeof(float);
+        size_t parent_indexs_memory_bytes = max_iterations_ * sizeof(int);
+
+        cudaMalloc(&d_start_tree_configurations_,configuration_memory_bytes);
+        cudaMalloc(&d_start_tree_parent_indexs_, parent_indexs_memory_bytes);
+        cudaMalloc(&d_goal_tree_configurations_,configuration_memory_bytes);
+        cudaMalloc(&d_goal_tree_parent_indexs_, parent_indexs_memory_bytes);
+        cudaMalloc(&connected_tree_node_pair_, 2 * sizeof(int) * num_of_thread_blocks_);
+
+        // Sample a set of random configurations in the space for later use
+        // allocate memory for the d_sampled_configurations_
+        size_t sampled_configurations_memory_bytes = max_iterations_ * dim_ * sizeof(float);
+        cudaMalloc(&d_sampled_configurations_, sampled_configurations_memory_bytes);
+
+        sampleConfigurations(d_sampled_configurations_, max_iterations_);
     }
 
     RobotSolver::~RobotSolver()
     {
-        // TODO: release CUDA resources, unload PTX, etc.
+        // free memory on the device
+        cudaFree(d_start_tree_configurations_);
+        cudaFree(d_start_tree_parent_indexs_);
+
+        cudaFree(d_goal_tree_configurations_);
+        cudaFree(d_goal_tree_parent_indexs_);
+
+        cudaFree(connected_tree_node_pair_);
+
+        cudaFree(d_sampled_configurations_);
+
+        cRRTCKernelPtr_.reset();
     }
 
     void RobotSolver::setEnvObstacleCache(int num_of_spheres, int num_of_cuboids, int num_of_cylinders)
@@ -112,16 +170,277 @@ namespace CPRRTC
         // TODO: upload obstacle data to GPU
     }
 
+    void RobotSolver::sampleConfigurations(float * d_configurations, int num_of_config)
+    {
+        std::vector<float> upper_bound_host;
+        std::vector<float> lower_bound_host;
+
+        float * d_lower_bound_in_sample_configurations;
+        float * d_upper_bound_in_sample_configurations;
+
+        size_t d_bound_bytes = dim_ * sizeof(float);
+
+        cudaMalloc(&d_lower_bound_in_sample_configurations, d_bound_bytes);
+        cudaMalloc(&d_upper_bound_in_sample_configurations, d_bound_bytes);
+
+        for (size_t i = 0; i < active_joint_map_.size(); i++)
+        {
+            if (active_joint_map_[i])
+            {
+                // copy the upper and lower bound to host
+                upper_bound_host.push_back(upper_bound_[i]);
+                lower_bound_host.push_back(lower_bound_[i]);
+            }
+        }
+
+        // copy the upper and lower bound to device
+        cudaMemcpy(d_lower_bound_in_sample_configurations, lower_bound_host.data(), d_bound_bytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_upper_bound_in_sample_configurations, upper_bound_host.data(), d_bound_bytes, cudaMemcpyHostToDevice);
+
+        curandState * d_random_state;
+        size_t d_random_state_bytes = num_of_config * dim_ * sizeof(curandState);
+        auto allocate_result = cudaMalloc(&d_random_state, d_random_state_bytes);
+        if (allocate_result != cudaSuccess)
+        {
+            // print in red
+            std::cerr << "\033[31m" << "Failed to allocate device memory for random state. Perhaps, the num_of_config is too large." << "\033[0m" << std::endl;
+        }
+
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (num_of_config * dim_ + threadsPerBlock - 1) / threadsPerBlock;
+
+        unsigned long seed = dist(gen);
+        initCurand<<<blocksPerGrid, threadsPerBlock>>>(d_random_state, seed, num_of_config * dim_);
+
+        // call kernel
+        sample_configuration_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+            d_random_state, 
+            d_configurations, 
+            num_of_config, 
+            dim_,
+            d_lower_bound_in_sample_configurations, 
+            d_upper_bound_in_sample_configurations
+        );
+
+        // wait for the kernel to finish
+        cudaDeviceSynchronize();
+
+        // free device memory
+        cudaFree(d_random_state);
+        cudaFree(d_lower_bound_in_sample_configurations);
+        cudaFree(d_upper_bound_in_sample_configurations);
+    }
+
+    std::vector<std::vector<float>> RobotSolver::backtraceTree(const std::vector<float>& tree_configurations,
+                                            const std::vector<int>& tree_parent_indexs,
+                                            int dim,
+                                            int start_index)
+    {
+        std::vector<std::vector<float>> path;
+        int index = start_index;
+        // Backtrace until we reach the root (assumed to be index 0).
+        while (true)
+        {
+            // Extract the configuration for the current node.
+            std::vector<float> config(dim);
+            for (int j = 0; j < dim; j++)
+            {
+                // Each node's configuration is stored consecutively.
+                config[j] = tree_configurations[index * dim + j];
+            }
+            path.push_back(config);
+            
+            // If we've reached the root node, we finish.
+            if (index == 0)
+                break;
+            
+            // Move to the parent of the current node.
+            index = tree_parent_indexs[index];
+        }
+        
+        return path;
+    }
+
+    std::vector<std::vector<float>> RobotSolver::constructFinalPath(int dim,
+                        const std::vector<float>& start_tree_configurations,
+                        const std::vector<int>& start_tree_parent_indexs,
+                        const std::vector<float>& goal_tree_configurations,
+                        const std::vector<int>& goal_tree_parent_indexs,
+                        int connection_index_start, // index in the start tree where connection occurred
+                        int connection_index_goal)  // index in the goal tree where connection occurred
+    {
+        // Backtrace the start tree from the connection node back to the start configuration.
+        // This yields a sequence from the connection node up to the start.
+        std::vector<std::vector<float>> start_path = backtraceTree(start_tree_configurations,
+                                                                    start_tree_parent_indexs,
+                                                                    dim,
+                                                                    connection_index_start);
+        // The backtracing from the start tree gives the path in reverse order (from the connection node to the start).
+        // Reverse it to obtain a proper order: from the start configuration to the connection node.
+        std::reverse(start_path.begin(), start_path.end());
+        
+        // Backtrace the goal tree from the connection node back to the goal configuration.
+        // Here the tree was grown from the goal, so index 0 should correspond to the goal.
+        std::vector<std::vector<float>> goal_path = backtraceTree(goal_tree_configurations,
+                                                                goal_tree_parent_indexs,
+                                                                dim,
+                                                                connection_index_goal);
+        // The goal tree path is from the connection node to the goal state.
+        // Depending on how you wish to join the two paths, you may not need to reverse the goal_path.
+        // In this example, we assume that goal_path is already in the order from the connection node to the goal.
+        
+        // Combine the two paths.
+        // Since the connection node is included in both paths, remove the duplicate by skipping the first element of the goal path.
+        std::vector<std::vector<float>> final_path = start_path;
+        if (!goal_path.empty())
+        {
+            final_path.insert(final_path.end(), goal_path.begin() + 1, goal_path.end());
+        }
+
+        // print start path
+        std::cout << "Start path from start to connection node:" << std::endl;
+        for (size_t i = 0; i < start_path.size(); i++)
+        {
+            std::cout << "Node " << i << ": ";
+            for (int j = 0; j < dim; j++)
+            {
+                std::cout << start_path[i][j] << " ";
+            }
+            std::cout << std::endl;
+        }
+        // print goal path
+        std::cout << "Goal path from connection node to goal:" << std::endl;
+        for (size_t i = 0; i < goal_path.size(); i++)
+        {
+            std::cout << "Node " << i << ": ";
+            for (int j = 0; j < dim; j++)
+            {
+                std::cout << goal_path[i][j] << " ";
+            }
+            std::cout << std::endl;
+        }
+
+        // (Optional) Print the final path for verification.
+        std::cout << "Final path from start to goal:" << std::endl;
+        for (size_t i = 0; i < final_path.size(); i++)
+        {
+            std::cout << "Node " << i << ": ";
+            for (int j = 0; j < dim; j++)
+            {
+                std::cout << final_path[i][j] << " ";
+            }
+            std::cout << std::endl;
+        }
+
+        return final_path;
+    }
+
     std::vector<std::vector<float>> RobotSolver::solve(
         std::vector<float>& start,
         std::vector<float>& goal
     )
     {
-        // TODO:
-        //  1. Set kernel arguments (start, goal, joint limits, etc.)
-        //  2. Launch NVRTC‐compiled kernel
-        //  3. Retrieve and decode result path
-        //  4. Return as vector of joint‐value sequences
+        // check the size of start and goal
+        if (start.size() != dim_ || goal.size() != dim_)
+        {
+            std::cerr << "\033[31m" << "The size of start and goal configurations must be equal to the dimension of the robot." << "\033[0m" << std::endl;
+            return {};
+        }
+
+        // clear the device memory
+        cudaMemset(d_start_tree_configurations_, UNWRITTEN_VAL, max_iterations_ * dim_ * sizeof(float));
+        cudaMemset(d_start_tree_parent_indexs_, 0, sizeof(int));
+        cudaMemset(d_goal_tree_configurations_, UNWRITTEN_VAL, max_iterations_ * dim_ * sizeof(float));
+        cudaMemset(d_goal_tree_parent_indexs_, 0, sizeof(int));
+        cudaMemset(connected_tree_node_pair_, -1, 2 * sizeof(int) * num_of_thread_blocks_);
+
+        // pass first start and goal configurations to the device by copying them to the device
+        cudaMemcpy(d_start_tree_configurations_, start.data(), (size_t)(dim_ * sizeof(float)), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_goal_tree_configurations_, goal.data(), (size_t)(dim_ * sizeof(float)), cudaMemcpyHostToDevice);
+
+        // Retrieve global variable pointers from the compiled module.
+        CUdeviceptr d_startTreeCounter, d_goalTreeCounter, d_sampledCounter, d_foundSolution;
+        size_t varSize;
+        cuModuleGetGlobal(&d_startTreeCounter, &varSize, cRRTCKernelPtr_->module, "startTreeCounter");
+        cuModuleGetGlobal(&d_goalTreeCounter, &varSize, cRRTCKernelPtr_->module, "goalTreeCounter");
+        cuModuleGetGlobal(&d_sampledCounter, &varSize, cRRTCKernelPtr_->module, "sampledCounter");
+        cuModuleGetGlobal(&d_foundSolution, &varSize, cRRTCKernelPtr_->module, "foundSolution");
+
+        int h_startTreeCounter = 1;
+        int h_goalTreeCounter = 1;
+        int h_sampledCounter = 0;
+        int h_foundSolution = 0;
+
+        // Copy the initial values to the device
+        cuMemcpyHtoD(d_startTreeCounter, &h_startTreeCounter, sizeof(int));
+        cuMemcpyHtoD(d_goalTreeCounter, &h_goalTreeCounter, sizeof(int));
+        cuMemcpyHtoD(d_sampledCounter, &h_sampledCounter, sizeof(int));
+        cuMemcpyHtoD(d_foundSolution, &h_foundSolution, sizeof(int));
+
+        // Set up kernel launch parameters
+        void *args[] = {
+            &d_start_tree_configurations_,
+            &d_goal_tree_configurations_,
+            &d_start_tree_parent_indexs_,
+            &d_goal_tree_parent_indexs_,
+            &d_sampled_configurations_,
+            &connected_tree_node_pair_
+        };
+
+        int threads_per_block = num_of_threads_per_motion_;
+        int blocks_per_grid = num_of_thread_blocks_;
+
+        cRRTCKernelPtr_->launchKernel(
+            dim3(blocks_per_grid, 1, 1), // grid size
+            dim3(threads_per_block, 1, 1), // block size
+            0, // shared memory size
+            nullptr, // stream
+            args // kernel arguments
+        );
+
+        // wait for the kernel to finish
+        cudaDeviceSynchronize();
+
+        std::vector<int> connected_tree_node_pair(num_of_thread_blocks_ * 2);
+        cudaMemcpy(connected_tree_node_pair.data(), connected_tree_node_pair_, num_of_thread_blocks_ * 2 * sizeof(int), cudaMemcpyDeviceToHost);
+        int current_start_tree_num = 0;
+        int current_goal_tree_num = 0;
+        bool found = false;
+        for (int i = 0; i < num_of_thread_blocks_; i++)
+        {
+            if (connected_tree_node_pair[i * 2] != -1  && connected_tree_node_pair[i * 2 + 1] != -1)
+            {
+                current_start_tree_num = connected_tree_node_pair[i * 2];
+                current_goal_tree_num = connected_tree_node_pair[i * 2 + 1];
+                found = true;
+                break;
+            }
+        }
+
+        if (found)
+        {
+            current_start_tree_num += 1;
+            current_goal_tree_num += 1;
+            // print d_start_tree_configurations_ with first current_start_tree_num configurations
+            std::vector<float> start_tree_configurations(current_start_tree_num * dim_);
+            std::vector<int> start_tree_parent_indexs(current_start_tree_num);
+            cudaMemcpy(start_tree_configurations.data(), d_start_tree_configurations_, current_start_tree_num * dim_ * sizeof(float), cudaMemcpyDeviceToHost);
+            cudaMemcpy(start_tree_parent_indexs.data(), d_start_tree_parent_indexs_, current_start_tree_num * sizeof(int), cudaMemcpyDeviceToHost);
+
+            // print d_goal_tree_configurations_ with first current_goal_tree_num configurations
+            std::vector<float> goal_tree_configurations(current_goal_tree_num * dim_);
+            std::vector<int> goal_tree_parent_indexs(current_goal_tree_num);
+            cudaMemcpy(goal_tree_configurations.data(), d_goal_tree_configurations_, current_goal_tree_num * dim_ * sizeof(float), cudaMemcpyDeviceToHost);
+            cudaMemcpy(goal_tree_parent_indexs.data(), d_goal_tree_parent_indexs_, current_goal_tree_num * sizeof(int), cudaMemcpyDeviceToHost);
+
+            // Get the final path
+            // std::cout << "Final path: " << std::endl;
+            std::vector<std::vector<float>> final_path = constructFinalPath(dim_, start_tree_configurations, start_tree_parent_indexs, goal_tree_configurations, goal_tree_parent_indexs, current_start_tree_num - 1, current_goal_tree_num - 1);
+            
+            return final_path;
+        }
+
+
         return {};
     }
 
@@ -154,7 +473,8 @@ extern "C" {
         kernel_code += "    return false;\n";
         kernel_code += "}\n";
 
-        kernel_code += "extern \"C\" __global__ void CPRRTCKernel(float* d_start_tree_configurations, float* d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations, int * connected_tree_node_pair, int num_of_sphere_obstacles, float * d_sphere_obstacles, int num_of_cuboid_obstacles, float * d_cuboid_obstacles, int num_of_cylinder_obstacles, float * d_cylinder_obstacles){\n";
+        // kernel_code += "extern \"C\" __global__ void CPRRTCKernel(float* d_start_tree_configurations, float* d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations, int * connected_tree_node_pair, int num_of_sphere_obstacles, float * d_sphere_obstacles, int num_of_cuboid_obstacles, float * d_cuboid_obstacles, int num_of_cylinder_obstacles, float * d_cylinder_obstacles){\n";
+        kernel_code += "extern \"C\" __global__ void CPRRTCKernel(float* d_start_tree_configurations, float* d_goal_tree_configurations, int * d_start_tree_parent_indexs, int * d_goal_tree_parent_indexs, float * d_sampled_configurations, int * connected_tree_node_pair){\n";
         kernel_code += "    __shared__ float * target_tree;\n";
         kernel_code += "    __shared__ int * target_tree_counter;\n";
         kernel_code += "    __shared__ int * target_tree_parent_indexs;\n";

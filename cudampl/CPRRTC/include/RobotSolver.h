@@ -1,10 +1,15 @@
 #pragma once
+
 #include <string>
 #include <vector>
 #include <eigen3/Eigen/Dense>
 #include <Obstacle.h>
 
+#include <random>
+#include <limits>
+
 #include <Nvrtc.h>
+#include <curand_kernel.h>
 
 namespace CPRRTC
 {
@@ -73,6 +78,21 @@ namespace CPRRTC
             std::vector<std::vector<float>> solve(std::vector<float>& start, std::vector<float>& goal);
 
         private:
+            void sampleConfigurations(float * d_configurations, int num_of_configurations);
+
+            std::vector<std::vector<float>> constructFinalPath(int dim,
+                const std::vector<float>& start_tree_configurations,
+                const std::vector<int>& start_tree_parent_indexs,
+                const std::vector<float>& goal_tree_configurations,
+                const std::vector<int>& goal_tree_parent_indexs,
+                int connection_index_start, // index in the start tree where connection occurred
+                int connection_index_goal);  // index in the goal tree where connection occurred
+
+            std::vector<std::vector<float>> backtraceTree(const std::vector<float>& tree_configurations,
+                                            const std::vector<int>& tree_parent_indexs,
+                                            int dim,
+                                            int start_index);
+
             std::string generateKernelSourceCode();
             std::string generateFKKernelSourceCode();
             std::string generateSelfCollisionCheckSourceCode();
@@ -104,13 +124,37 @@ namespace CPRRTC
             std::vector<int> self_collision_sphere_indices_2_;
             std::vector<float> self_collision_distance_thresholds_;
 
+            // Obstacle cache
+            int num_of_spheres_;
+            int num_of_cuboids_;
+            int num_of_cylinders_;
+            std::vector<Sphere> spheres_;
+            std::vector<Cuboid> cuboids_;
+            std::vector<Cylinder> cylinders_;
+            float * d_spheres;
+            float * d_cuboids;
+            float * d_cylinders;
+
             // Parameters
             int max_iterations_;
             int num_of_threads_per_motion_;
             int num_of_thread_blocks_;
             int max_step_;
 
+            // start and goal tree
+            float* d_start_tree_configurations_;
+            int* d_start_tree_parent_indexs_;
+            float* d_goal_tree_configurations_;
+            int* d_goal_tree_parent_indexs_;
+            int * connected_tree_node_pair_;
+
+            float * d_sampled_configurations_;
+
             KernelFunctionPtr cRRTCKernelPtr_;
+
+            std::mt19937 gen;       // Standard mersenne_twister_engine seeded with rd()
+            std::uniform_int_distribution<unsigned long> dist;
+
     };
 
     // create std::shared_ptr for RobotSolver
