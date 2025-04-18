@@ -1772,8 +1772,7 @@ void TEST_CPRRTC(const moveit::core::RobotModelPtr & robot_model, const std::str
 
     // create obstacles for spheres
     std::vector<Sphere> collision_spheres;
-    // genSphereObstacles(1, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
-    genTestSphereObstacles(collision_spheres);
+    genSphereObstacles(80, 0.08, 0.06, unmoveable_bounding_boxes_of_robot, collision_spheres);
     std::vector<CPRRTC::Sphere> cprrtc_spheres;
     for (size_t i = 0; i < collision_spheres.size(); i++)
     {
@@ -1920,16 +1919,13 @@ void TEST_CPRRTC(const moveit::core::RobotModelPtr & robot_model, const std::str
     );
 
     // setup obstacle cache
-    robot_solver->setEnvObstacleCache(30,1,1);
+    robot_solver->setEnvObstacleCache(100,1,1);
 
     robot_solver->updateEnvObstacle(
         cprrtc_spheres,
         cprrtc_cuboids,
         cprrtc_cylinders
     );
-
-    start_joint_values = std::vector<float>{1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    goal_joint_values = std::vector<float>{-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
     // solve
     std::vector<std::vector<float>> solution_path = robot_solver->solve(start_joint_values, goal_joint_values);

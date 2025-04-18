@@ -422,29 +422,6 @@ void genSphereObstacles(
     }
 }
 
-void genTestSphereObstacles(
-    std::vector<Sphere> & obstacle_spheres
-)
-{
-    obstacle_spheres.clear();
-
-    Eigen::Vector3d position_candidate(0.9, 0.0, 0.75);
-    // Random radius
-    float radius_candidate = 0.1;
-
-    std::vector<double> obstacle_position_double = {position_candidate.x(), position_candidate.y(), position_candidate.z()}; 
-    // convert c from double to float
-    std::vector<float> obstacle_position(obstacle_position_double.begin(), obstacle_position_double.end());
-
-    Sphere obstacle_sphere;
-    obstacle_sphere.x = (float)(position_candidate.x());
-    obstacle_sphere.y = (float)(position_candidate.y());
-    obstacle_sphere.z = (float)(position_candidate.z());
-    obstacle_sphere.radius = radius_candidate;
-
-    obstacle_spheres.push_back(obstacle_sphere);
-}
-
 visualization_msgs::msg::MarkerArray generateSpheresMarkers(
     const std::vector<Sphere> & spheres,
     rclcpp::Node::SharedPtr node)

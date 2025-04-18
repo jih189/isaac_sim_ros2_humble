@@ -73,9 +73,9 @@ namespace CPRRTC
         , num_of_self_collision_spheres_(static_cast<int>(self_collision_spheres_radius_.size()))
         , num_of_active_joints_(static_cast<int>(std::count(active_joint_map_.begin(), active_joint_map_.end(), true)))
     {
-        max_iterations_ = 40;
+        max_iterations_ = 10000;
         num_of_threads_per_motion_ = max_step_ = 32;
-        num_of_thread_blocks_ = 1;
+        num_of_thread_blocks_ = 512;
 
         // Initialize self-collision check parameters
         self_collision_sphere_indices_1_.clear();
